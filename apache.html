@@ -1,0 +1,347 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Debian Apache — servidor web com a2ensite e a2enmod | Guia Debian</title>
+<meta name="description" content="Aprenda o Apache no jeito Debian: instalar o apache2, a estrutura de /etc/apache2 com sites-available e sites-enabled, a2ensite, a2enmod, a2enconf, apache2ctl configtest, VirtualHost comentado, logs e erros reais.">
+<link rel="stylesheet" href="assets/style.css">
+<script>try{var t=localStorage.getItem("tema");if(t)document.documentElement.setAttribute("data-theme",t)}catch(e){}</script>
+</head>
+<body>
+<div class="layout">
+<nav class="sidebar" id="sidebar" aria-label="Tópicos"></nav>
+<main class="main">
+<div class="content">
+
+<div class="pager"></div>
+
+<h1>Debian <span class="hl">Servidor Web (Apache)</span></h1>
+
+<p class="intro">O <strong>Apache HTTP Server</strong> é o servidor web mais antigo ainda em uso em larga escala. No Debian ele se chama <code>apache2</code> e vem organizado de um jeito próprio: cada site e cada módulo é um arquivo que você liga e desliga com comandos <code>a2en…</code> e <code>a2dis…</code>. Esse "jeito Debian" é o assunto desta aula.</p>
+
+<div class="note">
+<strong>Você vai aprender</strong>
+<ul>
+  <li>Instalar o Apache e reconhecer a página padrão do Debian.</li>
+  <li>Onde fica cada arquivo em <code>/etc/apache2</code>.</li>
+  <li>Publicar um site com um <strong>VirtualHost</strong> e ativá-lo com <code>a2ensite</code>.</li>
+  <li>Ligar módulos e configurações com <code>a2enmod</code> e <code>a2enconf</code>.</li>
+  <li>Testar a configuração antes de recarregar, ler os logs e entender os erros mais comuns.</li>
+</ul>
+</div>
+
+<p>Os comandos rodam como <strong>root</strong> (<code>su -</code>) na máquina fictícia <strong>servidor</strong>. As saídas vêm de um Debian 13 real com Apache 2.4.68. Os comandos <code>a2en…</code> e as mensagens do Apache são em inglês.</p>
+
+<hr>
+
+<h2>Conceito: um prédio com vários apartamentos</h2>
+<p>Pense no servidor como um <strong>prédio</strong> com um único endereço (o IP e a porta 80). O Apache é o <strong>porteiro</strong>: quando chega um visitante, ele olha <strong>para qual nome</strong> o visitante perguntou (<code>loja.com.br</code>, <code>blog.com.br</code>) e o leva ao apartamento certo. Cada apartamento é um <strong>VirtualHost</strong>, com sua própria pasta de arquivos e seus próprios logs.</p>
+
+<hr>
+
+<h2>Instalar e testar</h2>
+<pre class="term" data-host="servidor" data-user="root">#> apt install apache2</pre>
+
+<p>No Debian, o pacote já <strong>inicia</strong> o Apache e o deixa <strong>ativado</strong> no boot. Confira:</p>
+
+<pre class="term" data-host="servidor" data-user="root">#> systemctl status apache2 --no-pager
+● apache2.service - The Apache HTTP Server
+     Loaded: loaded (/usr/lib/systemd/system/apache2.service; enabled; preset: enabled)
+     Active: active (running) since Thu 2026-10-15 22:59:10 -03; 38ms ago
+       Docs: https://httpd.apache.org/docs/2.4/
+    Process: 133933 ExecStart=/usr/sbin/apachectl start (code=exited, status=0/SUCCESS)
+   Main PID: 133936 (apache2)                                     « o processo principal
+      Tasks: 33 (limit: 4638)
+     Memory: 3.6M (peak: 3.8M)
+        CPU: 50ms
+     CGroup: /system.slice/apache2.service
+             ├─133936 /usr/sbin/apache2 -k start
+             ├─133940 /usr/sbin/apache2 -k start                  « processos que atendem os visitantes
+             └─133941 /usr/sbin/apache2 -k start
+#> ss -tlnp | grep :80
+LISTEN 0      511                *:80               *:*    users:(("apache2",pid=133941,fd=4),("apache2",pid=133940,fd=4),("apache2",pid=133936,fd=4))</pre>
+
+<p>Agora peça a página com o <code>curl</code>. A opção <code>-I</code> mostra só o cabeçalho da resposta:</p>
+
+<pre class="term" data-host="servidor" data-user="root">#> curl -I http://localhost
+HTTP/1.1 200 OK                                                   « 200 = deu certo
+Date: Fri, 16 Oct 2026 01:59:10 GMT
+Server: Apache/2.4.68 (Debian)                                    « quem respondeu
+Last-Modified: Fri, 16 Oct 2026 01:52:47 GMT
+ETag: "29cf-65deb6bd0f8a0"
+Accept-Ranges: bytes
+Content-Length: 10703
+Vary: Accept-Encoding
+#> curl -s http://localhost | grep -i "&lt;title&gt;"
+    &lt;title&gt;Apache2 Debian Default Page: It works&lt;/title&gt;</pre>
+
+<p>No navegador, abrindo o IP do servidor, aparece a página <strong>"Apache2 Debian Default Page — It works!"</strong>. Ela é o arquivo <code>/var/www/html/index.html</code> e explica, em inglês, a mesma estrutura de pastas desta aula.</p>
+
+<hr>
+
+<h2>Onde fica cada coisa</h2>
+<pre class="term" data-host="servidor" data-user="root">#> ls /etc/apache2
+apache2.conf  conf-available  conf-enabled  envvars  magic  mods-available  mods-enabled  ports.conf  sites-available  sites-enabled</pre>
+
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Caminho</th><th>O que guarda</th></tr>
+<tr><td><code>apache2.conf</code></td><td>Configuração principal; inclui todos os outros arquivos</td></tr>
+<tr><td><code>ports.conf</code></td><td>Em quais portas o Apache escuta (<code>Listen 80</code>, <code>Listen 443</code>)</td></tr>
+<tr><td><code>sites-available/</code></td><td>Todos os sites configurados (ligados ou não)</td></tr>
+<tr><td><code>sites-enabled/</code></td><td>Atalhos para os sites <strong>ligados</strong></td></tr>
+<tr><td><code>mods-available/</code> / <code>mods-enabled/</code></td><td>Módulos existentes / ligados</td></tr>
+<tr><td><code>conf-available/</code> / <code>conf-enabled/</code></td><td>Trechos de configuração extra / ligados</td></tr>
+<tr><td><code>/var/www/html/</code></td><td>Arquivos do site padrão</td></tr>
+<tr><td><code>/var/log/apache2/</code></td><td><code>access.log</code> (visitas) e <code>error.log</code> (erros)</td></tr>
+</table>
+</div>
+
+<p>A regra do "available/enabled": o arquivo de verdade fica em <code>…-available</code>; ligar é criar um atalho (link simbólico) em <code>…-enabled</code>. Você não cria esses atalhos à mão: usa os comandos abaixo.</p>
+
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Para…</th><th>Ligar</th><th>Desligar</th></tr>
+<tr><td>Sites</td><td><code>a2ensite NOME</code></td><td><code>a2dissite NOME</code></td></tr>
+<tr><td>Módulos</td><td><code>a2enmod NOME</code></td><td><code>a2dismod NOME</code></td></tr>
+<tr><td>Configurações extras</td><td><code>a2enconf NOME</code></td><td><code>a2disconf NOME</code></td></tr>
+</table>
+</div>
+
+<p>O nome vem de "<em>apache2 enable site</em>" e "<em>apache2 disable site</em>". Já vem ligado o site <code>000-default</code>, o padrão:</p>
+
+<pre class="file" data-file="/etc/apache2/sites-available/000-default.conf (sem os comentários)">&lt;VirtualHost *:80&gt;
+	ServerAdmin webmaster@localhost
+	DocumentRoot /var/www/html
+	ErrorLog ${APACHE_LOG_DIR}/error.log
+	CustomLog ${APACHE_LOG_DIR}/access.log combined
+&lt;/VirtualHost&gt;</pre>
+
+<hr>
+
+<h2>Publicar o seu primeiro site</h2>
+
+<ol class="passo">
+  <li><strong>Crie a pasta e a página.</strong>
+<pre class="term" data-host="servidor" data-user="root">#> mkdir -p /var/www/meusite
+#> echo '&lt;h1&gt;Olá do meu site&lt;/h1&gt;' &gt; /var/www/meusite/index.html</pre></li>
+  <li><strong>Escreva o VirtualHost</strong> em <code>sites-available</code>. O nome do arquivo precisa terminar em <code>.conf</code>:
+<pre class="file" data-file="/etc/apache2/sites-available/meusite.conf">&lt;VirtualHost *:80&gt;                       # vale para qualquer IP, porta 80
+    ServerName meusite.local                # o nome que o visitante digita
+    DocumentRoot /var/www/meusite           # a pasta com os arquivos do site
+    ErrorLog ${APACHE_LOG_DIR}/meusite-error.log
+    CustomLog ${APACHE_LOG_DIR}/meusite-access.log combined
+&lt;/VirtualHost&gt;</pre>
+  <code>${APACHE_LOG_DIR}</code> é uma variável definida em <code>/etc/apache2/envvars</code>; vale <code>/var/log/apache2</code>. Os comentários com <code>#</code> no fim da linha estão aqui só para explicar: no arquivo real, deixe cada comentário numa linha própria.</li>
+  <li><strong>Ligue o site</strong>:
+<dl class="anatomy">
+  <dt>a2ensite</dt><dd>Liga um site (cria o atalho em <code>sites-enabled</code>).</dd>
+  <dt>meusite</dt><dd>O nome do arquivo, sem o <code>.conf</code>.</dd>
+</dl>
+<pre class="term" data-host="servidor" data-user="root">#> a2ensite meusite
+Enabling site meusite.
+To activate the new configuration, you need to run:
+  systemctl reload apache2                                « ele mesmo diz o próximo passo</pre></li>
+  <li><strong>Teste a configuração</strong> antes de aplicar:
+<pre class="term" data-host="servidor" data-user="root">#> apache2ctl configtest
+Syntax OK</pre></li>
+  <li><strong>Recarregue</strong> e teste. O <code>-H "Host: …"</code> finge que o visitante digitou <code>meusite.local</code>, sem precisar de DNS:
+<pre class="term" data-host="servidor" data-user="root">#> systemctl reload apache2
+#> curl -H "Host: meusite.local" http://localhost
+&lt;h1&gt;Olá do meu site&lt;/h1&gt;</pre></li>
+</ol>
+
+<h3><code>reload</code> ou <code>restart</code>?</h3>
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Comando</th><th>O que faz</th><th>Quando usar</th></tr>
+<tr><td><code>systemctl reload apache2</code></td><td>Relê a configuração sem derrubar conexões</td><td>Mudou um site ou uma configuração</td></tr>
+<tr><td><code>systemctl restart apache2</code></td><td>Para e inicia de novo</td><td>Ligou ou desligou um <strong>módulo</strong> (o <code>a2enmod</code> avisa)</td></tr>
+</table>
+</div>
+
+<hr>
+
+<h2>Módulos e configurações extras</h2>
+<p>Módulos acrescentam recursos ao Apache. Um dos mais pedidos é o <code>rewrite</code>, que muitos sistemas (como o WordPress) usam para "URLs amigáveis":</p>
+
+<pre class="term" data-host="servidor" data-user="root">#> a2enmod rewrite
+Enabling module rewrite.
+To activate the new configuration, you need to run:
+  systemctl restart apache2                               « módulo pede restart, não reload
+#> systemctl restart apache2
+#> a2dismod rewrite
+Module rewrite disabled.
+To activate the new configuration, you need to run:
+  systemctl restart apache2</pre>
+
+<p>Os módulos ligados ficam em <code>/etc/apache2/mods-enabled</code>; para ver os disponíveis, <code>ls /etc/apache2/mods-available</code>. Com as configurações extras é igual:</p>
+
+<pre class="term" data-host="servidor" data-user="root">#> ls /etc/apache2/conf-available
+charset.conf  javascript-common.conf  localized-error-pages.conf  other-vhosts-access-log.conf  security.conf  serve-cgi-bin.conf
+#> a2disconf serve-cgi-bin
+Conf serve-cgi-bin disabled.
+To activate the new configuration, you need to run:
+  systemctl reload apache2</pre>
+
+<hr>
+
+<h2>Ler os logs</h2>
+<p>Cada visita vira uma linha em <code>access.log</code>; cada problema, uma linha em <code>error.log</code>. Os logs são do grupo <code>adm</code>: a ana, que não está nesse grupo, não consegue ler (<code>cat: /var/log/apache2/access.log: Permissão negada</code>).</p>
+
+<pre class="term" data-host="servidor" data-user="root">#> tail -2 /var/log/apache2/access.log
+::1 - - [15/Oct/2026:22:59:10 -0300] "HEAD / HTTP/1.1" 200 255 "-" "curl/8.14.1"
+::1 - - [15/Oct/2026:22:59:10 -0300] "GET / HTTP/1.1" 200 10958 "-" "curl/8.14.1"</pre>
+
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Trecho</th><th>Significado</th></tr>
+<tr><td><code>::1</code></td><td>Quem visitou (aqui, a própria máquina pelo IPv6)</td></tr>
+<tr><td><code>[15/Oct/2026:22:59:10 -0300]</code></td><td>Quando</td></tr>
+<tr><td><code>"GET / HTTP/1.1"</code></td><td>O que foi pedido</td></tr>
+<tr><td><code>200</code></td><td>Código de resposta (200 ok, 404 não encontrado, 403 proibido, 500 erro)</td></tr>
+<tr><td><code>10958</code></td><td>Bytes enviados</td></tr>
+<tr><td><code>"curl/8.14.1"</code></td><td>O programa do visitante (navegador)</td></tr>
+</table>
+</div>
+
+<p>Acompanhar ao vivo: <code>tail -f /var/log/apache2/access.log</code> (saia com <kbd>Ctrl</kbd>+<kbd>C</kbd>).</p>
+
+<hr>
+
+<h2>Desligar um site e o próprio Apache</h2>
+<pre class="term" data-host="servidor" data-user="root">#> a2dissite meusite
+Site meusite disabled.
+To activate the new configuration, you need to run:
+  systemctl reload apache2
+#> systemctl reload apache2
+#> systemctl disable --now apache2                         « para e não liga mais no boot
+Synchronizing state of apache2.service with SysV service script with /usr/lib/systemd/systemd-sysv-install.
+Executing: /usr/lib/systemd/systemd-sysv-install disable apache2</pre>
+
+<hr>
+
+<h2>Quando não funciona</h2>
+
+<div class="cenario">
+<strong>"AH00526: Syntax error … Invalid command"</strong>
+<pre class="term" data-host="servidor" data-user="root">#> apache2ctl configtest
+AH00526: Syntax error on line 3 of /etc/apache2/sites-enabled/meusite.conf:
+Invalid command 'DocumentRot', perhaps misspelled or defined by a module not included in the server configuration
+#> systemctl reload apache2
+Job for apache2.service failed.
+See "systemctl status apache2.service" and "journalctl -xeu apache2.service" for details.</pre>
+<p><strong>O que aconteceu:</strong> uma palavra errada na configuração (<code>DocumentRot</code>). O erro diz o arquivo e a linha.</p>
+<p><strong>O detalhe que salva você:</strong> o <code>reload</code> falhou, mas o Apache <strong>continuou no ar</strong> com a configuração antiga. Já um <code>restart</code> com erro derrubaria o servidor. Por isso: sempre <code>apache2ctl configtest</code> antes.</p>
+<p><strong>Como resolver:</strong> corrija a linha indicada e teste de novo até aparecer <code>Syntax OK</code>.</p>
+</div>
+
+<div class="cenario">
+<strong>"AH00112: Warning: DocumentRoot … does not exist"</strong>
+<pre class="term" data-host="servidor" data-user="root">#> apache2ctl configtest
+AH00112: Warning: DocumentRoot [/var/www/naoexiste] does not exist
+Syntax OK</pre>
+<p><strong>O que aconteceu:</strong> a sintaxe está certa (<code>Syntax OK</code>), mas a pasta do site não existe. O site vai responder com erro.</p>
+<p><strong>Como resolver:</strong> crie a pasta ou corrija o caminho no <code>DocumentRoot</code>.</p>
+</div>
+
+<div class="cenario">
+<strong>403 Forbidden</strong>
+<pre class="term" data-host="servidor" data-user="root">#> curl -I -H "Host: meusite.local" http://localhost
+HTTP/1.1 403 Forbidden
+#> tail -1 /var/log/apache2/meusite-error.log
+[Thu Oct 15 22:59:27.108412 2026] [core:error] [pid 134044:tid 134049] (13)Permission denied: [client ::1:57680] AH00132: file permissions deny server access: /var/www/meusite/index.html</pre>
+<p><strong>O que aconteceu:</strong> o Apache roda como o usuário <code>www-data</code>, que não tem permissão de ler o arquivo.</p>
+<p><strong>Como resolver:</strong> dê permissão de leitura: <code>chmod 644</code> nos arquivos e <code>755</code> nas pastas (veja <a href="chmod.html">chmod</a>). O <code>error.log</code> sempre diz o motivo exato.</p>
+</div>
+
+<div class="cenario">
+<strong>"ERROR: Module … does not exist!"</strong>
+<pre class="term" data-host="servidor" data-user="root">#> a2enmod naoexiste
+ERROR: Module naoexiste does not exist!</pre>
+<p><strong>Como resolver:</strong> confira o nome em <code>ls /etc/apache2/mods-available</code>. Alguns módulos vêm em pacotes separados, como o PHP (<code>libapache2-mod-php</code>).</p>
+</div>
+
+<div class="cenario">
+<strong>A ana não consegue recarregar o Apache</strong>
+<pre class="term" data-host="servidor">$ systemctl reload apache2
+Failed to reload apache2.service: Access denied
+See system logs and 'systemctl status apache2.service' for details.</pre>
+<p><strong>Como resolver:</strong> no Debian sem sudo, use <code>su -</code> antes. Veja <a href="root-su-sudo.html">root, su e sudo</a>.</p>
+</div>
+
+<div class="cenario">
+<strong>"Address already in use" ao iniciar</strong>
+<p><strong>O que aconteceu:</strong> outro programa (geralmente o nginx) já ocupa a porta 80.</p>
+<p><strong>Como resolver:</strong> descubra quem com <code>ss -tlnp | grep :80</code> e pare o outro serviço, ou mude a porta em <code>/etc/apache2/ports.conf</code>. Veja também <a href="nginx.html">Servidor Web (nginx)</a>.</p>
+</div>
+
+<hr>
+
+<h2>Referência rápida</h2>
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Comando</th><th>O que faz</th></tr>
+<tr><td><code>apt install apache2</code></td><td>Instala e já inicia o Apache</td></tr>
+<tr><td><code>a2ensite</code> / <code>a2dissite NOME</code></td><td>Liga / desliga um site</td></tr>
+<tr><td><code>a2enmod</code> / <code>a2dismod NOME</code></td><td>Liga / desliga um módulo</td></tr>
+<tr><td><code>a2enconf</code> / <code>a2disconf NOME</code></td><td>Liga / desliga uma configuração extra</td></tr>
+<tr><td><code>apache2ctl configtest</code></td><td>Confere a sintaxe de toda a configuração</td></tr>
+<tr><td><code>apache2ctl -S</code></td><td>Mostra quais VirtualHosts estão ativos</td></tr>
+<tr><td><code>systemctl reload apache2</code></td><td>Aplica mudanças sem derrubar conexões</td></tr>
+<tr><td><code>systemctl restart apache2</code></td><td>Reinicia (necessário após mudar módulos)</td></tr>
+<tr><td><code>tail -f /var/log/apache2/error.log</code></td><td>Acompanha os erros ao vivo</td></tr>
+</table>
+</div>
+
+<hr>
+
+<h2>Exercícios</h2>
+
+<div class="exercise">
+<h3>1. Ligar o site</h3>
+<p>O arquivo é <code>/etc/apache2/sites-available/loja.conf</code>. Complete:</p>
+<div class="ex-code"><input data-answer="a2ensite" aria-label="comando"> loja</div>
+</div>
+
+<div class="exercise">
+<h3>2. Antes de aplicar</h3>
+<p>Complete para conferir a configuração do Apache:</p>
+<div class="ex-code">apache2ctl <input data-answer="configtest|-t" aria-label="opção"></div>
+</div>
+
+<div class="mc" data-answer="2">
+<p class="mc-q">3. Você ligou o módulo <code>headers</code> com <code>a2enmod</code>. O que precisa fazer em seguida?</p>
+<label><input type="radio" name="q3"> <code>systemctl reload apache2</code></label>
+<label><input type="radio" name="q3"> <code>systemctl restart apache2</code></label>
+<label><input type="radio" name="q3"> Reiniciar a máquina</label>
+<label><input type="radio" name="q3"> Nada: módulos já funcionam na hora</label>
+</div>
+
+<div class="mc" data-answer="3">
+<p class="mc-q">4. O <code>systemctl reload apache2</code> falhou com erro de sintaxe. O que acontece com os sites no ar?</p>
+<label><input type="radio" name="q4"> Saem do ar até você corrigir.</label>
+<label><input type="radio" name="q4"> Passam a mostrar a página "It works".</label>
+<label><input type="radio" name="q4"> Continuam no ar com a configuração antiga.</label>
+<label><input type="radio" name="q4"> O Debian desfaz a sua mudança sozinho.</label>
+</div>
+
+<hr>
+
+<h2>Resumo</h2>
+<ul>
+  <li>No Debian o pacote é <code>apache2</code>, a configuração fica em <code>/etc/apache2</code> e os sites padrão em <code>/var/www/html</code>.</li>
+  <li>Cada site é um <code>.conf</code> em <code>sites-available</code>; <code>a2ensite</code>/<code>a2dissite</code> ligam e desligam.</li>
+  <li>Módulos: <code>a2enmod</code>/<code>a2dismod</code> + <code>restart</code>. Sites e configurações: <code>reload</code>.</li>
+  <li><code>apache2ctl configtest</code> antes de qualquer reload; o <code>error.log</code> sempre diz o motivo do erro.</li>
+</ul>
+
+<div class="pager"></div>
+
+</div>
+</main>
+</div>
+<script src="assets/site.js"></script>
+</body>
+</html>

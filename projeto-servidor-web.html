@@ -1,0 +1,361 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Debian Projeto: Servidor Web do Zero | Guia Debian</title>
+<meta name="description" content="Laboratório no Debian 13: do su - ao site no ar. Instalar e configurar o sudo, SSH por chave, firewall com nftables, Apache com o jeito Debian (a2ensite) e HTTPS.">
+<link rel="stylesheet" href="assets/style.css">
+<script>try{var t=localStorage.getItem("tema");if(t)document.documentElement.setAttribute("data-theme",t)}catch(e){}</script>
+</head>
+<body>
+<div class="layout">
+<nav class="sidebar" id="sidebar" aria-label="Tópicos"></nav>
+<main class="main">
+<div class="content">
+
+<div class="pager"></div>
+
+<h1>Projeto <span class="hl">Servidor Web do Zero</span></h1>
+
+<p class="intro">Você vai pegar um Debian 13 recém-instalado e deixá-lo pronto para servir um site: com um usuário administrador de verdade, acesso SSH só por chave, firewall fechado por padrão e o Apache configurado no jeito Debian, com HTTPS. É o roteiro que se repete em todo servidor novo.</p>
+
+<div class="tip">
+<strong>Ao terminar você terá</strong>
+<ul>
+  <li>O <code>sudo</code> instalado e a <code>ana</code> como administradora.</li>
+  <li>Login SSH só por chave, sem senha e sem root.</li>
+  <li>Um firewall nftables que só deixa entrar SSH (22), HTTP (80) e HTTPS (443).</li>
+  <li>Um site próprio em <code>/var/www/meusite</code>, publicado com <code>a2ensite</code>.</li>
+  <li>HTTPS com certificado autoassinado, e o caminho para um certificado de verdade com o certbot.</li>
+</ul>
+</div>
+
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Item</th><th>Detalhe</th></tr>
+<tr><td>Tempo estimado</td><td>1h30</td></tr>
+<tr><td>Pré-requisitos</td><td><a href="projetos.html">Como Usar os Projetos</a>, <a href="root-su-sudo.html">root, su e sudo</a>, <a href="ssh.html">SSH</a>, <a href="nftables.html">Firewall (nftables)</a>, <a href="apache.html">Servidor Web (Apache)</a></td></tr>
+<tr><td>Onde roda</td><td>Sua VM <code>lab</code>, acessada pelo SSH na porta 2222 do seu computador</td></tr>
+</table>
+</div>
+
+<div class="warning">
+<strong>Tire um snapshot antes</strong>
+<p>As etapas de SSH e firewall podem trancar você fora. Na VM isso tem conserto (console do VirtualBox ou snapshot). Num servidor na nuvem, pode significar abrir chamado no provedor.</p>
+<pre class="term" data-host="notebook">$ VBoxManage snapshot lab take antes-servidor-web</pre>
+</div>
+
+<hr>
+
+<h2>As etapas</h2>
+
+<ol class="passo">
+
+<li>
+<h3>Virar root com <code>su -</code> e atualizar</h3>
+<p><strong>O que vamos fazer e por quê:</strong> numa instalação com senha de root, a <code>ana</code> não tem nenhum poder de administração e o <code>sudo</code> nem está instalado. O primeiro passo é virar root com a senha dele.</p>
+<pre class="term" data-host="lab">$ sudo apt update
+-bash: sudo: comando não encontrado
+$ su -
+Senha:
+#> apt update
+#> apt upgrade</pre>
+<dl class="anatomy">
+  <dt>su</dt><dd>Troca de usuário (<em>substitute user</em>). Sem nome, troca para o root.</dd>
+  <dt>-</dt><dd>Abre um <strong>login</strong> completo do root: o <code>PATH</code> passa a incluir <code>/usr/sbin</code>, onde moram <code>usermod</code>, <code>adduser</code> e <code>reboot</code>.</dd>
+</dl>
+<div class="cenario">
+<strong>Se deu errado: "usermod: comando não encontrado" sendo root</strong>
+<p>Você usou <code>su</code> sem o hífen. Desde o Debian 10, o <code>su</code> sozinho mantém o <code>PATH</code> da ana, que não tem <code>/usr/sbin</code>. Saia com <code>exit</code> e use <code>su -</code>.</p>
+</div>
+</li>
+
+<li>
+<h3>Instalar o sudo e dar poder à ana</h3>
+<p><strong>O que vamos fazer e por quê:</strong> trabalhar logado como root o tempo todo é perigoso e não deixa rastro de quem fez o quê. Com o <code>sudo</code>, a ana usa a própria senha e cada comando fica registrado.</p>
+<pre class="term" data-host="lab" data-user="root">#> apt install sudo
+#> usermod -aG sudo ana
+#> id ana
+uid=1000(ana) gid=1000(ana) grupos=1000(ana),24(cdrom),25(floppy),27(sudo),29(audio),30(dip),44(video),46(plugdev),100(users),101(netdev)
+#> exit</pre>
+<p>O grupo <code>27(sudo)</code> apareceu. Mas a sessão aberta da ana ainda não sabe disso: grupos só valem num <strong>login novo</strong>. Saia do SSH e entre de novo.</p>
+<p><strong>Confira:</strong></p>
+<pre class="term" data-host="lab">$ groups
+ana cdrom floppy sudo audio dip video plugdev users netdev
+$ sudo -l
+[sudo] senha para ana:
+Entradas de Defaults correspondentes a ana em lab:
+    env_reset, mail_badpass, secure_path=/usr/local/sbin\:/usr/local/bin\:/usr/sbin\:/usr/bin\:/sbin\:/bin, use_pty
+
+Usuário ana pode executar os seguintes comandos em lab:
+    (ALL : ALL) ALL                « pode tudo, como qualquer usuário</pre>
+<div class="cenario">
+<strong>Se deu errado: "ana is not in the sudoers file."</strong>
+<pre class="term" data-host="lab">$ sudo whoami
+[sudo] senha para ana:
+ana is not in the sudoers file.
+This incident has been reported to the administrator.</pre>
+<p>A sessão ainda é a antiga (sem o grupo), ou o <code>usermod</code> foi feito sem o <code>-a</code>. Saia, entre de novo e confira com <code>groups</code>. A recusa sai em inglês mesmo com o sistema em português.</p>
+</div>
+</li>
+
+<li>
+<h3>SSH por chave</h3>
+<p><strong>O que vamos fazer e por quê:</strong> senhas podem ser adivinhadas; uma chave ed25519, não. Os passos acontecem no <strong>seu computador</strong> (prompt <code>ana@notebook</code>):</p>
+<pre class="term" data-host="notebook">$ ssh-keygen -t ed25519 -C "notebook da ana"
+Generating public/private ed25519 key pair.
+Enter file in which to save the key (/home/ana/.ssh/id_ed25519):
+Enter passphrase for "/home/ana/.ssh/id_ed25519" (empty for no passphrase):
+Enter same passphrase again:
+Your identification has been saved in /home/ana/.ssh/id_ed25519
+Your public key has been saved in /home/ana/.ssh/id_ed25519.pub
+$ ssh-copy-id -p 2222 ana@127.0.0.1
+$ ssh -p 2222 ana@127.0.0.1           « agora entra sem pedir a senha da ana</pre>
+<p>Use uma <em>passphrase</em>: se alguém copiar a chave, ainda precisa dela. Veja <a href="ssh.html">SSH</a>.</p>
+</li>
+
+<li>
+<h3>Desligar senha e root no SSH</h3>
+<p><strong>O que vamos fazer e por quê:</strong> com a chave funcionando, fechamos as portas que robôs da internet tentam a cada minuto. Primeiro, veja o padrão do Debian:</p>
+<pre class="term" data-host="lab">$ sudo sshd -T | grep -E "^(permitrootlogin|passwordauthentication|pubkeyauthentication) "
+permitrootlogin without-password       « root só entra com chave
+pubkeyauthentication yes
+passwordauthentication yes             « qualquer usuário entra com senha</pre>
+<p>Em vez de editar o arquivo principal, crie um arquivo seu na pasta <code>sshd_config.d</code> (atualizações do pacote não mexem nele):</p>
+<pre class="file" data-file="/etc/ssh/sshd_config.d/10-seguranca.conf">PermitRootLogin no
+PasswordAuthentication no
+KbdInteractiveAuthentication no</pre>
+<pre class="term" data-host="lab">$ sudo sshd -t
+$ sudo systemctl reload ssh
+$ sudo sshd -T | grep -E "^(permitrootlogin|passwordauthentication) "
+permitrootlogin no
+passwordauthentication no</pre>
+<p>O <code>sshd -t</code> confere a configuração: silêncio quer dizer "sem erros". Só então recarregue.</p>
+<div class="warning">
+<strong>Teste antes de fechar a sessão atual</strong>
+<p>Abra um <strong>segundo terminal</strong> e faça um <code>ssh -p 2222 ana@127.0.0.1</code>. Só feche o primeiro depois que o segundo entrar. Se não entrar, você ainda tem a sessão antiga para desfazer.</p>
+</div>
+</li>
+
+<li>
+<h3>Firewall com nftables</h3>
+<p><strong>O que vamos fazer e por quê:</strong> por padrão o Debian não filtra nada. Vamos inverter: bloquear tudo que chega e liberar só o necessário. O arquivo padrão vem vazio:</p>
+<pre class="term" data-host="lab">$ cat /etc/nftables.conf
+#!/usr/sbin/nft -f
+
+flush ruleset
+
+table inet filter {
+	chain input {
+		type filter hook input priority filter;
+	}
+	chain forward {
+		type filter hook forward priority filter;
+	}
+	chain output {
+		type filter hook output priority filter;
+	}
+}
+$ systemctl is-enabled nftables
+disabled</pre>
+<p>Substitua o conteúdo por este (com <code>sudo nano /etc/nftables.conf</code>):</p>
+<pre class="file" data-file="/etc/nftables.conf">#!/usr/sbin/nft -f
+flush ruleset
+
+table inet filter {
+    chain input {
+        type filter hook input priority filter; policy drop;   # bloqueia tudo que não for liberado abaixo
+        ct state established,related accept                    # respostas de conexões que já existem
+        ct state invalid drop
+        iif "lo" accept                                         # a própria máquina falando com ela mesma
+        meta l4proto { icmp, ipv6-icmp } accept                 # ping e o básico do IPv6
+        tcp dport { 22, 80, 443 } accept                        # SSH, HTTP e HTTPS
+    }
+    chain forward {
+        type filter hook forward priority filter; policy drop;
+    }
+    chain output {
+        type filter hook output priority filter; policy accept;
+    }
+}</pre>
+<p>O <code>nft -c</code> (de <em>check</em>) confere o arquivo <strong>sem aplicar</strong>. Veja como ele aponta um erro, aqui uma chave <code>}</code> esquecida:</p>
+<pre class="term" data-host="lab">$ sudo nft -c -f /etc/nftables.conf
+/etc/nftables.conf:11:33-38: Error: syntax error, unexpected accept, expecting comma or '}'
+        tcp dport { 22, 80, 443 accept
+                                ^^^^^^</pre>
+<p>Arquivo, linha 11, colunas 33 a 38, e as setinhas embaixo do lugar exato. Corrigido, o <code>nft -c</code> fica em silêncio. Então aplique e ative no boot:</p>
+<pre class="term" data-host="lab">$ sudo nft -c -f /etc/nftables.conf
+$ sudo systemctl enable --now nftables
+$ sudo nft list chain inet filter input</pre>
+<p><strong>Confira:</strong> do seu computador, num terminal novo, <code>ssh -p 2222 ana@127.0.0.1</code> continua entrando.</p>
+<div class="cenario">
+<strong>Se deu errado: o SSH parou de responder</strong>
+<p>A porta 22 ficou fora da regra. Pelo console da VM, rode <code>sudo nft flush ruleset</code> (libera tudo na hora), corrija o arquivo e aplique de novo. Veja <a href="nftables.html">Firewall (nftables)</a>.</p>
+</div>
+</li>
+
+<li>
+<h3>Instalar o Apache</h3>
+<pre class="term" data-host="lab">$ sudo apt install apache2
+$ systemctl is-active apache2
+active
+$ apache2 -v
+-bash: apache2: comando não encontrado
+$ sudo apache2 -v
+Server version: Apache/2.4.68 (Debian)
+$ wget -qO- http://localhost/ | grep -o "&lt;title&gt;.*&lt;/title&gt;"
+&lt;title&gt;Apache2 Debian Default Page: It works&lt;/title&gt;</pre>
+<p>Dois detalhes do Debian aparecem aqui. O pacote se chama <code>apache2</code>, e o serviço sobe sozinho logo após a instalação. E o binário mora em <code>/usr/sbin</code>, fora do PATH da ana: por isso o primeiro <code>apache2 -v</code> falha.</p>
+</li>
+
+<li>
+<h3>Publicar o seu site, no jeito Debian</h3>
+<p><strong>O que vamos fazer e por quê:</strong> o Debian organiza o Apache em pastas <code>*-available</code> (o que existe) e <code>*-enabled</code> (o que está ligado, por links). Os comandos <code>a2ensite</code> e <code>a2dissite</code> criam e apagam esses links para você.</p>
+<pre class="term" data-host="lab">$ ls /etc/apache2/
+apache2.conf    conf-enabled  magic           mods-enabled  sites-available
+conf-available  envvars       mods-available  ports.conf    sites-enabled
+$ sudo mkdir -p /var/www/meusite
+$ echo '&lt;h1&gt;Olá do Debian&lt;/h1&gt;' | sudo tee /var/www/meusite/index.html</pre>
+<pre class="file" data-file="/etc/apache2/sites-available/meusite.conf">&lt;VirtualHost *:80&gt;
+    ServerName meusite.lab
+    DocumentRoot /var/www/meusite
+    ErrorLog ${APACHE_LOG_DIR}/meusite-erro.log
+    CustomLog ${APACHE_LOG_DIR}/meusite-acesso.log combined
+&lt;/VirtualHost&gt;</pre>
+<pre class="term" data-host="lab">$ sudo a2ensite meusite
+Enabling site meusite.
+To activate the new configuration, you need to run:
+  systemctl reload apache2
+$ sudo apache2ctl configtest
+Syntax OK
+$ sudo systemctl reload apache2
+$ ls -l /etc/apache2/sites-enabled/
+total 0
+lrwxrwxrwx 1 root root 35 out 15 22:52 000-default.conf -&gt; ../sites-available/000-default.conf
+lrwxrwxrwx 1 root root 31 out 15 22:53 meusite.conf -&gt; ../sites-available/meusite.conf</pre>
+<p><strong>Confira:</strong> peça a página dizendo que quer o site <code>meusite.lab</code> (o Apache escolhe o site pelo nome pedido):</p>
+<pre class="term" data-host="lab">$ wget -qO- --header "Host: meusite.lab" http://localhost/
+&lt;h1&gt;Olá do Debian&lt;/h1&gt;
+$ sudo tail -1 /var/log/apache2/meusite-acesso.log
+::1 - - [15/Oct/2026:22:53:01 -0300] "GET / HTTP/1.1" 200 309 "-" "Wget/1.25.0"</pre>
+<p>Para abrir no navegador do seu computador, redirecione uma porta da VM (com ela desligada): <code>VBoxManage modifyvm lab --natpf1 "web,tcp,127.0.0.1,8080,,80"</code> e acesse <code>http://localhost:8080</code>. Para o nome <code>meusite.lab</code> funcionar, desative o site padrão com <code>sudo a2dissite 000-default</code>, ou adicione o nome no <code>/etc/hosts</code> do seu computador.</p>
+<div class="cenario">
+<strong>Se deu errado: o configtest reclama</strong>
+<pre class="term" data-host="lab">$ sudo apache2ctl configtest
+AH00526: Syntax error on line 3 of /etc/apache2/sites-enabled/meusite.conf:
+Invalid command 'DocumentRot', perhaps misspelled or defined by a module not included in the server configuration</pre>
+<p>Arquivo e linha estão na mensagem. Corrija e rode o <code>configtest</code> de novo antes do <code>reload</code>.</p>
+</div>
+</li>
+
+<li>
+<h3>HTTPS</h3>
+<p><strong>O que vamos fazer e por quê:</strong> sem HTTPS, senhas e cookies viajam abertos. No laboratório, sem domínio, usamos um certificado <strong>autoassinado</strong>: criptografa, mas o navegador avisa que ninguém confirmou a identidade do site.</p>
+<pre class="term" data-host="lab">$ sudo openssl req -x509 -nodes -days 365 -newkey rsa:2048 \
+    -keyout /etc/ssl/private/meusite.key -out /etc/ssl/certs/meusite.crt -subj "/CN=meusite.lab"
+$ sudo openssl x509 -in /etc/ssl/certs/meusite.crt -noout -subject -dates
+subject=CN=meusite.lab
+notBefore=Oct 16 01:48:50 2026 GMT
+notAfter=Oct 16 01:48:50 2027 GMT
+$ sudo a2enmod ssl
+Considering dependency mime for ssl:
+Module mime already enabled
+Considering dependency socache_shmcb for ssl:
+Enabling module socache_shmcb.
+Enabling module ssl.
+See /usr/share/doc/apache2/README.Debian.gz on how to configure SSL and create self-signed certificates.
+To activate the new configuration, you need to run:
+  systemctl restart apache2</pre>
+<p>Acrescente ao <code>meusite.conf</code> um segundo bloco, agora na porta 443:</p>
+<pre class="file" data-file="/etc/apache2/sites-available/meusite.conf (acréscimo)">&lt;VirtualHost *:443&gt;
+    ServerName meusite.lab
+    DocumentRoot /var/www/meusite
+    SSLEngine on
+    SSLCertificateFile    /etc/ssl/certs/meusite.crt
+    SSLCertificateKeyFile /etc/ssl/private/meusite.key
+&lt;/VirtualHost&gt;</pre>
+<pre class="term" data-host="lab">$ sudo apache2ctl configtest
+Syntax OK
+$ sudo systemctl restart apache2
+$ wget -qO- --no-check-certificate --header "Host: meusite.lab" https://localhost/
+&lt;h1&gt;Olá do Debian&lt;/h1&gt;</pre>
+<p>O <code>--no-check-certificate</code> faz o mesmo que o "aceitar o risco" do navegador.</p>
+<div class="tip">
+<strong>Com um domínio de verdade</strong>
+<p>Num servidor com IP público e um domínio apontando para ele, o Debian tem o certbot no próprio repositório: <code>sudo apt install python3-certbot-apache</code> e depois <code>sudo certbot --apache -d meusite.com.br</code>. Ele pede o certificado ao Let's Encrypt, ajusta o Apache e agenda a renovação. Veja <a href="https.html">HTTPS (Let's Encrypt)</a>.</p>
+</div>
+</li>
+</ol>
+
+<hr>
+
+<h2>Checklist do que você aprendeu</h2>
+<ul>
+  <li><code>su -</code> (com hífen) para virar root; <code>apt install sudo</code> e <code>usermod -aG sudo</code> para criar um administrador.</li>
+  <li>Grupos novos só valem num login novo.</li>
+  <li>SSH: chave ed25519, depois <code>PasswordAuthentication no</code> e <code>PermitRootLogin no</code> num arquivo em <code>sshd_config.d</code>, com <code>sshd -t</code> antes do reload.</li>
+  <li>nftables: <code>policy drop</code> na entrada, liberar 22/80/443, conferir com <code>nft -c</code>, ativar com <code>systemctl enable --now nftables</code>.</li>
+  <li>Apache no Debian: <code>sites-available</code> + <code>a2ensite</code>, <code>apache2ctl configtest</code>, <code>systemctl reload apache2</code>.</li>
+</ul>
+
+<h2>Desafios extras</h2>
+<ul>
+  <li>Instale o <code>fail2ban</code> e veja-o bloquear tentativas de senha no SSH. Veja <a href="seguranca.html">Segurança do Servidor</a>.</li>
+  <li>Troque o Apache pelo nginx (<code>sudo systemctl disable --now apache2</code>, <code>sudo apt install nginx</code>) e publique o mesmo site. Veja <a href="nginx.html">Servidor Web (nginx)</a>.</li>
+  <li>Redirecione todo acesso HTTP para HTTPS com <code>Redirect permanent / https://meusite.lab/</code> no bloco da porta 80.</li>
+</ul>
+
+<h2>Limpeza</h2>
+<pre class="term" data-host="notebook">$ VBoxManage controlvm lab poweroff
+$ VBoxManage snapshot lab restore antes-servidor-web</pre>
+
+<hr>
+
+<h2>Exercícios</h2>
+
+<div class="mc" data-answer="2">
+<p class="mc-q">1. Você virou root com <code>su</code> (sem hífen) e o <code>usermod</code> deu "comando não encontrado". Por quê?</p>
+<label><input type="radio" name="q1"> O usermod não vem instalado no Debian.</label>
+<label><input type="radio" name="q1"> Sem o hífen, o PATH continua o da ana, sem <code>/usr/sbin</code>.</label>
+<label><input type="radio" name="q1"> Falta instalar o sudo.</label>
+<label><input type="radio" name="q1"> A senha do root está errada.</label>
+</div>
+
+<div class="exercise">
+<h3>2. Ligar um site</h3>
+<p>Complete o comando que liga o site descrito em <code>/etc/apache2/sites-available/loja.conf</code>:</p>
+<div class="ex-code">sudo <input data-answer="a2ensite loja|a2ensite loja.conf" aria-label="comando"></div>
+</div>
+
+<div class="exercise">
+<h3>3. Conferir sem aplicar</h3>
+<p>Complete para conferir o arquivo do firewall sem aplicá-lo:</p>
+<div class="ex-code">sudo nft <input data-answer="-c -f|-cf" aria-label="opções"> /etc/nftables.conf</div>
+</div>
+
+<div class="mc" data-answer="3">
+<p class="mc-q">4. Você acabou de colocar <code>PasswordAuthentication no</code>. O que fazer antes de fechar a sessão SSH atual?</p>
+<label><input type="radio" name="q4"> Reiniciar a VM.</label>
+<label><input type="radio" name="q4"> Apagar a chave pública.</label>
+<label><input type="radio" name="q4"> Testar o login por chave num segundo terminal.</label>
+<label><input type="radio" name="q4"> Desligar o firewall.</label>
+</div>
+
+<hr>
+
+<h2>Resumo</h2>
+<ul>
+  <li>Num Debian com senha de root, o primeiro passo de um servidor é <code>su -</code>, instalar o <code>sudo</code> e criar um administrador.</li>
+  <li>Segurança em camadas: SSH só por chave, firewall fechado por padrão e serviços testados antes de recarregar.</li>
+  <li>O Apache do Debian se administra com <code>a2ensite</code>, <code>a2enmod</code> e <code>apache2ctl configtest</code>.</li>
+</ul>
+
+<div class="pager"></div>
+
+</div>
+</main>
+</div>
+<script src="assets/site.js"></script>
+</body>
+</html>

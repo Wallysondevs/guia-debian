@@ -1,0 +1,360 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Debian Projeto: Backup Automático | Guia Debian</title>
+<meta name="description" content="Laboratório no Debian 13: script de backup com rsync e --link-dest, log, rotação de 7 dias, systemd timer, aviso de falha com OnFailure e teste de restauração.">
+<link rel="stylesheet" href="assets/style.css">
+<script>try{var t=localStorage.getItem("tema");if(t)document.documentElement.setAttribute("data-theme",t)}catch(e){}</script>
+</head>
+<body>
+<div class="layout">
+<nav class="sidebar" id="sidebar" aria-label="Tópicos"></nav>
+<main class="main">
+<div class="content">
+
+<div class="pager"></div>
+
+<h1>Projeto <span class="hl">Backup Automático</span></h1>
+
+<p class="intro">Um backup que depende de você lembrar não é backup. E um backup que nunca foi restaurado é só uma esperança. Neste laboratório você monta, num Debian 13, uma rotina que copia os dados todo dia sozinha, guarda 7 dias de histórico sem gastar espaço à toa, avisa quando falha e, o mais importante, prova que a restauração funciona.</p>
+
+<div class="tip">
+<strong>Ao terminar você terá</strong>
+<ul>
+  <li>Um script <code>/usr/local/bin/backup-dados.sh</code> que copia <code>/srv/dados</code> com <code>rsync</code> para uma pasta com data e hora.</li>
+  <li>Cópias diárias que compartilham os arquivos repetidos (<code>--link-dest</code>): 7 dias de histórico ocupando pouco mais que uma cópia.</li>
+  <li>Um log em <code>/var/log/backup-dados.log</code>.</li>
+  <li>Um <strong>systemd timer</strong> rodando às 02:00, e um aviso no journal quando o backup falhar.</li>
+  <li>Uma restauração testada: de um arquivo e da pasta inteira.</li>
+</ul>
+</div>
+
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Item</th><th>Detalhe</th></tr>
+<tr><td>Tempo estimado</td><td>1h</td></tr>
+<tr><td>Pré-requisitos</td><td><a href="projetos.html">Como Usar os Projetos</a>, <a href="script-intro.html">Primeiro Script</a>, <a href="scp-rsync.html">scp e rsync</a>, <a href="criar-servico.html">Criar um Serviço</a>, <a href="backup.html">Backup</a></td></tr>
+<tr><td>Onde roda</td><td>Sua VM <code>lab</code>, como root (<code>root@lab</code>)</td></tr>
+</table>
+</div>
+
+<div class="note">
+<strong>No mundo real</strong>
+<p>Aqui o destino <code>/backup</code> fica no mesmo disco, para simplificar. Na vida real ele deve ser <strong>outro disco</strong> (um HD externo montado em <code>/backup</code>, outro servidor). Backup no mesmo disco não sobrevive a um disco queimado. Veja a regra 3-2-1 em <a href="backup.html">Backup</a>.</p>
+</div>
+
+<hr>
+
+<h2>As etapas</h2>
+
+<ol class="passo">
+
+<li>
+<h3>Virar root e instalar o rsync</h3>
+<p><strong>O que vamos fazer e por quê:</strong> o backup lê e grava em pastas do sistema, então tudo aqui roda como root. No Debian instalado com senha de root, o caminho é <code>su -</code>. O <code>rsync</code> nem sempre vem na instalação mínima.</p>
+<pre class="term" data-host="lab">$ su -
+Senha:
+#> apt install rsync
+#> rsync --version | head -1
+rsync  version 3.5.0  protocol version 32</pre>
+<p><strong>Confira:</strong> a última linha mostra a versão. Se aparecer <code>bash: rsync: comando não encontrado</code>, a instalação não terminou.</p>
+</li>
+
+<li>
+<h3>Criar os dados de exemplo</h3>
+<p><strong>O que vamos fazer e por quê:</strong> precisamos de algo para proteger. Dois textos (fáceis de conferir) e um arquivo de 1 MB, simulando uma foto.</p>
+<pre class="term" data-host="lab" data-user="root">#> mkdir -p /srv/dados/docs /srv/dados/fotos
+#> echo "contrato da padaria" &gt; /srv/dados/docs/contrato.txt
+#> echo "lista de clientes" &gt; /srv/dados/docs/clientes.txt
+#> head -c 1048576 /dev/urandom &gt; /srv/dados/fotos/foto1.jpg
+#> find /srv/dados
+/srv/dados
+/srv/dados/docs
+/srv/dados/docs/clientes.txt
+/srv/dados/docs/contrato.txt
+/srv/dados/fotos
+/srv/dados/fotos/foto1.jpg</pre>
+<p><code>/srv</code> é a pasta que o Debian reserva para dados servidos pela máquina. Veja <a href="estrutura-diretorios.html">Estrutura de Diretórios</a>.</p>
+</li>
+
+<li>
+<h3>Escrever o script</h3>
+<p><strong>O que vamos fazer e por quê:</strong> um script reúne os passos e pode ser chamado pelo timer. Crie o arquivo com <code>nano /usr/local/bin/backup-dados.sh</code>:</p>
+<pre class="file" data-file="/usr/local/bin/backup-dados.sh">#!/bin/bash
+# Backup diário de /srv/dados para /backup, com rotação de 7 dias.
+set -euo pipefail
+
+ORIGEM="/srv/dados"
+DESTINO="/backup"
+LOG="/var/log/backup-dados.log"
+DATA="$(date +%F_%H%M%S)"
+
+log() { echo "$(date '+%F %T') $*" &gt;&gt; "$LOG"; }
+
+# 1. Sem origem, não há o que copiar: falha com mensagem clara
+if [ ! -d "$ORIGEM" ]; then
+    log "ERRO: a origem $ORIGEM não existe"
+    exit 1
+fi
+
+mkdir -p "$DESTINO"
+rm -rf "$DESTINO"/.parcial-*          # restos de execuções que falharam
+ANTERIOR="$(ls -1d "$DESTINO"/20* 2&gt;/dev/null | tail -n 1 || true)"
+PARCIAL="$DESTINO/.parcial-$DATA"
+
+log "início -&gt; $DESTINO/$DATA"
+
+# 2. Copia para uma pasta temporária; arquivos iguais aos do backup
+#    anterior viram links (--link-dest) e não ocupam espaço de novo
+if [ -n "$ANTERIOR" ]; then
+    rsync -a --delete --link-dest="$ANTERIOR" "$ORIGEM/" "$PARCIAL/" &gt;&gt; "$LOG" 2&gt;&amp;1
+else
+    rsync -a --delete "$ORIGEM/" "$PARCIAL/" &gt;&gt; "$LOG" 2&gt;&amp;1
+fi
+
+# 3. Só vira backup "de verdade" se o rsync terminou sem erro
+mv "$PARCIAL" "$DESTINO/$DATA"
+
+# 4. Apaga cópias com mais de 7 dias
+find "$DESTINO" -mindepth 1 -maxdepth 1 -type d -name '20*' -mtime +7 -exec rm -rf {} +
+
+log "OK $DESTINO/$DATA"</pre>
+
+<p>As partes que merecem atenção:</p>
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Trecho</th><th>Por quê</th></tr>
+<tr><td><code>set -euo pipefail</code></td><td>Para o script no primeiro erro. Sem isso, um <code>rsync</code> que falhou seria seguido de "OK" no log.</td></tr>
+<tr><td><code>if [ ! -d "$ORIGEM" ]</code></td><td>Se a pasta de dados sumir (disco desmontado, por exemplo), o script avisa em vez de criar um backup vazio.</td></tr>
+<tr><td><code>.parcial-…</code> e depois <code>mv</code></td><td>A cópia só ganha o nome definitivo quando terminou bem. Um backup pela metade nunca vira "o mais recente".</td></tr>
+<tr><td><code>--link-dest="$ANTERIOR"</code></td><td>Arquivos que não mudaram viram <em>hard links</em> para o backup anterior: aparecem inteiros em cada pasta, mas ocupam espaço uma vez só.</td></tr>
+<tr><td><code>find … -mtime +7 … rm -rf</code></td><td>A rotação: apaga as pastas com mais de 7 dias.</td></tr>
+</table>
+</div>
+
+<pre class="term" data-host="lab" data-user="root">#> chmod 755 /usr/local/bin/backup-dados.sh
+#> bash -n /usr/local/bin/backup-dados.sh &amp;&amp; echo "sintaxe ok"
+sintaxe ok</pre>
+<p>O <code>bash -n</code> lê o script sem executar e acusa erros de digitação como um <code>fi</code> esquecido.</p>
+</li>
+
+<li>
+<h3>Rodar duas vezes e ver o --link-dest funcionando</h3>
+<pre class="term" data-host="lab" data-user="root">#> /usr/local/bin/backup-dados.sh
+#> /usr/local/bin/backup-dados.sh
+#> ls /backup
+2026-10-15_214513  2026-10-15_214514
+#> cat /var/log/backup-dados.log
+2026-10-15 21:45:13 início -&gt; /backup/2026-10-15_214513
+2026-10-15 21:45:13 OK /backup/2026-10-15_214513
+2026-10-15 21:45:14 início -&gt; /backup/2026-10-15_214514
+2026-10-15 21:45:14 OK /backup/2026-10-15_214514
+#> du -sh /backup/*
+1,1M	/backup/2026-10-15_214513
+12K	/backup/2026-10-15_214514        « a segunda cópia quase não ocupa espaço
+#> ls -li /backup/*/fotos/foto1.jpg
+654087 -rw-r--r-- 2 root root 1048576 out 15 21:45 /backup/2026-10-15_214513/fotos/foto1.jpg
+654087 -rw-r--r-- 2 root root 1048576 out 15 21:45 /backup/2026-10-15_214514/fotos/foto1.jpg</pre>
+<p>O <code>ls -li</code> mostra o número do <strong>inode</strong> na primeira coluna. É o mesmo (<code>654087</code>) nas duas pastas, e o contador de links é <code>2</code>: é <strong>o mesmo arquivo</strong> no disco, visto de dois lugares. Veja <a href="links.html">Links (ln)</a>.</p>
+</li>
+
+<li>
+<h3>Agendar com um systemd timer</h3>
+<p><strong>O que vamos fazer e por quê:</strong> um <code>.service</code> diz <strong>o que</strong> rodar; um <code>.timer</code> diz <strong>quando</strong>. Comparado ao cron, o timer guarda o histórico no journal e, com <code>Persistent=true</code>, roda o backup atrasado se a máquina estava desligada às 02:00.</p>
+
+<pre class="file" data-file="/etc/systemd/system/backup-dados.service">[Unit]
+Description=Backup diário de /srv/dados
+OnFailure=backup-falhou.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/bin/backup-dados.sh</pre>
+
+<pre class="file" data-file="/etc/systemd/system/backup-dados.timer">[Unit]
+Description=Roda o backup todo dia às 02:00
+
+[Timer]
+OnCalendar=*-*-* 02:00:00
+Persistent=true
+
+[Install]
+WantedBy=timers.target</pre>
+
+<p>O <code>OnFailure=</code> chama outro serviço quando o backup falha. Ele grava um aviso de prioridade "erro" no journal:</p>
+<pre class="file" data-file="/etc/systemd/system/backup-falhou.service">[Unit]
+Description=Aviso de falha do backup
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/logger -p user.err -t backup "ATENÇÃO: o backup de /srv/dados FALHOU. Veja: journalctl -u backup-dados"</pre>
+
+<pre class="term" data-host="lab" data-user="root">#> systemctl daemon-reload
+#> systemctl enable --now backup-dados.timer
+Created symlink '/etc/systemd/system/timers.target.wants/backup-dados.timer' → '/etc/systemd/system/backup-dados.timer'.
+#> systemctl list-timers backup-dados.timer
+NEXT                            LEFT LAST PASSED UNIT               ACTIVATES
+Fri 2026-10-16 02:00:00 -03 4h 16min -         - backup-dados.timer backup-dados.service
+
+1 timers listed.
+Pass --all to see loaded but inactive timers, too.</pre>
+<p>A coluna <code>NEXT</code> é a próxima execução e <code>LEFT</code>, quanto falta. As datas do systemd saem em inglês (<code>Fri</code> = sexta), mesmo com o sistema em português.</p>
+<p><strong>Confira:</strong> rode o serviço na hora, sem esperar as 02:00:</p>
+<pre class="term" data-host="lab" data-user="root">#> systemctl start backup-dados.service
+#> systemctl status backup-dados.service --no-pager
+○ backup-dados.service - Backup diário de /srv/dados
+     Loaded: loaded (/etc/systemd/system/backup-dados.service; static)
+     Active: inactive (dead) since Thu 2026-10-15 21:43:38 -03; 31ms ago
+TriggeredBy: ● backup-dados.timer
+    Process: 110168 ExecStart=/usr/local/bin/backup-dados.sh (code=exited, status=0/SUCCESS)   « status=0: deu certo
+   Main PID: 110168 (code=exited, status=0/SUCCESS)</pre>
+<p><code>inactive (dead)</code> parece ruim, mas é o normal para um <code>Type=oneshot</code>: ele roda, termina e fica parado até a próxima vez. O que importa é o <code>status=0/SUCCESS</code>.</p>
+<div class="cenario">
+<strong>Se deu errado: "Unit backup-dados.timer has a bad unit file setting"</strong>
+<p>Algum erro de digitação nos arquivos. O <code>systemd-analyze verify /etc/systemd/system/backup-dados.*</code> aponta a linha. Depois de corrigir, rode <code>systemctl daemon-reload</code> de novo.</p>
+</div>
+</li>
+
+<li>
+<h3>Provocar uma falha e ver o aviso</h3>
+<p><strong>O que vamos fazer e por quê:</strong> um alarme que nunca tocou pode estar quebrado. Vamos "sumir" com a origem e rodar o backup.</p>
+<pre class="term" data-host="lab" data-user="root">#> mv /srv/dados /srv/dados-x
+#> systemctl start backup-dados.service
+Job for backup-dados.service failed because the control process exited with error code.
+See "systemctl status backup-dados.service" and "journalctl -xeu backup-dados.service" for details.
+#> journalctl -u backup-dados.service -n 5 --no-pager
+out 15 21:43:39 lab systemd[1]: Starting backup-dados.service - Backup diário de /srv/dados...
+out 15 21:43:39 lab systemd[1]: backup-dados.service: Main process exited, code=exited, status=1/FAILURE
+out 15 21:43:39 lab systemd[1]: backup-dados.service: Failed with result 'exit-code'.
+out 15 21:43:39 lab systemd[1]: Failed to start backup-dados.service - Backup diário de /srv/dados.
+out 15 21:43:39 lab systemd[1]: backup-dados.service: Triggering OnFailure= dependencies.   « chamou o aviso
+#> journalctl -t backup -n 1 --no-pager
+out 15 21:43:39 lab backup[110197]: ATENÇÃO: o backup de /srv/dados FALHOU. Veja: journalctl -u backup-dados
+#> tail -1 /var/log/backup-dados.log
+2026-10-15 21:45:14 ERRO: a origem /srv/dados não existe
+#> mv /srv/dados-x /srv/dados
+#> systemctl reset-failed backup-dados.service</pre>
+<p>O <code>reset-failed</code> limpa o estado de falha, para o <code>systemctl --failed</code> não continuar listando o serviço.</p>
+<div class="tip">
+<strong>Ir além: aviso por e-mail</strong>
+<p>Troque o <code>ExecStart</code> do <code>backup-falhou.service</code> por um comando que mande e-mail (por exemplo, com o pacote <code>msmtp-mta</code> configurado) ou uma mensagem para um aplicativo de chat via <code>curl</code>.</p>
+</div>
+</li>
+
+<li>
+<h3>O teste que importa: restaurar</h3>
+<p><strong>O que vamos fazer e por quê:</strong> apagar um arquivo "sem querer" e trazê-lo de volta. Depois, restaurar a pasta inteira num lugar separado e comparar tudo.</p>
+<pre class="term" data-host="lab" data-user="root">#> rm /srv/dados/docs/contrato.txt
+#> ls /backup
+2026-10-15_214513  2026-10-15_214514
+#> rsync -av /backup/2026-10-15_214514/docs/contrato.txt /srv/dados/docs/
+sending incremental file list
+contrato.txt
+
+sent 129 bytes  received 35 bytes  109,33 bytes/sec
+total size is 20  speedup is 0,12
+#> cat /srv/dados/docs/contrato.txt
+contrato da padaria</pre>
+<p>Agora a restauração completa, numa pasta de teste (nunca por cima dos dados de produção sem conferir antes):</p>
+<pre class="term" data-host="lab" data-user="root">#> mkdir /tmp/restaura
+#> rsync -a /backup/2026-10-15_214514/ /tmp/restaura/
+#> diff -r /srv/dados /tmp/restaura &amp;&amp; echo "IGUAIS"
+IGUAIS</pre>
+<p>O <code>diff -r</code> compara as duas árvores arquivo por arquivo. Silêncio seguido de <code>IGUAIS</code> é o melhor resultado possível.</p>
+<div class="cenario">
+<strong>Se deu errado: a pasta de backup mais recente estava vazia</strong>
+<p>Foi exatamente esse problema que nos fez criar a etapa <code>.parcial</code>. Numa primeira versão deste script, sem a checagem da origem nem a pasta temporária, um backup com a origem ausente criava uma pasta com a data de hoje <strong>vazia</strong>. Na hora de restaurar, "o mais recente" não tinha nada. Moral: teste a restauração depois de cada mudança no script.</p>
+</div>
+</li>
+
+<li>
+<h3>Conferir a rotação</h3>
+<p>Para não esperar uma semana, "envelhecemos" a cópia mais antiga com o <code>touch -d</code>:</p>
+<pre class="term" data-host="lab" data-user="root">#> touch -d "10 days ago" /backup/2026-10-15_214513
+#> ls -l --time-style=+%F /backup
+total 8
+drwxr-xr-x 4 root root 4096 2026-10-05 2026-10-15_214513
+drwxr-xr-x 4 root root 4096 2026-10-15 2026-10-15_214514
+#> /usr/local/bin/backup-dados.sh
+#> ls /backup
+2026-10-15_214514  2026-10-15_214515</pre>
+<p>A pasta "de 10 dias" sumiu e uma nova chegou. A rotação funciona.</p>
+</li>
+</ol>
+
+<hr>
+
+<h2>Checklist do que você aprendeu</h2>
+<ul>
+  <li><code>rsync -a --delete</code> espelha uma pasta; <code>--link-dest</code> cria cópias diárias baratas com hard links.</li>
+  <li>Grave numa pasta temporária e renomeie no fim: um backup pela metade nunca parece completo.</li>
+  <li>Um <code>.service</code> <code>Type=oneshot</code> + um <code>.timer</code> com <code>Persistent=true</code> substituem o cron com vantagens.</li>
+  <li><code>OnFailure=</code> transforma falhas em avisos.</li>
+  <li>Backup só é backup depois de uma restauração testada com <code>diff -r</code>.</li>
+</ul>
+
+<h2>Desafios extras</h2>
+<ul>
+  <li>Mande o backup para outra máquina: <code>rsync -a … usuario@servidor:/backup/…</code> com chave SSH (veja <a href="ssh.html">SSH</a>).</li>
+  <li>Monte um HD externo em <code>/backup</code> com <code>nofail</code> no fstab e faça o script falhar se ele não estiver montado (<code>mountpoint -q /backup</code>).</li>
+  <li>Experimente o <code>restic</code> (<code>apt install restic</code>): backup com criptografia e deduplicação.</li>
+</ul>
+
+<h2>Limpeza</h2>
+<pre class="term" data-host="lab" data-user="root">#> systemctl disable --now backup-dados.timer
+Removed '/etc/systemd/system/timers.target.wants/backup-dados.timer'.
+#> rm /etc/systemd/system/backup-dados.{service,timer} /etc/systemd/system/backup-falhou.service
+#> systemctl daemon-reload
+#> rm -rf /srv/dados /backup /tmp/restaura /usr/local/bin/backup-dados.sh /var/log/backup-dados.log</pre>
+<p>Ou restaure o snapshot tirado antes do projeto.</p>
+
+<hr>
+
+<h2>Exercícios</h2>
+
+<div class="exercise">
+<h3>1. Cópias baratas</h3>
+<p>Complete a opção do rsync que transforma arquivos iguais aos do backup anterior em hard links:</p>
+<div class="ex-code">rsync -a --delete <input data-answer="--link-dest=&quot;$ANTERIOR&quot;|--link-dest=$ANTERIOR" aria-label="opção"> "$ORIGEM/" "$PARCIAL/"</div>
+</div>
+
+<div class="mc" data-answer="2">
+<p class="mc-q">2. O <code>systemctl status</code> do backup mostra <code>Active: inactive (dead)</code> e <code>status=0/SUCCESS</code>. Isso quer dizer:</p>
+<label><input type="radio" name="q2"> O backup está quebrado.</label>
+<label><input type="radio" name="q2"> O backup rodou, terminou bem e espera a próxima execução.</label>
+<label><input type="radio" name="q2"> O timer foi desativado.</label>
+<label><input type="radio" name="q2"> Falta o <code>daemon-reload</code>.</label>
+</div>
+
+<div class="exercise">
+<h3>3. Quando rodar</h3>
+<p>Complete o timer para rodar todo dia às 03:30:</p>
+<div class="ex-code">OnCalendar=<input data-answer="*-*-* 03:30:00|*-*-* 03:30|03:30|daily 03:30" aria-label="calendário"></div>
+</div>
+
+<div class="mc" data-answer="1">
+<p class="mc-q">4. Por que o script copia para <code>.parcial-DATA</code> e só depois renomeia?</p>
+<label><input type="radio" name="q4"> Para que um backup que falhou no meio nunca seja tratado como o mais recente.</label>
+<label><input type="radio" name="q4"> Porque o rsync não aceita nomes com data.</label>
+<label><input type="radio" name="q4"> Para economizar espaço.</label>
+<label><input type="radio" name="q4"> Porque o systemd exige.</label>
+</div>
+
+<hr>
+
+<h2>Resumo</h2>
+<ul>
+  <li>Script + <code>rsync --link-dest</code> + timer do systemd = backup diário com histórico, sem trabalho manual.</li>
+  <li>Proteja o script contra os dois piores casos: origem ausente e cópia pela metade.</li>
+  <li>Teste a falha (o aviso aparece?) e a restauração (<code>diff -r</code> dá iguais?).</li>
+</ul>
+
+<div class="pager"></div>
+
+</div>
+</main>
+</div>
+<script src="assets/site.js"></script>
+</body>
+</html>

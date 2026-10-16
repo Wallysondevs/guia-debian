@@ -1,0 +1,547 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Debian particionar e formatar — fdisk, parted, mkfs | Guia Debian</title>
+<meta name="description" content="Aprenda a particionar e formatar discos no Debian 13 com fdisk, parted e mkfs, num laboratório seguro com arquivos-imagem e losetup, com cada parte do comando explicada e as mensagens reais do Debian.">
+<link rel="stylesheet" href="assets/style.css">
+<script>try{var t=localStorage.getItem("tema");if(t)document.documentElement.setAttribute("data-theme",t)}catch(e){}</script>
+</head>
+<body>
+<div class="layout">
+<nav class="sidebar" id="sidebar" aria-label="Tópicos"></nav>
+<main class="main">
+<div class="content">
+
+<div class="pager"></div>
+
+<h1>Debian <span class="hl">Particionar e Formatar</span></h1>
+
+<p class="intro">Um disco novo chega "cru": o Debian enxerga o aparelho, mas não consegue guardar arquivos nele. Para usar, você faz três coisas: cria uma <strong>tabela de partições</strong>, cria uma ou mais <strong>partições</strong> e <strong>formata</strong> cada uma com um sistema de arquivos. Nesta aula você faz tudo isso num laboratório que não põe nada em risco.</p>
+
+<div class="warning">
+<strong>Esta aula apaga dados</strong>
+<p>Particionar e formatar destroem o que estiver no disco, sem lixeira e sem "desfazer". Pratique primeiro no laboratório mostrado abaixo. Num disco real, confira o nome do dispositivo duas vezes antes de apertar <kbd>Enter</kbd>.</p>
+</div>
+
+<div class="note">
+<strong>Você vai aprender</strong>
+<ul>
+  <li>A diferença entre disco, tabela de partições, partição e sistema de arquivos.</li>
+  <li>Como montar um laboratório sem risco com um arquivo-imagem e o <code>losetup</code>.</li>
+  <li>Como identificar o disco certo com <code>lsblk</code>.</li>
+  <li>Particionar com <code>fdisk</code> (interativo) e com <code>parted</code> (numa linha só).</li>
+  <li>Formatar com <code>mkfs.ext4</code> e outros formatos, e criar swap.</li>
+</ul>
+</div>
+
+<p>Os exemplos acontecem na máquina fictícia <strong>servidor</strong>. Como no Debian a usuária <strong>ana</strong> não tem <code>sudo</code> (veja <a href="root-su-sudo.html">root, su e sudo</a>), os comandos de disco são rodados como <strong>root</strong>: o prompt muda para <code>root@servidor:~#</code>.</p>
+
+<hr>
+
+<h2>Conceito: o terreno, os lotes e a casa</h2>
+<p>Pense num disco como um <strong>terreno</strong>. Antes de construir, é preciso registrar o mapa dos lotes, depois dividir o terreno em lotes e, por fim, construir em cada lote.</p>
+
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Peça</th><th>Analogia</th><th>No Linux</th></tr>
+<tr><td>Disco</td><td>O terreno inteiro</td><td><code>/dev/sdb</code>, <code>/dev/nvme1n1</code></td></tr>
+<tr><td>Tabela de partições</td><td>O mapa que diz onde começa e termina cada lote</td><td><strong>GPT</strong> (moderna) ou <strong>MBR</strong>/DOS (antiga)</td></tr>
+<tr><td>Partição</td><td>Um lote</td><td><code>/dev/sdb1</code>, <code>/dev/nvme1n1p1</code></td></tr>
+<tr><td>Sistema de arquivos</td><td>A casa construída no lote</td><td><code>ext4</code> (padrão do Debian), <code>xfs</code>, <code>vfat</code>, <code>exfat</code></td></tr>
+<tr><td>Ponto de montagem</td><td>O endereço da casa</td><td><code>/mnt/dados</code>, <code>/srv</code></td></tr>
+</table>
+</div>
+
+<h3>GPT ou MBR?</h3>
+<div class="table-wrap">
+<table class="ref">
+<tr><th></th><th>GPT</th><th>MBR (DOS)</th></tr>
+<tr><td>Tamanho máximo do disco</td><td>Praticamente ilimitado</td><td>2 TiB</td></tr>
+<tr><td>Quantidade de partições</td><td>128 por padrão</td><td>4 primárias (ou 3 + estendida)</td></tr>
+<tr><td>Quando usar</td><td>Sempre, em disco novo</td><td>Máquinas antigas sem UEFI e pendrives para aparelhos velhos</td></tr>
+</table>
+</div>
+
+<div class="note">
+<strong>Curiosidade: a própria instalação do Debian</strong>
+<p>Quando o Debian é instalado numa máquina sem UEFI, o instalador costuma usar MBR, com uma partição <strong>estendida</strong> guardando a swap. Na VM de teste deste guia, o <code>lsblk</code> mostra exatamente isso: <code>sda1</code> é o sistema, <code>sda2</code> (1K) é a partição estendida e <code>sda5</code> é a swap.</p>
+</div>
+
+<h3>Nomes dos dispositivos</h3>
+<ul>
+  <li><code>/dev/sda</code>, <code>/dev/sdb</code>…: discos SATA, USB e discos de VM. As partições ganham um número: <code>/dev/sdb1</code>.</li>
+  <li><code>/dev/nvme0n1</code>…: SSDs NVMe. As partições ganham <code>p</code> + número: <code>/dev/nvme0n1p1</code>.</li>
+  <li><code>/dev/vda</code>: disco virtual em VMs KVM.</li>
+  <li><code>/dev/loop0</code>…: "discos" que na verdade são arquivos. É o que você vai usar no laboratório.</li>
+</ul>
+
+<hr>
+
+<h2>Laboratório seguro: um disco que é só um arquivo</h2>
+<p>Você vai criar um arquivo de 2 GB e pedir ao kernel para tratá-lo como um disco de verdade. A partir daí, <code>fdisk</code>, <code>parted</code> e <code>mkfs</code> funcionam nele igualzinho funcionariam num HD.</p>
+
+<p>Primeiro, vire root com <code>su -</code> (ele pede a senha do root, não a sua):</p>
+
+<pre class="term" data-host="servidor">$ su -
+Senha:                                                « nada aparece enquanto você digita
+#> mkdir -p /root/lab &amp;&amp; cd /root/lab</pre>
+
+<dl class="anatomy">
+  <dt>truncate</dt><dd>Programa que muda o tamanho de um arquivo.</dd>
+  <dt>-s 2G</dt><dd><code>-s</code> (<em>size</em>) define o tamanho: 2 GB.</dd>
+  <dt>disco1.img</dt><dd>O arquivo que vai fazer o papel de disco.</dd>
+</dl>
+
+<dl class="anatomy">
+  <dt>losetup</dt><dd>"<em>loop setup</em>": liga um arquivo a um dispositivo <code>/dev/loopN</code>.</dd>
+  <dt>-f</dt><dd><em>find</em>: usa o primeiro <code>/dev/loop</code> livre.</dd>
+  <dt>-P</dt><dd><em>partscan</em>: faz o kernel enxergar as partições que você criar (<code>loop0p1</code>, <code>loop0p2</code>).</dd>
+  <dt>--show</dt><dd>Mostra qual dispositivo foi usado.</dd>
+  <dt>disco1.img</dt><dd>O arquivo.</dd>
+</dl>
+
+<pre class="term" data-host="servidor" data-user="root" data-cwd="~/lab">#> truncate -s 2G disco1.img
+#> losetup -fP --show disco1.img
+/dev/loop0                                            « este é o seu "disco" de treino
+#> lsblk /dev/loop0
+NAME  MAJ:MIN RM SIZE RO TYPE MOUNTPOINTS
+loop0   7:0    0   2G  0 loop</pre>
+
+<p>Daqui em diante, onde a aula disser <code>/dev/loop0</code>, num disco real seria algo como <code>/dev/sdb</code>. Ao terminar, desligue o laboratório com <code>losetup -d /dev/loop0</code> e apague o arquivo.</p>
+
+<div class="tip">
+<strong>Outra opção: uma VM com disco extra</strong>
+<p>No VirtualBox, em <em>Configurações → Armazenamento</em>, adicione um segundo disco virtual. Dentro da VM ele aparece como <code>/dev/sdb</code>, igual a um disco de verdade.</p>
+</div>
+
+<hr>
+
+<h2>Passo 1: identificar o disco certo</h2>
+<p>O erro mais grave desta aula é formatar o disco do sistema por engano. Antes de tudo, descubra o nome do disco novo.</p>
+
+<dl class="anatomy">
+  <dt>lsblk</dt><dd>"<em>list block devices</em>": lista discos e partições.</dd>
+  <dt>-o NAME,SIZE,TYPE,FSTYPE,MOUNTPOINTS</dt><dd>Escolhe as colunas: nome, tamanho, tipo, formato e onde está montado.</dd>
+</dl>
+
+<pre class="term" data-host="servidor" data-user="root">#> lsblk -o NAME,SIZE,TYPE,FSTYPE,MOUNTPOINTS
+NAME     SIZE TYPE FSTYPE MOUNTPOINTS
+sda       25G disk
+├─sda1  23,7G part ext4   /                           « disco do sistema: NÃO mexa
+├─sda2     1K part
+└─sda5   1,3G part swap   [SWAP]
+sdb      100G disk                                    « o novo: sem partições, sem montagem
+sr0     1024M rom</pre>
+
+<p>Como reconhecer o disco novo:</p>
+<ul>
+  <li>Tem o tamanho que você comprou ou criou.</li>
+  <li>Não tem linhas de partição (<code>├─</code>) embaixo dele.</li>
+  <li>A coluna <code>MOUNTPOINTS</code> está vazia.</li>
+</ul>
+
+<p>Outra forma de olhar é o <code>fdisk -l</code>, que mostra os detalhes de um disco sem mudar nada:</p>
+
+<pre class="term" data-host="servidor" data-user="root">#> fdisk -l /dev/loop0
+Disco /dev/loop0: 2 GiB, 2147483648 bytes, 4194304 setores
+Unidades: setor de 1 * 512 = 512 bytes
+Tamanho de setor (lógico/físico): 512 bytes / 512 bytes
+Tamanho E/S (mínimo/ótimo): 512 bytes / 512 bytes          « sem "Tipo de rótulo": ainda não tem tabela</pre>
+
+<div class="warning">
+<strong>Por que "comando não encontrado"?</strong>
+<p>Se você rodar <code>fdisk</code> como <code>ana</code>, o Debian responde <code>bash: fdisk: comando não encontrado</code>. O programa existe, mas fica em <code>/usr/sbin</code>, que não está no PATH dos usuários comuns. Vire root com <code>su -</code> (o hífen importa: ele carrega o PATH do root).</p>
+</div>
+
+<hr>
+
+<h2>Passo 2: particionar com <code>fdisk</code></h2>
+<p><code>fdisk</code> (de <em>fixed disk</em>) é interativo: você digita uma letra por vez, e ele pergunta o resto. Nada é gravado até você digitar <code>w</code>. Se errar, digite <code>q</code> para sair sem salvar.</p>
+
+<dl class="anatomy">
+  <dt>fdisk</dt><dd>O programa de particionamento (rodando como root).</dd>
+  <dt>/dev/loop0</dt><dd>O <strong>disco inteiro</strong>, sem número de partição no fim.</dd>
+</dl>
+
+<h3>Os comandos do fdisk</h3>
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Tecla</th><th>O que faz</th></tr>
+<tr><td><code>m</code></td><td>Mostra o menu de ajuda</td></tr>
+<tr><td><code>p</code></td><td>Mostra (<em>print</em>) a tabela atual</td></tr>
+<tr><td><code>g</code></td><td>Cria uma tabela <strong>GPT</strong> nova e vazia</td></tr>
+<tr><td><code>o</code></td><td>Cria uma tabela MBR/DOS nova e vazia</td></tr>
+<tr><td><code>n</code></td><td>Cria uma partição nova (<em>new</em>)</td></tr>
+<tr><td><code>d</code></td><td>Apaga (<em>delete</em>) uma partição</td></tr>
+<tr><td><code>t</code></td><td>Muda o tipo da partição (ex.: swap, EFI)</td></tr>
+<tr><td><code>w</code></td><td>Grava (<em>write</em>) e sai. A partir daqui, não tem volta</td></tr>
+<tr><td><code>q</code></td><td>Sai (<em>quit</em>) <strong>sem gravar</strong> nada</td></tr>
+</table>
+</div>
+
+<p>Vamos dividir o disco em duas partições: uma de 1 GB e outra com o resto. Esta é a sessão real, no Debian 13 com util-linux 2.41.5. Em cada pergunta, <kbd>Enter</kbd> aceita o valor padrão, que aparece no fim da pergunta.</p>
+
+<pre class="term" data-host="servidor" data-user="root">#> fdisk /dev/loop0
+
+Bem-vindo ao fdisk (util-linux 2.41.5).
+As alterações permanecerão apenas na memória, até que você decida gravá-las.
+Tenha cuidado antes de usar o comando de gravação.
+
+A unidade não contém uma tabela de partição conhecida.                    « disco virgem
+Criado um novo rótulo de disco DOS (MBR) com o identificador de disco 0x3f3937ba.
+
+Comando (m para ajuda): g                                                « tabela GPT nova
+Criado um novo rótulo de disco GPT (GUID: FB9DB81A-1B94-4989-950E-8E939FF3C7A6).
+
+Comando (m para ajuda): n                                                « partição nova
+Número da partição (1-128, padrão 1):                                    « Enter
+Primeiro setor (2048-4194270, padrão 2048):                              « Enter
+Último setor, +/-setores ou +/-tamanho{K,M,G,T,P} (2048-4194270, padrão 4192255): +1G
+
+Criada uma nova partição 1 do tipo "Linux filesystem" e de tamanho 1 GiB.
+
+Comando (m para ajuda): n
+Número da partição (2-128, padrão 2):                                    « Enter
+Primeiro setor (2099200-4194270, padrão 2099200):                        « Enter
+Último setor, +/-setores ou +/-tamanho{K,M,G,T,P} (2099200-4194270, padrão 4192255):   « Enter = o resto
+
+Criada uma nova partição 2 do tipo "Linux filesystem" e de tamanho 1022 MiB.
+
+Comando (m para ajuda): p
+Disco /dev/loop0: 2 GiB, 2147483648 bytes, 4194304 setores
+Unidades: setor de 1 * 512 = 512 bytes
+Tamanho de setor (lógico/físico): 512 bytes / 512 bytes
+Tamanho E/S (mínimo/ótimo): 512 bytes / 512 bytes
+Tipo de rótulo do disco: gpt
+Identificador do disco: FB9DB81A-1B94-4989-950E-8E939FF3C7A6
+
+Dispositivo   Início     Fim Setores Tamanho Tipo
+/dev/loop0p1    2048 2099199 2097152      1G Linux sistema de arquivos
+/dev/loop0p2 2099200 4192255 2093056   1022M Linux sistema de arquivos
+
+Comando (m para ajuda): w                                                « grava de verdade
+A tabela de partição foi alterada.
+Chamando ioctl() para reler tabela de partição.
+Sincronizando discos.</pre>
+
+<p>Entendendo a pergunta do "último setor": o disco é dividido em setores de 512 bytes. Em vez de calcular setores, você escreve o tamanho com <code>+</code>: <code>+1G</code> significa "1 GB a partir do início". Deixar em branco usa todo o espaço livre.</p>
+
+<p>Confira o resultado:</p>
+<pre class="term" data-host="servidor" data-user="root">#> lsblk /dev/loop0
+NAME      MAJ:MIN RM  SIZE RO TYPE MOUNTPOINTS
+loop0       7:0    0    2G  0 loop
+├─loop0p1 259:0    0    1G  0 part                    « partições novas, ainda sem formato
+└─loop0p2 259:1    0 1022M  0 part</pre>
+
+<h3>O que o comando devolve</h3>
+<p>O <code>fdisk</code> não altera o disco até o <code>w</code>. Se você sair com <code>q</code>, nada mudou. Se ele não conseguir reler a tabela (o disco está em uso), avisa que a releitura falhou; nesse caso, rode <code>partprobe /dev/sdb</code> (do pacote <code>parted</code>) ou reinicie.</p>
+
+<hr>
+
+<h2>Forma alternativa: <code>parted</code> numa linha só</h2>
+<p>O <code>parted</code> faz o mesmo trabalho, mas aceita tudo como argumentos. É a forma preferida em scripts. No Debian ele <strong>não vem instalado</strong>:</p>
+
+<pre class="term" data-host="servidor" data-user="root">#> parted
+-bash: parted: comando não encontrado
+#> apt install parted</pre>
+
+<dl class="anatomy">
+  <dt>parted</dt><dd>O programa.</dd>
+  <dt>-s</dt><dd><em>script</em>: não faz perguntas.</dd>
+  <dt>/dev/loop0</dt><dd>O disco inteiro.</dd>
+  <dt>mklabel gpt</dt><dd>Cria uma tabela GPT nova (apaga a anterior).</dd>
+  <dt>mkpart dados ext4 0% 100%</dt><dd>Cria uma partição chamada "dados", marcada como ext4, do início (0%) ao fim (100%).</dd>
+  <dt>print</dt><dd>Mostra o resultado.</dd>
+</dl>
+
+<pre class="term" data-host="servidor" data-user="root">#> parted -s /dev/loop0 mklabel gpt mkpart dados ext4 0% 100% print
+Model: Loopback device (loopback)
+Disk /dev/loop0: 2147MB
+Sector size (logical/physical): 512B/512B
+Partition Table: gpt
+Disk Flags:
+
+Number  Start   End     Size    File system  Name   Flags
+ 1      1049kB  2146MB  2145MB               dados          « ainda sem formato</pre>
+
+<p>O <code>parted</code> do Debian responde em inglês: o pacote não traz tradução para o português. <em>Number</em> é o número da partição, <em>Start</em>/<em>End</em> são o início e o fim, e <em>Name</em> é o nome que você deu.</p>
+
+<div class="note">
+<strong>O "ext4" do mkpart não formata</strong>
+<p>No <code>mkpart</code>, o tipo é só uma etiqueta na tabela. A partição continua vazia até você rodar o <code>mkfs</code>. Usar <code>0%</code> e <code>100%</code> faz o <code>parted</code> alinhar a partição corretamente, sem você calcular setores.</p>
+</div>
+
+<h3>Qual ferramenta usar?</h3>
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Ferramenta</th><th>Como é</th><th>Melhor quando…</th></tr>
+<tr><td><code>fdisk</code></td><td>Interativa, menu de letras; já vem no Debian</td><td>Você está aprendendo ou quer ver cada passo.</td></tr>
+<tr><td><code>parted -s</code></td><td>Uma linha, sem perguntas; precisa instalar</td><td>Scripts, automação, discos grandes.</td></tr>
+<tr><td><code>sfdisk</code></td><td>Lê a tabela de um texto; já vem no Debian</td><td>Copiar a tabela de um disco para outro: <code>sfdisk -d /dev/sda | sfdisk /dev/sdb</code>.</td></tr>
+<tr><td>GParted / Discos (GNOME)</td><td>Gráfica</td><td>Você está no desktop e prefere clicar.</td></tr>
+</table>
+</div>
+
+<hr>
+
+<h2>Passo 3: formatar com <code>mkfs</code></h2>
+<p><code>mkfs</code> vem de <em>make filesystem</em>, "criar sistema de arquivos". Existe uma versão para cada formato: <code>mkfs.ext4</code>, <code>mkfs.xfs</code>, <code>mkfs.vfat</code>…</p>
+
+<dl class="anatomy">
+  <dt>mkfs.ext4</dt><dd>Cria um sistema de arquivos ext4, o padrão do Debian.</dd>
+  <dt>-L dados</dt><dd><code>-L</code> (<em>label</em>) dá um nome à partição. Aparece no <code>lsblk -f</code> e no gerenciador de arquivos.</dd>
+  <dt>/dev/loop0p1</dt><dd>A <strong>partição</strong> (com número no fim), não o disco.</dd>
+</dl>
+
+<pre class="term" data-host="servidor" data-user="root">#> mkfs.ext4 -L dados /dev/loop0p1
+mke2fs 1.47.2 (1-Jan-2025)
+Discarding device blocks: done
+Creating filesystem with 262144 4k blocks and 65536 inodes
+Filesystem UUID: 9861e39a-83ea-41f8-8584-423b5ff75cba                « identificador único
+Superblock backups stored on blocks:
+	32768, 98304, 163840, 229376
+
+Allocating group tables: done
+Writing inode tables: done
+Creating journal (8192 blocks): done
+Writing superblocks and filesystem accounting information: done</pre>
+
+<p>Repare: no Debian, o <code>mke2fs</code> responde <strong>em inglês</strong>, porque o pacote de tradução dele não vem instalado (no Ubuntu a mesma saída aparece num português de Portugal). O que importa:</p>
+<ul>
+  <li><strong>Filesystem UUID</strong>: o "RG" da partição. É ele que você usa no <code>/etc/fstab</code> (veja <a href="montar.html">mount e fstab</a>).</li>
+  <li><strong>Superblock backups</strong>: cópias da estrutura do disco, usadas pelo <code>fsck</code> para consertar danos.</li>
+  <li><strong>Journal</strong> (diário): registro que protege contra corrupção em quedas de energia.</li>
+</ul>
+
+<p>Confira o formato e o UUID com <code>lsblk -f</code> (de <em>filesystems</em>):</p>
+<pre class="term" data-host="servidor" data-user="root">#> lsblk -f /dev/loop0
+NAME      FSTYPE FSVER LABEL UUID                                 FSAVAIL FSUSE% MOUNTPOINTS
+loop0
+├─loop0p1 ext4   1.0   dados 9861e39a-83ea-41f8-8584-423b5ff75cba        « formatada
+└─loop0p2                                                               « ainda vazia</pre>
+
+<h3>Outros formatos</h3>
+<p>Os programas de outros formatos vêm em pacotes separados, que o Debian não instala por padrão:</p>
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Formato</th><th>Comando</th><th>Pacote</th><th>Use para</th></tr>
+<tr><td>ext4</td><td><code>mkfs.ext4 -L dados /dev/sdb1</code></td><td><code>e2fsprogs</code> (já vem)</td><td>Discos Linux em geral (padrão)</td></tr>
+<tr><td>xfs</td><td><code>mkfs.xfs -L dados /dev/sdb1</code></td><td><code>xfsprogs</code></td><td>Servidores com arquivos muito grandes; não pode ser encolhido</td></tr>
+<tr><td>btrfs</td><td><code>mkfs.btrfs -L dados /dev/sdb1</code></td><td><code>btrfs-progs</code></td><td>Snapshots e compressão embutidos</td></tr>
+<tr><td>vfat (FAT32)</td><td><code>mkfs.vfat -n PENDRIVE /dev/sdc1</code></td><td><code>dosfstools</code></td><td>Pendrives para qualquer aparelho; arquivo máximo de 4 GB</td></tr>
+<tr><td>exfat</td><td><code>mkfs.exfat -L FOTOS /dev/sdc1</code></td><td><code>exfatprogs</code></td><td>Pendrives e HDs externos compartilhados com Windows e Mac</td></tr>
+</table>
+</div>
+
+<p>Exemplo com XFS na segunda partição:</p>
+<pre class="term" data-host="servidor" data-user="root">#> apt install xfsprogs
+#> mkfs.xfs -L backup /dev/loop0p2
+meta-data=/dev/loop0p2           isize=512    agcount=4, agsize=65472 blks
+         =                       sectsz=512   attr=2, projid32bit=1
+         =                       crc=1        finobt=1, sparse=1, rmapbt=1
+         =                       reflink=1    bigtime=1 inobtcount=1 nrext64=1
+         =                       exchange=0   metadir=0
+data     =                       bsize=4096   blocks=261888, imaxpct=25
+         =                       sunit=0      swidth=0 blks
+naming   =version 2              bsize=4096   ascii-ci=0, ftype=1, parent=0
+log      =internal log           bsize=4096   blocks=16384, version=2
+         =                       sectsz=512   sunit=0 blks, lazy-count=1
+realtime =none                   extsz=4096   blocks=0, rtextents=0
+         =                       rgcount=0    rgsize=0 extents
+Discarding blocks...Done.</pre>
+
+<p>O <code>mkfs.xfs</code> não pergunta nada quando a partição está vazia. Se já houver um sistema de arquivos ali, ele recusa até você usar <code>-f</code> (<em>force</em>):</p>
+<pre class="term" data-host="servidor" data-user="root">#> mkfs.xfs /dev/loop0p2
+mkfs.xfs: /dev/loop0p2 appears to contain an existing filesystem (xfs).
+mkfs.xfs: Use the -f option to force overwrite.</pre>
+
+<hr>
+
+<h2>Apagar assinaturas antigas: <code>wipefs</code></h2>
+<p>Um disco reaproveitado pode ter restos de formatos antigos (RAID, LVM, ZFS) que confundem o sistema. <code>wipefs</code> (de <em>wipe filesystem signatures</em>) lista e apaga essas "assinaturas".</p>
+
+<pre class="term" data-host="servidor" data-user="root">#> wipefs /dev/loop0p2                              « só lista, não apaga
+DEVICE  OFFSET TYPE UUID                                 LABEL
+loop0p2 0x0    xfs  7e6911df-13af-474f-a47d-f8411f43511f backup
+#> wipefs -a /dev/loop0p2                           « -a (all) apaga todas
+/dev/loop0p2: 4 bytes foram apagados na posição 0x00000000 (xfs): 58 46 53 42
+#> wipefs /dev/loop0                                « no disco inteiro: a tabela GPT e o MBR protetor
+DEVICE OFFSET     TYPE UUID LABEL
+loop0  0x200      gpt
+loop0  0x7ffffe00 gpt
+loop0  0x1fe      PMBR</pre>
+
+<div class="warning">
+<strong>Atenção</strong>
+<p><code>wipefs -a</code> faz o disco ou a partição "esquecer" o formato na hora. Os dados ainda estão lá fisicamente, mas o sistema deixa de enxergá-los.</p>
+</div>
+
+<hr>
+
+<h2>Swap: memória extra no disco</h2>
+<p><strong>Swap</strong> é um espaço no disco que o Linux usa quando a memória RAM enche. É bem mais lento que a RAM, mas evita que programas sejam encerrados à força. Diferente do Ubuntu (que cria um <em>arquivo</em> <code>/swap.img</code>), o instalador do Debian cria uma <strong>partição</strong> de swap:</p>
+
+<pre class="term" data-host="servidor" data-user="root">#> swapon --show
+NAME      TYPE      SIZE USED PRIO
+/dev/sda5 partition 1,3G   0B   -2                 « partição de swap criada na instalação</pre>
+
+<h3>Criar um arquivo de swap extra</h3>
+<ol class="passo">
+  <li><strong>Reserve o espaço.</strong> <code>fallocate -l 2G</code> cria um arquivo de 2 GB de uma vez.
+<pre class="term" data-host="servidor" data-user="root">#> fallocate -l 2G /swapfile</pre></li>
+  <li><strong>Proteja o arquivo.</strong> Só o root pode ler: a swap pode conter senhas que estavam na memória. Se esquecer, o <code>mkswap</code> avisa: <code>mkswap: /swapfile: permissões inseguras 0644, corrija com: chmod 0600 /swapfile</code>.
+<pre class="term" data-host="servidor" data-user="root">#> chmod 600 /swapfile</pre></li>
+  <li><strong>Formate como swap</strong> e <strong>ative</strong>.
+<pre class="term" data-host="servidor" data-user="root">#> mkswap /swapfile
+Configurando espaço de swap versão 1, tamanho = 2 GiB (2147479552 bytes)
+nenhum rótulo, UUID=2ec0cb1f-ea96-4672-9f59-b78091f66bf6
+#> swapon /swapfile
+#> swapon --show
+NAME      TYPE      SIZE USED PRIO
+/dev/sda5 partition 1,3G 268K   -2
+/swapfile file        2G   0B   -3                 « a nova swap, com prioridade menor</pre></li>
+  <li><strong>Torne permanente.</strong> Adicione a linha no <code>/etc/fstab</code> para ela voltar depois de reiniciar:
+<pre class="term" data-host="servidor" data-user="root">#> echo '/swapfile none swap sw 0 0' &gt;&gt; /etc/fstab</pre></li>
+</ol>
+
+<h3>Quanto o sistema usa a swap: <code>vm.swappiness</code></h3>
+<p>Um número de 0 a 200. O padrão é 60. Valores menores fazem o Linux preferir a RAM. No Debian, o <code>sysctl</code> também fica em <code>/usr/sbin</code>: rode como root.</p>
+<pre class="term" data-host="servidor" data-user="root">#> cat /proc/sys/vm/swappiness
+60
+#> echo 'vm.swappiness=10' &gt; /etc/sysctl.d/99-swappiness.conf
+#> sysctl --system | tail -1
+vm.swappiness = 10</pre>
+
+<hr>
+
+<h2>Desmontar o laboratório</h2>
+<pre class="term" data-host="servidor" data-user="root" data-cwd="~/lab">#> losetup -d /dev/loop0                             « solta o arquivo do /dev/loop0
+#> rm disco1.img
+#> losetup -a                                        « nada listado: laboratório desligado</pre>
+
+<hr>
+
+<h2>Quando não funciona</h2>
+
+<div class="cenario">
+<strong>"fdisk: comando não encontrado"</strong>
+<pre class="term" data-host="servidor">$ fdisk -l
+bash: fdisk: comando não encontrado</pre>
+<p><strong>O que aconteceu:</strong> você está como usuário comum. No Debian, o PATH de quem não é root não inclui <code>/usr/sbin</code>, onde moram <code>fdisk</code>, <code>mkfs</code> e companhia.</p>
+<p><strong>Como resolver:</strong> <code>su -</code> e rode de novo. Usar <code>su</code> sem o hífen mantém o PATH antigo, e o erro continua.</p>
+</div>
+
+<div class="cenario">
+<strong>"is mounted; will not make a filesystem here!"</strong>
+<pre class="term" data-host="servidor" data-user="root">#> mkfs.ext4 /dev/sdb1
+mke2fs 1.47.2 (1-Jan-2025)
+/dev/sdb1 is mounted; will not make a filesystem here!</pre>
+<p><strong>O que aconteceu:</strong> a partição está montada (em uso). O <code>mkfs</code> se recusa a formatar, para proteger seus dados.</p>
+<p><strong>Como resolver:</strong> confira com <code>findmnt /dev/sdb1</code>. Se for mesmo a partição certa, desmonte com <code>umount /dev/sdb1</code> e rode de novo.</p>
+</div>
+
+<div class="cenario">
+<strong>"contains a ext4 file system … Proceed anyway?"</strong>
+<pre class="term" data-host="servidor" data-user="root">#> mkfs.ext4 /dev/loop0p1
+mke2fs 1.47.2 (1-Jan-2025)
+/dev/loop0p1 contains a ext4 file system labelled 'dados'
+	created on Thu Oct 15 22:48:05 2026
+Proceed anyway? (y,N) n</pre>
+<p><strong>O que aconteceu:</strong> já existe um sistema de arquivos ali, possivelmente com dados. O padrão (<code>N</code>) cancela.</p>
+<p><strong>Como resolver:</strong> responda <code>y</code> só se tiver certeza de que pode apagar tudo.</p>
+</div>
+
+<div class="cenario">
+<strong>"The file … does not exist and no size was specified."</strong>
+<pre class="term" data-host="servidor" data-user="root">#> mkfs.ext4 /dev/loop0p3
+mke2fs 1.47.2 (1-Jan-2025)
+The file /dev/loop0p3 does not exist and no size was specified.</pre>
+<p><strong>O que aconteceu:</strong> a partição não existe. Ou você errou o número, ou o kernel ainda não releu a tabela.</p>
+<p><strong>Como resolver:</strong> confira com <code>lsblk</code>. Se as partições acabaram de ser criadas e não aparecem, rode <code>partprobe /dev/sdb</code>. No laboratório, lembre do <code>-P</code> no <code>losetup</code>.</p>
+</div>
+
+<div class="cenario">
+<strong>Formatou o disco inteiro em vez da partição</strong>
+<p><strong>O que aconteceu:</strong> rodou <code>mkfs.ext4 /dev/sdb</code> (sem número). Funciona, mas apaga a tabela de partições: o disco vira um sistema de arquivos só.</p>
+<p><strong>Como resolver:</strong> se não há dados ainda, recomece com <code>wipefs -a /dev/sdb</code> e particione de novo. Regra prática: <strong>fdisk e parted recebem o disco</strong> (<code>/dev/sdb</code>); <strong>mkfs recebe a partição</strong> (<code>/dev/sdb1</code>).</p>
+</div>
+
+<hr>
+
+<h2>Referência rápida</h2>
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Comando (como root)</th><th>O que faz</th></tr>
+<tr><td><code>lsblk -f</code></td><td>Lista discos e partições com formato, rótulo e UUID</td></tr>
+<tr><td><code>fdisk -l /dev/sdb</code></td><td>Mostra a tabela de partições sem entrar no modo interativo</td></tr>
+<tr><td><code>fdisk /dev/sdb</code></td><td>Particiona de forma interativa</td></tr>
+<tr><td><code>parted -s /dev/sdb mklabel gpt</code></td><td>Cria tabela GPT nova (pacote <code>parted</code>)</td></tr>
+<tr><td><code>parted -s /dev/sdb mkpart NOME ext4 0% 100%</code></td><td>Cria uma partição ocupando o disco todo</td></tr>
+<tr><td><code>partprobe /dev/sdb</code></td><td>Pede ao kernel para reler a tabela de partições</td></tr>
+<tr><td><code>mkfs.ext4 -L NOME /dev/sdb1</code></td><td>Formata em ext4 com rótulo</td></tr>
+<tr><td><code>e2label /dev/sdb1 NOVO</code></td><td>Troca o rótulo de uma partição ext4</td></tr>
+<tr><td><code>wipefs -a /dev/sdb</code></td><td>Apaga assinaturas de formatos antigos</td></tr>
+<tr><td><code>losetup -fP --show disco.img</code></td><td>Transforma um arquivo em disco de treino</td></tr>
+<tr><td><code>mkswap</code> / <code>swapon</code> / <code>swapoff</code></td><td>Prepara, liga e desliga swap</td></tr>
+</table>
+</div>
+
+<hr>
+
+<h2>Exercícios</h2>
+
+<div class="exercise">
+<h3>1. Disco ou partição?</h3>
+<p>Complete para formatar a <strong>primeira partição</strong> do disco <code>/dev/sdb</code> em ext4:</p>
+<div class="ex-code">mkfs.ext4 <input data-answer="/dev/sdb1" aria-label="dispositivo"></div>
+</div>
+
+<div class="exercise">
+<h3>2. Tabela nova</h3>
+<p>Dentro do <code>fdisk</code>, qual letra cria uma tabela <strong>GPT</strong> nova?</p>
+<div class="ex-code">Comando (m para ajuda): <input data-answer="g" aria-label="letra"></div>
+</div>
+
+<div class="exercise">
+<h3>3. Laboratório</h3>
+<p>Complete para ligar o arquivo <code>treino.img</code> a um <code>/dev/loop</code> livre, com leitura das partições:</p>
+<div class="ex-code">losetup <input data-answer="-fP --show|-Pf --show|-f -P --show|--show -fP|-fP" aria-label="opções"> treino.img</div>
+</div>
+
+<div class="mc" data-answer="3">
+<p class="mc-q">4. A ana digitou <code>fdisk -l</code> e recebeu "comando não encontrado". Qual é a causa no Debian?</p>
+<label><input type="radio" name="q4"> O fdisk não vem instalado no Debian.</label>
+<label><input type="radio" name="q4"> Falta o sudo.</label>
+<label><input type="radio" name="q4"> O fdisk fica em <code>/usr/sbin</code>, fora do PATH do usuário comum.</label>
+<label><input type="radio" name="q4"> O disco não está conectado.</label>
+</div>
+
+<div class="mc" data-answer="2">
+<p class="mc-q">5. Qual formato usar num pendrive que vai ser lido no Windows, no Mac e no Linux, com arquivos de 6 GB?</p>
+<label><input type="radio" name="q5"> vfat (FAT32)</label>
+<label><input type="radio" name="q5"> exfat</label>
+<label><input type="radio" name="q5"> ext4</label>
+<label><input type="radio" name="q5"> xfs</label>
+</div>
+
+<hr>
+
+<h2>Resumo</h2>
+<ul>
+  <li>Ordem: <strong>tabela</strong> (GPT) → <strong>partição</strong> → <strong>formato</strong> (mkfs) → <strong>montagem</strong>.</li>
+  <li>No Debian, ferramentas de disco ficam em <code>/usr/sbin</code>: use <code>su -</code>.</li>
+  <li><code>fdisk</code> já vem instalado; <code>parted</code>, <code>xfsprogs</code>, <code>dosfstools</code> e <code>exfatprogs</code> são instalados à parte.</li>
+  <li><code>fdisk</code>/<code>parted</code> recebem o disco (<code>/dev/sdb</code>); <code>mkfs</code> recebe a partição (<code>/dev/sdb1</code>).</li>
+  <li>Treine com <code>truncate</code> + <code>losetup -fP</code>: as mesmas ferramentas funcionam num arquivo, sem risco.</li>
+</ul>
+
+<div class="pager"></div>
+
+</div>
+</main>
+</div>
+<script src="assets/site.js"></script>
+</body>
+</html>

@@ -1,0 +1,317 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Debian Podman — containers sem root e sem daemon | Guia Debian</title>
+<meta name="description" content="Podman no Debian 13: instalar, rodar containers como usuário comum (rootless), nomes curtos de imagem, portas, como o mapeamento de usuários funciona, quadlets com systemd e diferenças para o Docker.">
+<link rel="stylesheet" href="assets/style.css">
+<script>try{var t=localStorage.getItem("tema");if(t)document.documentElement.setAttribute("data-theme",t)}catch(e){}</script>
+</head>
+<body>
+<div class="layout">
+<nav class="sidebar" id="sidebar" aria-label="Tópicos"></nav>
+<main class="main">
+<div class="content">
+
+<div class="pager"></div>
+
+<h1>Debian <span class="hl">Podman</span></h1>
+
+<p class="intro">O <strong>Podman</strong> roda containers como o <a href="docker.html">Docker</a>, com quase os mesmos comandos, mas com duas diferenças importantes: não tem um serviço central rodando como root (o "daemon") e funciona muito bem como <strong>usuário comum</strong>. Num Debian em que a sua usuária não tem sudo, isso cai como uma luva: ela roda containers sem nunca ganhar poder de root.</p>
+
+<div class="note">
+<strong>Você vai aprender</strong>
+<ul>
+  <li>O que muda entre Podman e Docker, e quando usar cada um.</li>
+  <li>Rodar containers como a <code>ana</code>, sem root (modo <em>rootless</em>).</li>
+  <li>Por que o Podman do Debian transforma <code>hello-world</code> em outra imagem, e como usar nomes completos.</li>
+  <li>Como o "root de dentro" vira a <code>ana</code> de fora.</li>
+  <li>Transformar um container num serviço do systemd com um <strong>quadlet</strong>.</li>
+</ul>
+</div>
+
+<p>As saídas vêm do Debian 13 de laboratório, com Podman 5.4.2. Pré-requisito: <a href="docker.html">Docker</a>, para os conceitos de imagem e container.</p>
+
+<hr>
+
+<h2>Conceito: sem daemon, sem root</h2>
+<div class="table-wrap">
+<table class="ref">
+<tr><th></th><th>Docker</th><th>Podman</th></tr>
+<tr><td>Serviço central</td><td>Sim: <code>dockerd</code>, rodando como root</td><td>Não: cada comando <code>podman</code> cria o container e sai</td></tr>
+<tr><td>Usuário comum</td><td>Precisa do grupo <code>docker</code> (que equivale a root)</td><td>Funciona direto, sem grupo especial</td></tr>
+<tr><td>Comandos</td><td><code>docker run</code>, <code>docker ps</code>…</td><td><code>podman run</code>, <code>podman ps</code>… (os mesmos)</td></tr>
+<tr><td>Imagens</td><td>Mesmo formato (OCI)</td><td>Mesmo formato (OCI)</td></tr>
+<tr><td>Serviços no boot</td><td><code>--restart</code> do daemon</td><td>systemd (quadlets)</td></tr>
+<tr><td>Onde guarda tudo (usuário)</td><td><code>/var/lib/docker</code> (do root)</td><td><code>~/.local/share/containers</code> (da própria usuária)</td></tr>
+</table>
+</div>
+
+<hr>
+
+<h2>Instalar</h2>
+<p>Instalar exige root (no Debian, <code>su -</code>; veja <a href="root-su-sudo.html">root, su e sudo</a>). Depois disso, a ana usa sem root.</p>
+
+<pre class="term">$ su -
+Senha:</pre>
+<pre class="term" data-user="root" data-cwd="/root">#> apt install podman
+#> exit</pre>
+
+<pre class="term">$ podman --version
+podman version 5.4.2</pre>
+
+<p>O pacote já traz o que o modo rootless precisa (<code>uidmap</code>, <code>slirp4netns</code>/<code>passt</code>). Confira com <code>podman info</code>:</p>
+
+<pre class="term">$ podman info --format "rootless={{.Host.Security.Rootless}} driver={{.Store.GraphDriverName}} rede={{.Host.NetworkBackend}} cgroup={{.Host.CgroupsVersion}}"
+rootless=true driver=overlay rede=netavark cgroup=v2</pre>
+
+<hr>
+
+<h2>O primeiro container, como a ana</h2>
+
+<dl class="anatomy">
+  <dt>podman</dt><dd>O programa. Rodado pela ana, sem <code>su</code>.</dd>
+  <dt>run</dt><dd>Cria e roda um container, como no Docker.</dd>
+  <dt>--rm</dt><dd>Apaga o container quando ele terminar.</dd>
+  <dt>hello-world</dt><dd>Um <strong>nome curto</strong> de imagem. Veja logo abaixo o que o Debian faz com ele.</dd>
+</dl>
+
+<pre class="term">$ podman run --rm hello-world
+Resolved "hello-world" as an alias (/etc/containers/registries.conf.d/shortnames.conf)   « o nome curto virou outro
+Trying to pull quay.io/podman/hello:latest...
+Getting image source signatures
+Copying blob sha256:81df7ff16254ed9756e27c8de9ceb02a9568228fccadbf080f41cc5eb5118a44
+Copying config sha256:5dd467fce50b56951185da365b5feee75409968cbab5767b9b59e325fb2ecbc0
+Writing manifest to image destination
+!... Hello Podman World ...!
+…
+Project:   https://github.com/containers/podman
+Website:   https://podman.io</pre>
+
+<h3>Nomes curtos: de onde vem a imagem?</h3>
+<p>No Docker, <code>nginx</code> significa sempre "a imagem <code>nginx</code> do Docker Hub". O Podman é mais desconfiado: um nome curto poderia vir de qualquer registro, e um atacante poderia publicar uma imagem com o mesmo nome. Por isso o Debian traz uma lista de apelidos conhecidos, em <code>/etc/containers/registries.conf.d/shortnames.conf</code>:</p>
+
+<pre class="term">$ grep -E '"(alpine|debian|ubuntu)"' /etc/containers/registries.conf.d/shortnames.conf
+  "alpine" = "docker.io/library/alpine"
+  "debian" = "docker.io/library/debian"
+  "ubuntu" = "docker.io/library/ubuntu"</pre>
+
+<p>O <code>hello-world</code> está nessa lista apontando para a versão do próprio Podman, no <code>quay.io</code>. Um nome que não está na lista dá erro:</p>
+
+<pre class="term">$ podman run --rm meuapp-xyz
+Error: short-name "meuapp-xyz" did not resolve to an alias and no unqualified-search registries are defined in "/etc/containers/registries.conf"</pre>
+
+<div class="tip">
+<strong>Use sempre o nome completo</strong>
+<p><code>docker.io/library/nginx</code> em vez de <code>nginx</code>. Fica claro de onde vem a imagem e o comando funciona igual em qualquer máquina.</p>
+</div>
+
+<hr>
+
+<h2>Um servidor web sem root</h2>
+
+<dl class="anatomy">
+  <dt>-d</dt><dd>Em segundo plano.</dd>
+  <dt>--name web</dt><dd>O nome do container.</dd>
+  <dt>-p 8080:80</dt><dd>Porta 8080 do Debian → porta 80 do container. Sem root, a porta do Debian precisa ser 1024 ou maior.</dd>
+  <dt>docker.io/library/nginx</dt><dd>A imagem, com o nome completo.</dd>
+</dl>
+
+<pre class="term">$ podman run -d --name web -p 8080:80 docker.io/library/nginx
+572e6506ec224cbacd7cb14adb410a7bf5253f36682fc0fd1e152382998ba1c7
+$ curl -s localhost:8080 | grep -o "&lt;title&gt;.*&lt;/title&gt;"
+&lt;title&gt;Welcome to nginx!&lt;/title&gt;
+$ podman ps
+CONTAINER ID  IMAGE                           COMMAND               CREATED        STATUS        PORTS                 NAMES
+572e6506ec22  docker.io/library/nginx:latest  nginx -g daemon o...  6 seconds ago  Up 2 seconds  0.0.0.0:8080->80/tcp  web
+$ podman images
+REPOSITORY               TAG         IMAGE ID      CREATED       SIZE
+docker.io/library/nginx  latest      ca5e66f340c7  31 hours ago  167 MB
+quay.io/podman/hello     latest      5dd467fce50b  2 years ago   787 kB</pre>
+
+<p>Os outros comandos são os mesmos do Docker: <code>podman logs web</code>, <code>podman exec -it web bash</code>, <code>podman stop web</code>, <code>podman rm -f web</code>.</p>
+
+<h3>Quem é o "root" lá dentro?</h3>
+<p>Aqui está a mágica do rootless. Dentro do container, o nginx principal roda como <code>root</code>. Fora dele, o Debian vê... a <code>ana</code>:</p>
+
+<pre class="term">$ podman top web user huser pid args
+USER        HUSER       PID         COMMAND
+root        1000        1           nginx: master process nginx -g daemon off;    « root lá dentro = UID 1000 (ana) aqui fora
+nginx       100100      28          nginx: worker process
+nginx       100100      29          nginx: worker process
+$ ps -o user,pid,cmd -C nginx
+USER         PID CMD
+ana       127943 nginx: master process nginx -g daemon off;
+100100    127975 nginx: worker process</pre>
+
+<dl class="anatomy">
+  <dt>USER</dt><dd>O usuário <strong>dentro</strong> do container.</dd>
+  <dt>HUSER</dt><dd>O usuário no <strong>Debian</strong> (<em>host user</em>). O root de dentro vira a ana (1000); os outros usuários de dentro viram números de uma faixa reservada para ela.</dd>
+</dl>
+
+<p>Essa faixa é definida em <code>/etc/subuid</code> e <code>/etc/subgid</code>, que o Debian 13 preenche ao criar o usuário:</p>
+<pre class="term">$ grep ana /etc/subuid /etc/subgid
+/etc/subuid:ana:100000:65536
+/etc/subgid:ana:100000:65536</pre>
+<p>Ou seja: a ana pode usar 65.536 identidades, de 100000 em diante. Mesmo que algo escape do container, cai num usuário sem poder nenhum no sistema.</p>
+
+<hr>
+
+<h2>Container como serviço: quadlets</h2>
+<p>Como não há daemon, quem cuida de iniciar e reiniciar containers é o <a href="systemctl.html">systemd</a>. O jeito atual é o <strong>quadlet</strong>: um arquivo <code>.container</code> que o systemd transforma num serviço.</p>
+
+<pre class="file" data-file="~/.config/containers/systemd/web.container">[Unit]
+Description=Site da Ana (nginx num container)
+
+[Container]
+Image=docker.io/library/nginx:latest
+PublishPort=8080:80
+
+[Service]
+Restart=always
+
+[Install]
+WantedBy=default.target</pre>
+
+<pre class="term">$ mkdir -p ~/.config/containers/systemd
+$ nano ~/.config/containers/systemd/web.container
+$ systemctl --user daemon-reload
+$ systemctl --user start web.service
+$ systemctl --user status web.service --no-pager
+● web.service - Site da Ana (nginx num container)
+     Loaded: loaded (/home/ana/.config/containers/systemd/web.container; generated)   « gerado a partir do .container
+     Active: active (running) since Thu 2026-10-15 22:43:42 -03; 3s ago
+ Invocation: 6b134406f6d5441082d90a513bd7c01b
+   Main PID: 128219 (conmon)
+      Tasks: 5 (limit: 4638)
+     Memory: 31.7M (peak: 59.5M)
+        CPU: 423ms
+$ podman ps --format "{{.Names}} {{.Status}}"
+systemd-web Up 3 seconds                               « o container ganhou o nome systemd-web</pre>
+
+<dl class="anatomy">
+  <dt>--user</dt><dd>Fala com o systemd <strong>da ana</strong>, não com o do sistema. Nada de root.</dd>
+  <dt>daemon-reload</dt><dd>Faz o systemd ler o arquivo <code>.container</code> novo e gerar o <code>web.service</code>.</dd>
+</dl>
+
+<div class="warning">
+<strong>O serviço para quando a ana sai</strong>
+<p>Por padrão, o systemd de um usuário só roda enquanto ele está logado:</p>
+<pre class="term">$ loginctl show-user ana -p Linger
+Linger=no</pre>
+<p>Para o container continuar depois do logout e subir no boot, o root precisa ligar o <em>linger</em>: <code>loginctl enable-linger ana</code>.</p>
+</div>
+
+<hr>
+
+<h2>Formas diferentes de usar o Podman</h2>
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Forma</th><th>Como</th><th>Melhor quando…</th></tr>
+<tr><td>Comandos avulsos</td><td><code>podman run …</code></td><td>Testes e containers temporários</td></tr>
+<tr><td>Quadlet</td><td>Arquivo <code>.container</code> + systemd</td><td>Serviços que precisam voltar sozinhos</td></tr>
+<tr><td>Compose</td><td><code>podman-compose</code> (pacote do Debian) ou <code>podman compose</code></td><td>Reaproveitar um <code>compose.yaml</code> feito para o Docker</td></tr>
+<tr><td>Fingir que é Docker</td><td>Pacote <code>podman-docker</code> (cria o comando <code>docker</code> apontando para o Podman)</td><td>Scripts antigos que chamam <code>docker</code></td></tr>
+<tr><td>Pods</td><td><code>podman pod create</code></td><td>Vários containers que compartilham a rede, como no Kubernetes</td></tr>
+</table>
+</div>
+
+<hr>
+
+<h2>Quando não funciona</h2>
+
+<div class="cenario">
+<strong>"Failed to bind port 80 (Permission denied)"</strong>
+<pre class="term">$ podman run -d --name w80 -p 80:80 docker.io/library/nginx
+Failed to bind port 80 (Permission denied) for option '-t 80-80:80-80'</pre>
+<p><strong>O que aconteceu:</strong> portas abaixo de 1024 são reservadas ao root, e a ana roda sem root.</p>
+<p><strong>Como resolver:</strong> use uma porta alta (<code>-p 8080:80</code>) e, se precisar da 80, coloque um proxy na frente (veja <a href="nginx.html">nginx</a>). Outra saída, feita pelo root, é baixar o limite: <code>sysctl net.ipv4.ip_unprivileged_port_start=80</code>.</p>
+</div>
+
+<div class="cenario">
+<strong>"short-name … did not resolve to an alias"</strong>
+<p><strong>O que aconteceu:</strong> o nome curto não está na lista de apelidos do Debian.</p>
+<p><strong>Como resolver:</strong> use o nome completo: <code>docker.io/library/redis</code>, <code>quay.io/organizacao/imagem</code>.</p>
+</div>
+
+<div class="cenario">
+<strong>"cannot find newuidmap" ou erros de "subuid"</strong>
+<p><strong>O que aconteceu:</strong> falta o pacote <code>uidmap</code>, ou o usuário foi criado sem faixa em <code>/etc/subuid</code> (usuários antigos ou criados à mão).</p>
+<p><strong>Como confirmar:</strong> <code>grep $USER /etc/subuid</code> não mostra nada. <strong>Como resolver:</strong> como root, <code>apt install uidmap</code> e <code>usermod --add-subuids 100000-165535 --add-subgids 100000-165535 ana</code>; depois, como a ana, <code>podman system migrate</code>.</p>
+</div>
+
+<div class="cenario">
+<strong>O container some quando eu fecho o SSH</strong>
+<p><strong>O que aconteceu:</strong> o <em>linger</em> está desligado e o systemd da usuária terminou junto com a sessão.</p>
+<p><strong>Como resolver:</strong> como root, <code>loginctl enable-linger ana</code>.</p>
+</div>
+
+<hr>
+
+<h2>Referência</h2>
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Comando</th><th>O que faz</th></tr>
+<tr><td><code>podman run [opções] imagem</code></td><td>Cria e roda um container</td></tr>
+<tr><td><code>podman ps</code> / <code>podman ps -a</code></td><td>Containers rodando / todos</td></tr>
+<tr><td><code>podman images</code> / <code>pull</code> / <code>rmi</code></td><td>Imagens</td></tr>
+<tr><td><code>podman top nome user huser</code></td><td>Usuários de dentro e de fora</td></tr>
+<tr><td><code>podman info</code></td><td>Configuração (rootless, armazenamento, rede)</td></tr>
+<tr><td><code>podman system migrate</code></td><td>Reaplica a configuração de usuários depois de mudar o subuid</td></tr>
+<tr><td><code>systemctl --user start nome.service</code></td><td>Inicia um quadlet</td></tr>
+<tr><td><code>loginctl enable-linger usuário</code></td><td>Mantém os serviços do usuário sem login (root)</td></tr>
+</table>
+</div>
+
+<hr>
+
+<h2>Exercícios</h2>
+
+<div class="exercise">
+<h3>1. Nome completo</h3>
+<p>Complete com o nome completo da imagem oficial do Debian no Docker Hub:</p>
+<div class="ex-code">podman run --rm -it <input data-answer="docker.io/library/debian|docker.io/library/debian:trixie" aria-label="imagem"> bash</div>
+</div>
+
+<div class="exercise">
+<h3>2. Serviço do usuário</h3>
+<p>Complete para recarregar os quadlets da própria ana:</p>
+<div class="ex-code">systemctl <input data-answer="--user" aria-label="opção"> daemon-reload</div>
+</div>
+
+<div class="mc" data-answer="2">
+<p class="mc-q">3. Dentro de um container rootless da ana, um processo roda como <code>root</code>. Quem é ele no Debian?</p>
+<label><input type="radio" name="q3"> O root do Debian.</label>
+<label><input type="radio" name="q3"> A própria ana (UID 1000).</label>
+<label><input type="radio" name="q3"> O usuário nobody.</label>
+<label><input type="radio" name="q3"> O grupo docker.</label>
+</div>
+
+<div class="mc" data-answer="4">
+<p class="mc-q">4. Qual porta a ana <strong>não</strong> consegue publicar sem ajuda do root?</p>
+<label><input type="radio" name="q4"> 8080</label>
+<label><input type="radio" name="q4"> 3000</label>
+<label><input type="radio" name="q4"> 1024</label>
+<label><input type="radio" name="q4"> 443</label>
+</div>
+
+<hr>
+
+<h2>Resumo</h2>
+<ul>
+  <li>O Podman usa os mesmos comandos do Docker, sem daemon e sem root.</li>
+  <li>No Debian, nomes curtos passam por <code>shortnames.conf</code>; prefira nomes completos.</li>
+  <li>O root de dentro do container é a sua usuária do lado de fora.</li>
+  <li>Portas abaixo de 1024 exigem root; use portas altas.</li>
+  <li>Serviços: arquivo <code>.container</code> em <code>~/.config/containers/systemd</code> + <code>systemctl --user</code> + <code>enable-linger</code>.</li>
+</ul>
+
+<div class="pager"></div>
+
+</div>
+</main>
+</div>
+<script src="assets/site.js"></script>
+</body>
+</html>

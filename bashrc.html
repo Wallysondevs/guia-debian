@@ -1,0 +1,472 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Debian .bashrc, alias e PATH — configurar o terminal | Guia Debian</title>
+<meta name="description" content="Entenda o .bashrc real do Debian 13: por que o ll não existe, como ativá-lo, o PATH da usuária comum (sem /sbin) e o do root, a diferença entre su e su -, alias permanentes e o .profile.">
+<link rel="stylesheet" href="assets/style.css">
+<script>try{var t=localStorage.getItem("tema");if(t)document.documentElement.setAttribute("data-theme",t)}catch(e){}</script>
+</head>
+<body>
+<div class="layout">
+<nav class="sidebar" id="sidebar" aria-label="Tópicos"></nav>
+<main class="main">
+<div class="content">
+
+<div class="pager"></div>
+
+<h1>Debian <span class="hl">.bashrc, alias e PATH</span></h1>
+
+<p class="intro">Toda vez que você abre um terminal, o <code>bash</code> (o programa que lê o que você digita) executa um arquivo de configuração chamado <code>~/.bashrc</code>. É ali que você cria atalhos (<strong>alias</strong>), define variáveis e diz onde o sistema deve procurar programas (o <strong>PATH</strong>). O Debian vem com uma configuração bem enxuta, e entender isso explica vários "comando não encontrado".</p>
+
+<div class="note">
+<strong>Você vai aprender</strong>
+<ul>
+  <li>O que são variáveis de ambiente e como ver o valor delas.</li>
+  <li>Por que a usuária comum não acha <code>reboot</code> e <code>adduser</code>: o PATH do Debian.</li>
+  <li>A diferença entre <code>su</code> e <code>su -</code>.</li>
+  <li>Por que o <code>ll</code> não funciona no Debian e como ativá-lo.</li>
+  <li>A diferença entre <code>.bashrc</code>, <code>.bash_aliases</code>, <code>.profile</code> e <code>/etc/skel</code>.</li>
+</ul>
+</div>
+
+<hr>
+
+<h2>Antes dos comandos: variáveis</h2>
+<p>Uma <strong>variável</strong> é um nome que guarda um valor. O bash já começa com várias delas, chamadas <strong>variáveis de ambiente</strong>, que os programas consultam para saber quem você é, qual é sua pasta pessoal e assim por diante. Para ler uma variável, coloque <code>$</code> antes do nome:</p>
+
+<dl class="anatomy">
+  <dt>echo</dt><dd>Mostra na tela o que recebeu.</dd>
+  <dt>$HOME</dt><dd>O <code>$</code> pede ao bash para trocar o nome pelo valor da variável antes de rodar o <code>echo</code>.</dd>
+</dl>
+
+<pre class="term">$ echo $HOME
+/home/ana
+$ echo "Eu sou $USER e uso o editor [$EDITOR]"
+Eu sou ana e uso o editor []                « no Debian, EDITOR vem vazia</pre>
+
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Variável</th><th>Guarda</th><th>Valor no Debian da Ana</th></tr>
+<tr><td><code>HOME</code></td><td>Sua pasta pessoal</td><td><code>/home/ana</code></td></tr>
+<tr><td><code>USER</code></td><td>Seu nome de usuário</td><td><code>ana</code></td></tr>
+<tr><td><code>PATH</code></td><td>Onde procurar programas</td><td><code>/usr/local/bin:/usr/bin:/bin:…</code></td></tr>
+<tr><td><code>PWD</code></td><td>A pasta atual</td><td><code>/home/ana/Documentos</code></td></tr>
+<tr><td><code>SHELL</code></td><td>O seu shell</td><td><code>/bin/bash</code></td></tr>
+<tr><td><code>LANG</code></td><td>Idioma e formato regional</td><td><code>pt_BR.UTF-8</code></td></tr>
+<tr><td><code>EDITOR</code></td><td>Editor padrão de alguns comandos</td><td>vazia (o Debian usa o "editor do sistema", veja abaixo)</td></tr>
+</table>
+</div>
+
+<div class="note">
+<strong>E quem escolhe o editor, então?</strong>
+<p>Quando <code>EDITOR</code> está vazia, programas como o <code>crontab -e</code> usam o comando <code>sensible-editor</code>, que pergunta qual editor você prefere na primeira vez (veja <a href="cron.html">cron</a>). O padrão do sistema é o <code>nano</code>. Para fixar o seu, coloque <code>export EDITOR=nano</code> (ou <code>vim</code>) no <code>~/.bashrc</code>.</p>
+</div>
+
+<h3>Formas de ver variáveis</h3>
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Comando</th><th>Mostra</th></tr>
+<tr><td><code>echo $NOME</code></td><td>Uma variável. Se ela não existir, mostra uma linha vazia.</td></tr>
+<tr><td><code>printenv NOME</code></td><td>Uma variável de ambiente; devolve código 1 se ela não existir.</td></tr>
+<tr><td><code>env</code> ou <code>printenv</code></td><td>Todas as variáveis de ambiente.</td></tr>
+<tr><td><code>env | grep -i lang</code></td><td>Só as que contêm "lang".</td></tr>
+</table>
+</div>
+
+<pre class="term">$ printenv LANG
+pt_BR.UTF-8
+$ printenv NADA
+$ echo $?
+1                                        « 1 = a variável não existe</pre>
+
+<hr>
+
+<h2>PATH: onde o bash procura programas</h2>
+<p>Quando você digita <code>ls</code>, o bash não sabe de cara onde está o programa <code>ls</code>. Ele procura numa lista de pastas, na ordem, e usa o primeiro que encontrar. Essa lista é a variável <code>PATH</code> (em inglês, "caminho"). As pastas são separadas por dois-pontos. O <code>tr</code> troca cada <code>:</code> por uma quebra de linha, para ficar legível:</p>
+
+<dl class="anatomy">
+  <dt>echo $PATH</dt><dd>Imprime o PATH.</dd>
+  <dt>|</dt><dd>Entrega a saída ao próximo comando.</dd>
+  <dt>tr ':' '\n'</dt><dd><em>Translate</em>: troca cada <code>:</code> por <code>\n</code>, a quebra de linha.</dd>
+</dl>
+
+<pre class="term">$ echo $PATH | tr ':' '\n'
+/usr/local/bin
+/usr/bin                                 « a maioria dos programas está aqui
+/bin
+/usr/local/games
+/usr/games</pre>
+
+<p>Agora compare com o PATH do root, depois de <code>su -</code>:</p>
+
+<pre class="term" data-user="root">#> echo $PATH | tr ':' '\n'
+/usr/local/sbin                          « as pastas "sbin" só aparecem para o root
+/usr/local/bin
+/usr/sbin
+/usr/bin
+/sbin
+/bin</pre>
+
+<p>As pastas <code>sbin</code> (de <em>system binaries</em>, "programas do sistema") guardam ferramentas de administração: <code>reboot</code>, <code>adduser</code>, <code>usermod</code>, <code>blkid</code>, <code>fdisk</code>… O Debian define o PATH em <code>/etc/profile</code>, de acordo com quem você é:</p>
+
+<pre class="file" data-file="/etc/profile (trecho)">if [ "$(id -u)" -eq 0 ]; then
+  PATH="/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
+else
+  PATH="/usr/local/bin:/usr/bin:/bin:/usr/local/games:/usr/games"
+fi
+export PATH</pre>
+
+<p>É por isso que, como usuária comum, esses programas "não existem":</p>
+
+<pre class="term">$ reboot
+bash: reboot: comando não encontrado
+$ /usr/sbin/reboot                       « com o caminho completo, o bash acha o programa…
+Call to Reboot failed: Access denied     « …mas a usuária comum não tem permissão</pre>
+
+<h3>which e type: qual arquivo vai rodar</h3>
+<pre class="term">$ which python3
+/usr/bin/python3
+$ type -a ls
+ls está apelidada para `ls --color=auto'          « primeiro vem o alias
+ls é /usr/bin/ls
+ls é /bin/ls</pre>
+
+<p>O <code>ls</code> aparece duas vezes porque, no Debian 13, <code>/bin</code> é só um atalho para <code>/usr/bin</code>. Se o programa não está em nenhuma pasta do PATH, o bash responde "comando não encontrado", mesmo que o arquivo exista em outro lugar.</p>
+
+<div class="try" data-goal="ran:echo.*HOME,ran:echo.*USER,ran:PATH.*tr">
+<p class="try-task"><strong>Missão:</strong> veja o valor de <code>$HOME</code> e <code>$USER</code> com <code>echo</code>. Depois mostre o PATH com uma pasta por linha. Repare que não há nenhuma pasta <code>sbin</code>.</p>
+</div>
+
+<hr>
+
+<h2>su e su -: o hífen muda o PATH</h2>
+<p>Esse é um tropeço clássico de quem chega ao Debian. Os dois comandos pedem a senha do root e abrem um shell de root, mas só um deles carrega o ambiente do root:</p>
+
+<pre class="term">$ su
+Senha:
+#> adduser teste
+bash: adduser: comando não encontrado    « continua com o PATH da ana!
+#> echo $PATH
+/usr/local/bin:/usr/bin:/bin:/usr/local/games:/usr/games
+#> exit
+$ su -
+Senha:
+#> echo $PATH
+/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+#> pwd
+/root</pre>
+
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Comando</th><th>O que acontece</th></tr>
+<tr><td><code>su</code></td><td>Vira root, mas mantém o PATH e a pasta atual da usuária. Programas de <code>/sbin</code> não são encontrados.</td></tr>
+<tr><td><code>su -</code></td><td>Entra como se fosse um login novo do root: PATH completo, pasta <code>/root</code>, configuração do root. <strong>Use sempre este.</strong></td></tr>
+<tr><td><code>su -c "comando"</code></td><td>Roda um comando só como root e volta.</td></tr>
+</table>
+</div>
+
+<p>Veja mais em <a href="root-su-sudo.html">root, su e sudo</a>.</p>
+
+<hr>
+
+<h2>Acrescentar uma pasta ao PATH</h2>
+<p>Imagine que a Ana guarda seus scripts em <code>~/scripts</code> e quer rodá-los pelo nome, de qualquer pasta. Ela acrescenta essa pasta no começo do PATH, sem apagar o resto:</p>
+
+<dl class="anatomy">
+  <dt>export</dt><dd>Torna a variável visível para os programas que o bash abrir.</dd>
+  <dt>PATH=</dt><dd>Atribui um novo valor ao PATH. Sem espaços em volta do <code>=</code>.</dd>
+  <dt>"$HOME/scripts</dt><dd>A pasta nova…</dd>
+  <dt>:$PATH"</dt><dd>…seguida de dois-pontos e do PATH antigo. Nunca esqueça o <code>$PATH</code>.</dd>
+</dl>
+
+<pre class="term">$ export PATH="$HOME/scripts:$PATH"
+$ echo $PATH | tr ':' '\n' | head -3
+/home/ana/scripts
+/usr/local/bin
+/usr/bin</pre>
+
+<p>Isso vale só para este terminal. Para ficar permanente, coloque a mesma linha no fim do <code>~/.bashrc</code> (veja abaixo).</p>
+
+<div class="tip">
+<strong>As pastas ~/bin e ~/.local/bin já estão previstas</strong>
+<p>O <code>~/.profile</code> do Debian já põe <code>~/bin</code> e <code>~/.local/bin</code> no PATH, <strong>se essas pastas existirem</strong>. Num Debian novo elas não existem. Basta criar uma delas (<code>mkdir -p ~/.local/bin</code>), guardar os scripts lá e sair e entrar de novo na sessão.</p>
+</div>
+
+<pre class="file" data-file="~/.profile (trecho)"># set PATH so it includes user's private bin if it exists
+if [ -d "$HOME/bin" ] ; then
+    PATH="$HOME/bin:$PATH"
+fi
+
+# set PATH so it includes user's private bin if it exists
+if [ -d "$HOME/.local/bin" ] ; then
+    PATH="$HOME/.local/bin:$PATH"
+fi</pre>
+
+<hr>
+
+<h2>export: variáveis para os outros programas</h2>
+<p>Uma variável criada sem <code>export</code> existe só dentro do bash atual. Os programas que ele abre não a enxergam. Veja a diferença (o <code>bash -c</code> abre um bash "filho" que roda um comando):</p>
+
+<pre class="term">$ CIDADE=Recife
+$ echo $CIDADE
+Recife
+$ bash -c 'echo "o filho vê: [$CIDADE]"'
+o filho vê: []                           « sem export, o filho não enxerga
+$ export CIDADE
+$ bash -c 'echo "o filho vê: [$CIDADE]"'
+o filho vê: [Recife]</pre>
+
+<p>Regra prática: use <code>export</code> para tudo que um programa precisa ler (<code>PATH</code>, <code>EDITOR</code>, chaves de API…).</p>
+
+<hr>
+
+<h2>alias: atalhos para comandos</h2>
+<p>Um <strong>alias</strong> ("apelido") é um nome curto que o bash troca por um comando maior. Para ver todos, digite <code>alias</code>. No Debian, a lista é curtíssima:</p>
+
+<pre class="term">$ alias
+alias ls='ls --color=auto'               « é por isso que o ls tem cores
+$ ll
+bash: ll: comando não encontrado          « no Ubuntu existe; no Debian, não</pre>
+
+<h3>Por que o ll não existe: o .bashrc do Debian</h3>
+<p>O <code>ll</code> que você vê em tutoriais não é um programa: é um alias. O Debian deixa esses atalhos prontos no <code>~/.bashrc</code>, mas <strong>comentados</strong> (com <code>#</code> na frente, o bash ignora a linha):</p>
+
+<pre class="file" data-file="~/.bashrc (trecho original do Debian)"># some more ls aliases
+#alias ll='ls -l'
+#alias la='ls -A'
+#alias l='ls -CF'</pre>
+
+<p>Para ativá-los, tire o <code>#</code> do começo das três linhas. Você pode fazer isso no <code>nano ~/.bashrc</code> ou com um comando só:</p>
+
+<dl class="anatomy">
+  <dt>sed -i</dt><dd>Edita o arquivo no lugar (veja <a href="sed.html">sed</a>).</dd>
+  <dt>'s/^#alias \(ll\|la\|l\)=/alias \1=/'</dt><dd>Nas linhas que começam com <code>#alias ll=</code>, <code>#alias la=</code> ou <code>#alias l=</code>, tira o <code>#</code>.</dd>
+  <dt>~/.bashrc</dt><dd>O arquivo.</dd>
+</dl>
+
+<pre class="term">$ sed -i 's/^#alias \(ll\|la\|l\)=/alias \1=/' ~/.bashrc
+$ source ~/.bashrc
+$ alias
+alias l='ls -CF'
+alias la='ls -A'
+alias ll='ls -l'
+alias ls='ls --color=auto'</pre>
+
+<div class="note">
+<strong>O ll do Debian não é igual ao do Ubuntu</strong>
+<p>No Ubuntu, <code>ll</code> é <code>ls -alF</code> (mostra também os ocultos). No Debian, a versão comentada é <code>ls -l</code>. Se você prefere o do Ubuntu, escreva o seu: <code>alias ll='ls -alF'</code>.</p>
+</div>
+
+<h3>Criar um alias</h3>
+<dl class="anatomy">
+  <dt>alias</dt><dd>O comando que cria apelidos.</dd>
+  <dt>atualizar=</dt><dd>O nome do atalho. Sem espaço antes nem depois do <code>=</code>.</dd>
+  <dt>'su -c "apt update &amp;&amp; apt upgrade"'</dt><dd>O comando completo, entre aspas simples. Como não há sudo, usamos <code>su -c</code>.</dd>
+</dl>
+
+<pre class="term">$ alias atualizar='su -c "apt update &amp;&amp; apt upgrade"'
+$ type atualizar
+atualizar está apelidada para `su -c "apt update &amp;&amp; apt upgrade"'
+$ atualizar
+Senha:
+Atingido:1 http://deb.debian.org/debian trixie InRelease
+…</pre>
+
+<p>Para remover: <code>unalias atualizar</code>. Assim como as variáveis, esse alias some quando você fecha o terminal.</p>
+
+<h3>Ideias de alias úteis</h3>
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Alias</th><th>Para quê</th></tr>
+<tr><td><code>alias rm='rm -i'</code></td><td>Pergunta antes de apagar cada arquivo.</td></tr>
+<tr><td><code>alias ..='cd ..'</code></td><td>Subir uma pasta digitando só <code>..</code></td></tr>
+<tr><td><code>alias grep='grep --color=auto'</code></td><td>Destaca as palavras encontradas (vem comentado no Debian).</td></tr>
+<tr><td><code>alias ip='ip -c'</code></td><td>Saída colorida do <code>ip</code>.</td></tr>
+<tr><td><code>alias espaco='df -h -x tmpfs -x devtmpfs'</code></td><td>Espaço em disco sem os sistemas virtuais.</td></tr>
+</table>
+</div>
+
+<p>Um alias com o mesmo nome de um comando "ganha" dele. Para rodar o comando original uma vez, coloque uma barra antes: <code>\rm arquivo</code>.</p>
+
+<div class="try" data-goal="ran:^\s*alias\s+ll=,ran:^\s*ll">
+<p class="try-task"><strong>Missão:</strong> no simulador (que é um Debian), <code>ll</code> não existe. Crie o alias <code>ll</code> para <code>ls -l</code> e rode <code>ll</code>. Depois confira com <code>type ll</code>.</p>
+</div>
+
+<hr>
+
+<h2>Tornar permanente: os arquivos de configuração</h2>
+<p>Para que alias, variáveis e PATH sobrevivam ao fechar o terminal, eles precisam estar num arquivo que o bash lê sozinho. Qual arquivo depende de quando você quer que a configuração valha:</p>
+
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Arquivo</th><th>Quando é lido</th><th>Coloque aqui</th></tr>
+<tr><td><code>~/.bashrc</code></td><td>Cada terminal interativo que você abre</td><td>Alias, funções, aparência do prompt, PATH para o terminal.</td></tr>
+<tr><td><code>~/.bash_aliases</code></td><td>Lido pelo <code>.bashrc</code> do Debian, se existir</td><td>Só os seus alias, separados e organizados.</td></tr>
+<tr><td><code>~/.profile</code></td><td>Uma vez, ao entrar na sessão (gráfica, TTY ou SSH)</td><td>Variáveis que programas gráficos também precisam ver. Ele também lê o <code>.bashrc</code>.</td></tr>
+<tr><td><code>/etc/profile</code> e <code>/etc/bash.bashrc</code></td><td>Para todos os usuários</td><td>Configuração do sistema todo (só o root edita).</td></tr>
+<tr><td><code>/etc/skel/</code></td><td>Copiada para a pasta de cada usuário <strong>novo</strong></td><td>O modelo de <code>.bashrc</code>, <code>.profile</code> e <code>.bash_logout</code>.</td></tr>
+</table>
+</div>
+
+<p>O <code>.bashrc</code> do Debian já tem estas linhas, que leem o <code>~/.bash_aliases</code>:</p>
+
+<pre class="file" data-file="~/.bashrc (trecho)">if [ -f ~/.bash_aliases ]; then
+    . ~/.bash_aliases
+fi</pre>
+
+<h3>Passo a passo: alias permanente</h3>
+<ol class="passo">
+<li><strong>Acrescente o alias no fim do <code>~/.bash_aliases</code>.</strong> O <code>&gt;&gt;</code> acrescenta sem apagar o que já existe (e cria o arquivo se ele não existir):
+<pre class="term">$ echo "alias ll='ls -alF'" &gt;&gt; ~/.bash_aliases</pre>
+<p>Para editar com mais calma, use <code>nano ~/.bash_aliases</code>.</p>
+</li>
+<li><strong>Recarregue a configuração no terminal atual.</strong> O <code>source</code> lê o arquivo de novo sem fechar o terminal:
+<dl class="anatomy">
+  <dt>source</dt><dd>Executa um arquivo dentro do shell atual. Também pode ser escrito só como <code>.</code></dd>
+  <dt>~/.bashrc</dt><dd>O arquivo a reler (ele também lê o <code>.bash_aliases</code>).</dd>
+</dl>
+<pre class="term">$ source ~/.bashrc
+$ type ll
+ll está apelidada para `ls -alF'</pre>
+</li>
+<li><strong>Teste num terminal novo.</strong> O alias deve continuar lá.</li>
+</ol>
+
+<hr>
+
+<h2>O prompt: cores e o root sem cor</h2>
+<p>O <code>~/.bashrc</code> do Debian monta o prompt <code>ana@notebook:~$</code> na variável <code>PS1</code>. Ele só usa cores quando o terminal avisa que suporta (o terminal do GNOME avisa). No console de texto (TTY), o prompt fica sem cor. Para forçar cores sempre, tire o <code>#</code> desta linha:</p>
+
+<pre class="file" data-file="~/.bashrc (trecho)"># uncomment for a colored prompt, if the terminal has the capability; turned
+# off by default to not distract the user: the focus in a terminal window
+# should be on the output of commands, not on the prompt
+#force_color_prompt=yes</pre>
+
+<p>Já o root tem outro <code>.bashrc</code>, em <code>/root/.bashrc</code>, quase todo comentado. Por isso, depois de <code>su -</code>, o prompt fica <strong>sem cor</strong> e o <code>ls</code> também. Isso é proposital: é um lembrete visual de que você está como administrador.</p>
+
+<pre class="file" data-file="/root/.bashrc (trecho)"># You may uncomment the following lines if you want `ls' to be colorized:
+# export LS_OPTIONS='--color=auto'
+# eval "$(dircolors)"
+# alias ls='ls $LS_OPTIONS'
+# alias ll='ls $LS_OPTIONS -l'
+# alias l='ls $LS_OPTIONS -lA'
+#
+# Some more alias to avoid making mistakes:
+# alias rm='rm -i'
+# alias cp='cp -i'
+# alias mv='mv -i'</pre>
+
+<hr>
+
+<h2>Quando não funciona</h2>
+
+<div class="cenario">
+<strong>"erro de sintaxe: fim prematuro do arquivo" ao abrir o terminal</strong>
+<pre class="term">bash: /home/ana/.bashrc: linha 116: erro de sintaxe: fim prematuro do arquivo
+ana@notebook:~$</pre>
+<p><strong>O que aconteceu:</strong> você abriu um <code>if</code>, uma aspa ou um <code>{</code> no <code>.bashrc</code> e não fechou. O bash leu até o fim e parou. O terminal abre, mas sem a sua configuração.</p>
+<p><strong>Como resolver:</strong> abra com <code>nano ~/.bashrc</code>, vá até a linha indicada (<kbd>Ctrl</kbd>+<kbd>_</kbd> no nano) e feche o bloco (<code>fi</code>, aspa ou <code>}</code>). Antes de editar, faça uma cópia: <code>cp ~/.bashrc ~/.bashrc.bak</code>. Se precisar, recupere o original do Debian em <code>/etc/skel/.bashrc</code>.</p>
+</div>
+
+<div class="cenario">
+<strong>"alias: x: não encontrado"</strong>
+<pre class="term">$ alias x = 'ls'
+bash: alias: x: não encontrado
+bash: alias: =: não encontrado
+bash: alias: ls: não encontrado</pre>
+<p><strong>O que aconteceu:</strong> há espaços em volta do <code>=</code>. O bash entendeu três palavras separadas e tentou mostrar três alias que não existem.</p>
+<p><strong>Como resolver:</strong> escreva tudo junto: <code>alias x='ls'</code>.</p>
+</div>
+
+<div class="cenario">
+<strong>Virei root com su e o comando não existe</strong>
+<pre class="term">$ su
+Senha:
+#> usermod -aG cdrom ana
+bash: usermod: comando não encontrado</pre>
+<p><strong>O que aconteceu:</strong> sem o hífen, o <code>su</code> mantém o PATH da usuária, que não tem <code>/usr/sbin</code>.</p>
+<p><strong>Como resolver:</strong> saia com <code>exit</code> e entre com <code>su -</code>.</p>
+</div>
+
+<div class="cenario">
+<strong>Criei ~/.local/bin, mas o script continua "não encontrado"</strong>
+<p><strong>O que aconteceu:</strong> o <code>.profile</code> só confere se a pasta existe no momento do login. Como ela foi criada depois, o PATH atual não a inclui.</p>
+<p><strong>Como resolver:</strong> saia e entre de novo na sessão (ou, só neste terminal, <code>source ~/.profile</code>). Confira com <code>echo $PATH | tr ':' '\n'</code>.</p>
+</div>
+
+<hr>
+
+<h2>Referência</h2>
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Comando</th><th>O que faz</th></tr>
+<tr><td><code>echo $VAR</code> / <code>printenv VAR</code></td><td>Mostra uma variável</td></tr>
+<tr><td><code>export VAR=valor</code></td><td>Cria uma variável visível para os programas</td></tr>
+<tr><td><code>export PATH="$HOME/scripts:$PATH"</code></td><td>Acrescenta uma pasta ao PATH</td></tr>
+<tr><td><code>alias</code> / <code>alias nome='comando'</code> / <code>unalias nome</code></td><td>Lista / cria / remove apelidos</td></tr>
+<tr><td><code>type nome</code> / <code>which nome</code></td><td>Diz o que o bash vai rodar</td></tr>
+<tr><td><code>source ~/.bashrc</code></td><td>Relê a configuração</td></tr>
+<tr><td><code>su -</code></td><td>Vira root com o ambiente completo do root</td></tr>
+<tr><td><code>cp /etc/skel/.bashrc ~/</code></td><td>Volta o <code>.bashrc</code> ao original do Debian</td></tr>
+</table>
+</div>
+
+<hr>
+
+<h2>Exercícios</h2>
+
+<div class="exercise">
+<h3>1. Criar um alias</h3>
+<p>Complete para criar o atalho <code>ll</code> igual ao do Ubuntu:</p>
+<div class="ex-code">alias ll=<input data-answer="'ls -alF'|&quot;ls -alF&quot;" aria-label="comando"></div>
+</div>
+
+<div class="exercise">
+<h3>2. Root completo</h3>
+<p>Complete para virar root com o PATH do root:</p>
+<div class="ex-code">su <input data-answer="-|-l|--login" aria-label="opção"></div>
+</div>
+
+<div class="exercise">
+<h3>3. Reler a configuração</h3>
+<p>Complete para aplicar as mudanças do <code>.bashrc</code> sem fechar o terminal:</p>
+<div class="ex-code"><input data-answer="source|." aria-label="comando"> ~/.bashrc</div>
+</div>
+
+<div class="mc" data-answer="2">
+<p class="mc-q">4. Por que <code>reboot</code> dá "comando não encontrado" para a usuária comum no Debian?</p>
+<label><input type="radio" name="q4"> O Debian não tem o comando reboot.</label>
+<label><input type="radio" name="q4"> Ele fica em <code>/usr/sbin</code>, que não está no PATH da usuária comum.</label>
+<label><input type="radio" name="q4"> Falta instalar o pacote reboot.</label>
+<label><input type="radio" name="q4"> O alias reboot está comentado no .bashrc.</label>
+</div>
+
+<div class="mc" data-answer="4">
+<p class="mc-q">5. Onde estão os alias <code>ll</code>, <code>la</code> e <code>l</code> num Debian recém-instalado?</p>
+<label><input type="radio" name="q5"> Em <code>/etc/aliases</code>.</label>
+<label><input type="radio" name="q5"> Não existem em lugar nenhum.</label>
+<label><input type="radio" name="q5"> Em <code>~/.bash_aliases</code>, já ativos.</label>
+<label><input type="radio" name="q5"> No <code>~/.bashrc</code>, mas comentados com <code>#</code>.</label>
+</div>
+
+<hr>
+
+<h2>Resumo</h2>
+<ul>
+  <li>Variáveis guardam valores: <code>$HOME</code>, <code>$USER</code>, <code>$PATH</code>. Use <code>export</code> para os programas enxergarem.</li>
+  <li>O PATH da usuária comum no Debian não tem <code>/sbin</code>; o do root tem.</li>
+  <li>Use <code>su -</code>, com hífen, para ter o ambiente completo do root.</li>
+  <li>O Debian só ativa o alias <code>ls</code>; <code>ll</code>, <code>la</code> e <code>l</code> estão comentados no <code>~/.bashrc</code>.</li>
+  <li>Alias permanentes vão no <code>~/.bash_aliases</code>; recarregue com <code>source ~/.bashrc</code>.</li>
+</ul>
+
+<div class="pager"></div>
+
+</div>
+</main>
+</div>
+<script src="assets/site.js"></script>
+</body>
+</html>

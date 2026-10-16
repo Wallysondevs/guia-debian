@@ -1,0 +1,371 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Debian configurar a rede — ifupdown, IP fixo, DNS e NetworkManager | Guia Debian</title>
+<meta name="description" content="Configure a rede no Debian 13: o arquivo /etc/network/interfaces linha por linha, IP fixo testado antes de aplicar, ifup e ifdown, dhcpcd e resolv.conf, NetworkManager no desktop e nome da máquina.">
+<link rel="stylesheet" href="assets/style.css">
+<script>try{var t=localStorage.getItem("tema");if(t)document.documentElement.setAttribute("data-theme",t)}catch(e){}</script>
+</head>
+<body>
+<div class="layout">
+<nav class="sidebar" id="sidebar" aria-label="Tópicos"></nav>
+<main class="main">
+<div class="content">
+
+<div class="pager"></div>
+
+<h1>Debian <span class="hl">Configurar a Rede</span></h1>
+
+<p class="intro">No Debian não existe Netplan. Quem cuida da rede depende de como o sistema foi instalado: num <strong>servidor</strong> (sem desktop) é o <strong>ifupdown</strong>, configurado pelo arquivo <code>/etc/network/interfaces</code>; num <strong>desktop</strong> é o <strong>NetworkManager</strong>. Nesta aula você aprende os dois e, principalmente, a mudar a rede sem perder o acesso à máquina.</p>
+
+<div class="note">
+<strong>Você vai aprender</strong>
+<ul>
+  <li>Descobrir quem gerencia a rede do seu Debian.</li>
+  <li>Ler o <code>/etc/network/interfaces</code> linha por linha.</li>
+  <li>Trocar DHCP por IP fixo, testando antes com <code>ifup --no-act</code>.</li>
+  <li>Entender de onde vem o <code>/etc/resolv.conf</code> (o DNS) no Debian 13.</li>
+  <li>Usar o <code>nmcli</code> no desktop e evitar o conflito entre NetworkManager e ifupdown.</li>
+  <li>Trocar o nome da máquina corretamente.</li>
+</ul>
+</div>
+
+<div class="warning">
+<strong>Antes de mexer na rede</strong>
+<p>Mudar a rede de uma máquina que você acessa por SSH pode derrubar a sua conexão, e você fica do lado de fora. Faça essas mudanças <strong>pelo console</strong> (tela e teclado na máquina, ou a janela da VM). Se não tiver jeito, use o "plano B" com tempo de volta, mostrado mais abaixo.</p>
+</div>
+
+<hr>
+
+<h2>Quem cuida da rede neste Debian?</h2>
+
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Tipo de instalação</th><th>Gerenciador</th><th>Onde se configura</th></tr>
+<tr><td>Servidor ou instalação mínima (sem desktop)</td><td>ifupdown (serviço <code>networking</code>) + dhcpcd</td><td><code>/etc/network/interfaces</code></td></tr>
+<tr><td>Desktop (GNOME, KDE, Xfce…)</td><td>NetworkManager</td><td>Configurações → Rede, ou <code>nmcli</code></td></tr>
+<tr><td>Configuração avançada (opcional)</td><td>systemd-networkd</td><td><code>/etc/systemd/network/</code> (vem desativado)</td></tr>
+</table>
+</div>
+
+<p>Para descobrir qual está em uso, pergunte ao systemd:</p>
+
+<pre class="term">$ systemctl is-active networking NetworkManager
+active                          « o ifupdown está cuidando da rede
+inactive                        « o NetworkManager não está rodando (ou não está instalado)</pre>
+
+<p>No servidor de exemplo deste guia, só o <code>networking</code> está ativo. O NetworkManager nem vem instalado numa instalação sem desktop.</p>
+
+<hr>
+
+<h2>O arquivo /etc/network/interfaces</h2>
+<p>Este é o arquivo que o instalador do Debian cria num servidor. A leitura não precisa de root:</p>
+
+<pre class="file" data-file="/etc/network/interfaces"># This file describes the network interfaces available on your system
+# and how to activate them. For more information, see interfaces(5).
+
+source /etc/network/interfaces.d/*
+
+# The loopback network interface
+auto lo
+iface lo inet loopback
+
+# The primary network interface
+allow-hotplug enp1s0
+iface enp1s0 inet dhcp
+# This is an autoconfigured IPv6 interface
+iface enp1s0 inet6 auto</pre>
+
+<p>Linha por linha:</p>
+
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Linha</th><th>Significado</th></tr>
+<tr><td><code># …</code></td><td>Comentários (os do instalador ficam em inglês).</td></tr>
+<tr><td><code>source /etc/network/interfaces.d/*</code></td><td>Lê também todos os arquivos da pasta <code>interfaces.d</code>. Útil para separar a configuração de cada placa.</td></tr>
+<tr><td><code>auto lo</code></td><td>Liga a placa <code>lo</code> automaticamente no boot.</td></tr>
+<tr><td><code>iface lo inet loopback</code></td><td>"A placa <code>lo</code>, em IPv4 (<code>inet</code>), é do tipo loopback."</td></tr>
+<tr><td><code>allow-hotplug enp1s0</code></td><td>Liga a placa quando o sistema a detectar (no boot ou se ela for conectada depois).</td></tr>
+<tr><td><code>iface enp1s0 inet dhcp</code></td><td>A placa <code>enp1s0</code> pega o IPv4 por <strong>DHCP</strong>, do roteador.</td></tr>
+<tr><td><code>iface enp1s0 inet6 auto</code></td><td>O IPv6 é configurado automaticamente pelo roteador.</td></tr>
+</table>
+</div>
+
+<p>Cada placa é descrita por um bloco que começa com <code>iface &lt;placa&gt; &lt;família&gt; &lt;método&gt;</code>:</p>
+
+<dl class="anatomy">
+  <dt>iface</dt><dd>Começa a descrição de uma placa.</dd>
+  <dt>enp1s0</dt><dd>O nome da placa, igual ao do <code>ip a</code>.</dd>
+  <dt>inet</dt><dd>A família: <code>inet</code> = IPv4, <code>inet6</code> = IPv6.</dd>
+  <dt>dhcp</dt><dd>O método: <code>dhcp</code> (automático), <code>static</code> (IP fixo), <code>loopback</code>, <code>manual</code>…</dd>
+</dl>
+
+<h3>auto ou allow-hotplug?</h3>
+<p>As duas ligam a placa sozinhas. <code>auto</code> liga sempre no boot, e o sistema espera por ela. <code>allow-hotplug</code> liga quando a placa aparece. O instalador usa <code>allow-hotplug</code>; para um servidor com IP fixo, prefira <code>auto</code>.</p>
+
+<hr>
+
+<h2>ifquery, ifup e ifdown</h2>
+<p>O ifupdown tem três comandos, todos em <code>/usr/sbin</code> (só funcionam como root; para a usuária comum, eles dão "comando não encontrado"):</p>
+
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Comando</th><th>Faz</th></tr>
+<tr><td><code>ifquery &lt;placa&gt;</code></td><td>Mostra como a placa está configurada no arquivo.</td></tr>
+<tr><td><code>ifquery --state</code></td><td>Lista as placas que o ifupdown ligou.</td></tr>
+<tr><td><code>ifup &lt;placa&gt;</code></td><td>Liga a placa conforme o arquivo.</td></tr>
+<tr><td><code>ifdown &lt;placa&gt;</code></td><td>Desliga a placa. <strong>Por SSH, isso derruba a sua conexão.</strong></td></tr>
+<tr><td><code>systemctl restart networking</code></td><td>Desliga e liga todas as placas com <code>auto</code>/<code>allow-hotplug</code>.</td></tr>
+</table>
+</div>
+
+<pre class="term">$ su -
+Senha:
+#> ifquery --state
+lo=lo
+enp1s0=enp1s0
+#> ifup enp1s0
+ifup: interface enp1s0 already configured          « já está ligada: nada a fazer</pre>
+
+<hr>
+
+<h2>Trocar DHCP por IP fixo</h2>
+<p>Um servidor precisa de um endereço que não mude. Escolha um IP fora da faixa que o roteador distribui (por exemplo, <code>192.168.0.50</code>) e anote o gateway e o DNS da rede (<code>ip r</code> e <code>cat /etc/resolv.conf</code>).</p>
+
+<ol class="passo">
+  <li><strong>Faça uma cópia do arquivo</strong>, para poder voltar:
+<pre class="term" data-host="servidor">#> cp /etc/network/interfaces /etc/network/interfaces.bak</pre></li>
+  <li><strong>Edite o bloco da placa</strong> com <code>nano /etc/network/interfaces</code>. Troque as linhas da <code>enp1s0</code> por:
+<pre class="file" data-file="/etc/network/interfaces (trecho)">auto enp1s0
+iface enp1s0 inet static
+    address 192.168.0.50/24
+    gateway 192.168.0.1</pre>
+  As linhas de dentro do bloco ficam com recuo (o recuo é só para leitura; o que conta é a ordem).</li>
+  <li><strong>Teste sem aplicar</strong> com <code>--no-act</code> (<em>não faça nada</em>) e <code>-v</code> (detalhado). O ifup mostra os comandos que rodaria:
+<pre class="term" data-host="servidor">#> ifup --no-act -v enp1s0
+
+ifup: configuring interface enp1s0=enp1s0 (inet)
+run-parts --exit-on-error --verbose /etc/network/if-pre-up.d
+ip addr add 192.168.0.50/255.255.255.0 broadcast 192.168.0.255 	  dev enp1s0 label enp1s0   « o IP novo
+ip link set dev enp1s0   up
+ ip route add default via 192.168.0.1  dev enp1s0 onlink                                      « o gateway
+run-parts --exit-on-error --verbose /etc/network/if-up.d</pre>
+  Se houver erro de digitação, ele aparece aqui, antes de qualquer estrago (veja "Quando não funciona").</li>
+  <li><strong>Ajuste o DNS</strong>: com IP fixo, ninguém escreve o <code>/etc/resolv.conf</code> por você (veja a próxima seção). Deixe-o assim:
+<pre class="file" data-file="/etc/resolv.conf">nameserver 192.168.0.1
+nameserver 1.1.1.1</pre></li>
+  <li><strong>Aplique</strong>, de preferência pelo console. Desligar e ligar na <strong>mesma linha</strong> garante que a placa volte mesmo se a conexão cair no meio:
+<pre class="term" data-host="servidor">#> ifdown enp1s0 &amp;&amp; ifup enp1s0</pre></li>
+  <li><strong>Confira</strong>:
+<pre class="term" data-host="servidor">#> ip -br a show enp1s0
+enp1s0           UP             192.168.0.50/24 fe80::ae13:e729:e153:39c/64
+#> ping -c 2 debian.org</pre></li>
+</ol>
+
+<div class="note">
+<strong>E a opção dns-nameservers?</strong>
+<p>Muitos tutoriais colocam <code>dns-nameservers 1.1.1.1</code> dentro do bloco da placa. No Debian, essa linha só tem efeito se o pacote <code>resolvconf</code> (ou o <code>systemd-resolved</code>) estiver instalado. Numa instalação padrão do Debian 13 ela é ignorada, por isso o passo 4 edita o <code>/etc/resolv.conf</code> direto.</p>
+</div>
+
+<h3>Plano B: voltar sozinho se você perder o acesso</h3>
+<p>O Debian não tem um "teste com tempo para confirmar" como o <code>netplan try</code> do Ubuntu. Mas dá para montar um com o <code>systemd-run</code>: agende a volta do arquivo antigo para daqui a 5 minutos, aplique a mudança e, se tudo der certo, cancele o agendamento.</p>
+
+<pre class="term" data-host="servidor">#> systemd-run --on-active=5min /bin/sh -c 'cp /etc/network/interfaces.bak /etc/network/interfaces &amp;&amp; systemctl restart networking'
+Running timer as unit: run-p10090-i10390.timer          « o "despertador" de 5 minutos
+Will run service as unit: run-p10090-i10390.service
+#> ifdown enp1s0 &amp;&amp; ifup enp1s0
+# … reconecte pelo IP novo. Deu certo? Cancele a volta:
+#> systemctl stop run-p10090-i10390.timer</pre>
+
+<p>Se a conexão cair e você não conseguir voltar, em 5 minutos o arquivo antigo é restaurado e a rede reinicia sozinha.</p>
+
+<hr>
+
+<h2>DNS: quem escreve o /etc/resolv.conf</h2>
+<p>O arquivo <code>/etc/resolv.conf</code> diz quais servidores de DNS usar. No Debian 13, quem pega o IP por DHCP é o <strong>dhcpcd</strong>, e é ele que escreve esse arquivo. A primeira linha conta isso:</p>
+
+<pre class="term">$ cat /etc/resolv.conf
+# Generated by dhcpcd from enp1s0.dhcp, enp1s0.ra       « escrito pelo dhcpcd
+# /etc/resolv.conf.head can replace this line
+domain lan
+nameserver 192.168.0.1                                 « o DNS que o roteador informou
+# /etc/resolv.conf.tail can replace this line</pre>
+
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Situação</th><th>Quem controla o resolv.conf</th></tr>
+<tr><td>Servidor com DHCP (padrão)</td><td>O dhcpcd: ele reescreve o arquivo a cada renovação. Edições à mão se perdem.</td></tr>
+<tr><td>Servidor com IP fixo</td><td>Ninguém: você edita o arquivo e ele fica como está.</td></tr>
+<tr><td>Desktop com NetworkManager</td><td>O NetworkManager.</td></tr>
+</table>
+</div>
+
+<p>Diferente do Ubuntu, o Debian não usa o <code>systemd-resolved</code> por padrão, então o comando <code>resolvectl</code> não existe. Para testar o DNS, use <code>getent hosts debian.org</code> ou <code>dig</code> (veja <a href="curl-wget.html">curl, wget, dig</a>).</p>
+
+<p>Para fixar um DNS mesmo usando DHCP, acrescente ao <code>/etc/dhcpcd.conf</code> a linha <code>static domain_name_servers=1.1.1.1 9.9.9.9</code> e reinicie a rede.</p>
+
+<hr>
+
+<h2>No desktop: NetworkManager e nmcli</h2>
+<p>Num Debian com desktop, use o ícone de rede no canto da tela ou <strong>Configurações → Rede</strong>. No terminal, a ferramenta é o <code>nmcli</code> (de <em>NetworkManager command line</em>). Os comandos são os mesmos de qualquer distribuição:</p>
+
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Comando</th><th>Faz</th></tr>
+<tr><td><code>nmcli device status</code></td><td>Lista as placas e o estado de cada uma</td></tr>
+<tr><td><code>nmcli device wifi list</code></td><td>Redes Wi-Fi ao alcance</td></tr>
+<tr><td><code>nmcli device wifi connect "MinhaRede" password "senha"</code></td><td>Conecta num Wi-Fi</td></tr>
+<tr><td><code>nmcli connection show</code></td><td>Conexões salvas</td></tr>
+<tr><td><code>nmcli connection modify "Conexão" ipv4.method manual ipv4.addresses 192.168.0.50/24 ipv4.gateway 192.168.0.1 ipv4.dns "1.1.1.1"</code></td><td>IP fixo numa conexão</td></tr>
+<tr><td><code>nmcli connection up "Conexão"</code></td><td>Aplica as mudanças</td></tr>
+</table>
+</div>
+
+<p>Exemplo típico num notebook com Debian e GNOME (saída ilustrativa):</p>
+
+<pre class="term">$ nmcli device status
+DEVICE  TYPE      STATE                   CONNECTION
+wlp2s0  wifi      conectado               CasaWiFi
+enp1s0  ethernet  indisponível            --
+lo      loopback  conectado (externamente)  lo</pre>
+
+<div class="warning">
+<strong>O conflito clássico do Debian: placa "não gerenciada"</strong>
+<p>O NetworkManager do Debian <strong>ignora</strong> toda placa que estiver descrita no <code>/etc/network/interfaces</code> (opção <code>managed=false</code> em <code>/etc/NetworkManager/NetworkManager.conf</code>). Se você instalou o desktop depois de um servidor, a placa aparece como <code>não gerenciado</code> (<em>unmanaged</em>) e o ícone de rede não a controla.</p>
+<p><strong>Solução:</strong> deixe no <code>/etc/network/interfaces</code> só o bloco do <code>lo</code>, comente o da placa e reinicie: <code>systemctl restart networking NetworkManager</code>. A partir daí, o NetworkManager assume.</p>
+</div>
+
+<div class="tip">
+<strong>Escolha um só</strong>
+<p>Não configure a mesma placa no <code>interfaces</code> e no NetworkManager ao mesmo tempo. Servidor: ifupdown. Desktop: NetworkManager.</p>
+</div>
+
+<hr>
+
+<h2>O nome da máquina</h2>
+<p>O nome aparece no prompt (<code>ana@notebook</code>) e na rede. Para ver:</p>
+
+<pre class="term">$ hostnamectl hostname
+notebook</pre>
+
+<p>Para trocar, são dois passos como root. O primeiro troca o nome; o segundo atualiza o <code>/etc/hosts</code>, onde o Debian coloca o nome da própria máquina:</p>
+
+<pre class="term">#> hostnamectl set-hostname servidor
+#> cat /etc/hosts
+127.0.0.1	localhost
+127.0.1.1	notebook.lan	notebook          « ainda com o nome antigo
+…</pre>
+
+<p>Edite a linha <code>127.0.1.1</code> para <code>127.0.1.1	servidor.lan	servidor</code>. Sem isso, a máquina não consegue resolver o próprio nome, e alguns programas reclamam ou demoram (o <code>sudo</code>, se você o instalou, avisa <code>unable to resolve host servidor</code>). O prompt muda no próximo login.</p>
+
+<hr>
+
+<h2>Formas diferentes de mudar a rede</h2>
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Forma</th><th>Permanente?</th><th>Quando usar</th></tr>
+<tr><td>Editar <code>/etc/network/interfaces</code> + <code>ifdown/ifup</code></td><td>Sim</td><td>Servidor Debian.</td></tr>
+<tr><td>Configurações → Rede (GNOME)</td><td>Sim</td><td>Desktop.</td></tr>
+<tr><td><code>nmcli connection modify</code></td><td>Sim</td><td>Desktop, pelo terminal ou em scripts.</td></tr>
+<tr><td><code>ip addr add 192.168.0.60/24 dev enp1s0</code></td><td><strong>Não</strong>: some no próximo boot</td><td>Testes rápidos.</td></tr>
+<tr><td>systemd-networkd (arquivos <code>.network</code>)</td><td>Sim</td><td>Servidores mais modernos ou containers. Vem desativado no Debian.</td></tr>
+</table>
+</div>
+
+<hr>
+
+<h2>Quando não funciona</h2>
+
+<div class="cenario">
+<strong>"ifup: unknown interface eth0"</strong>
+<pre class="term">#> ifup eth0
+ifup: unknown interface eth0</pre>
+<p><strong>O que aconteceu:</strong> o nome da placa está errado ou ela não está no arquivo. O nome antigo <code>eth0</code> não existe mais na maioria das máquinas.</p>
+<p><strong>Como resolver:</strong> veja o nome real com <code>ip -br a</code> e use o mesmo nome no arquivo.</p>
+</div>
+
+<div class="cenario">
+<strong>Erro de digitação no método</strong>
+<pre class="term">#> ifup --no-act enp1s0
+ifup: /etc/network/interfaces:5: unknown or no method and no inherits keyword specified   « linha 5
+ifup: couldn't read interfaces file "/etc/network/interfaces"</pre>
+<p><strong>O que aconteceu:</strong> na linha 5 há um método inválido, como <code>statik</code> no lugar de <code>static</code>.</p>
+<p><strong>Como resolver:</strong> corrija a linha indicada e teste de novo com <code>--no-act</code>.</p>
+</div>
+
+<div class="cenario">
+<strong>Faltou o endereço</strong>
+<pre class="term">#> ifup --no-act enp1s0
+
+ifup: missing required variable: address
+ifup: missing required configuration variables for interface enp1s0/inet
+ifup: failed to bring up enp1s0</pre>
+<p><strong>O que aconteceu:</strong> o método <code>static</code> exige a linha <code>address</code>, e ela está faltando ou com o nome errado (por exemplo, <code>endereco</code>).</p>
+</div>
+
+<div class="cenario">
+<strong>IP fixo funciona, mas os nomes não resolvem</strong>
+<p><strong>O que aconteceu:</strong> sem DHCP, ninguém atualiza o <code>/etc/resolv.conf</code>; ele pode estar vazio ou com um DNS que não existe nessa rede.</p>
+<p><strong>Como resolver:</strong> coloque um <code>nameserver</code> válido no arquivo e teste com <code>getent hosts debian.org</code>.</p>
+</div>
+
+<div class="cenario">
+<strong>Rodei ifdown pelo SSH e perdi o acesso</strong>
+<p><strong>O que aconteceu:</strong> o <code>ifdown</code> desligou a placa por onde a sua conexão passava.</p>
+<p><strong>Como resolver:</strong> vá até o console da máquina (ou a janela da VM) e rode <code>ifup enp1s0</code>. Da próxima vez, use <code>ifdown enp1s0 &amp;&amp; ifup enp1s0</code> na mesma linha, ou o plano B com <code>systemd-run</code>.</p>
+</div>
+
+<hr>
+
+<h2>Exercícios</h2>
+
+<div class="exercise">
+<h3>1. Método do IP fixo</h3>
+<p>Complete a linha para a placa <code>enp1s0</code> usar IP fixo:</p>
+<div class="ex-code">iface enp1s0 inet <input data-answer="static" aria-label="método"></div>
+</div>
+
+<div class="exercise">
+<h3>2. Testar antes</h3>
+<p>Complete para ver o que o <code>ifup</code> faria, sem aplicar nada:</p>
+<div class="ex-code">ifup <input data-answer="--no-act -v|-n -v|--no-act|-n|-v --no-act|-nv|-vn" aria-label="opções"> enp1s0</div>
+</div>
+
+<div class="mc" data-answer="3">
+<p class="mc-q">3. Num Debian servidor com DHCP, quem escreve o <code>/etc/resolv.conf</code>?</p>
+<label><input type="radio" name="q3"> O Netplan</label>
+<label><input type="radio" name="q3"> O systemd-resolved</label>
+<label><input type="radio" name="q3"> O dhcpcd</label>
+<label><input type="radio" name="q3"> O NetworkManager</label>
+</div>
+
+<div class="mc" data-answer="1">
+<p class="mc-q">4. Você instalou o GNOME num Debian servidor e a placa de cabo aparece como "não gerenciado". Qual é a causa mais provável?</p>
+<label><input type="radio" name="q4"> A placa ainda está descrita no <code>/etc/network/interfaces</code>.</label>
+<label><input type="radio" name="q4"> Falta instalar o Netplan.</label>
+<label><input type="radio" name="q4"> O cabo está solto.</label>
+<label><input type="radio" name="q4"> O hostname está errado.</label>
+</div>
+
+<hr>
+
+<h2>Resumo</h2>
+<ul>
+  <li>Servidor Debian: ifupdown com <code>/etc/network/interfaces</code>; desktop: NetworkManager. Não há Netplan.</li>
+  <li>Cada placa tem um bloco <code>iface &lt;placa&gt; inet dhcp|static</code>.</li>
+  <li>Teste com <code>ifup --no-act -v</code> antes de aplicar; aplique com <code>ifdown placa &amp;&amp; ifup placa</code>.</li>
+  <li>No Debian 13, o dhcpcd escreve o <code>/etc/resolv.conf</code>; com IP fixo, edite-o à mão.</li>
+  <li>O NetworkManager ignora placas do <code>interfaces</code>: escolha um gerenciador só.</li>
+  <li>Trocar o nome: <code>hostnamectl set-hostname</code> e a linha <code>127.0.1.1</code> do <code>/etc/hosts</code>.</li>
+</ul>
+
+<div class="pager"></div>
+
+</div>
+</main>
+</div>
+<script src="assets/site.js"></script>
+</body>
+</html>

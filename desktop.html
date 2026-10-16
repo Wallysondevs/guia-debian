@@ -1,0 +1,301 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Debian O Desktop — GNOME e outras áreas de trabalho | Guia Debian</title>
+<meta name="description" content="A área de trabalho do Debian 13: o GNOME 48 sem modificações, as diferenças para o Ubuntu, atalhos de teclado, Firefox ESR, extensões e as outras áreas de trabalho (Xfce, KDE Plasma, Cinnamon…).">
+<link rel="stylesheet" href="assets/style.css">
+<script>try{var t=localStorage.getItem("tema");if(t)document.documentElement.setAttribute("data-theme",t)}catch(e){}</script>
+</head>
+<body>
+<div class="layout">
+<nav class="sidebar" id="sidebar" aria-label="Tópicos"></nav>
+<main class="main">
+<div class="content">
+
+<div class="pager"></div>
+
+<h1>Debian <span class="hl">O Desktop</span></h1>
+
+<p class="intro">A <strong>área de trabalho</strong> (<em>desktop</em>) é a parte gráfica do sistema: janelas, menus, ícones. No Debian você escolhe qual quer durante a instalação, e a padrão é o <strong>GNOME</strong>. Diferente do Ubuntu, o Debian entrega o GNOME do jeito que os autores do GNOME fizeram, sem barra lateral nem personalizações. Nesta aula você aprende a se localizar nele, os atalhos que realmente vêm configurados e como mudar de área de trabalho.</p>
+
+<div class="note">
+<strong>Você vai aprender</strong>
+<ul>
+  <li>As partes da tela do GNOME 48 e como abrir programas.</li>
+  <li>O que muda em relação ao GNOME do Ubuntu.</li>
+  <li>Os atalhos de teclado padrão (e o que <strong>não</strong> vem configurado).</li>
+  <li>Os programas que vêm instalados, inclusive o Firefox ESR.</li>
+  <li>Como instalar extensões e outras áreas de trabalho.</li>
+</ul>
+</div>
+
+<hr>
+
+<h2>O GNOME do Debian 13</h2>
+<p>O Debian 13 traz o <strong>GNOME 48</strong>. Você confere a versão de qualquer pacote com <code>apt-cache policy</code>:</p>
+
+<dl class="anatomy">
+  <dt>apt-cache policy</dt><dd>Mostra a versão instalada e a disponível de um pacote.</dd>
+  <dt>gnome-shell</dt><dd>O pacote principal do GNOME (a "casca" que desenha a tela).</dd>
+</dl>
+
+<pre class="term">$ apt-cache policy gnome-shell
+gnome-shell:
+  Instalado: 48.7-0+deb13u2              « GNOME 48
+  Candidato: 48.7-0+deb13u2
+  Tabela de versão:
+ *** 48.7-0+deb13u2 500
+        500 http://deb.debian.org/debian trixie/main amd64 Packages
+        100 /var/lib/dpkg/status</pre>
+
+<h3>As partes da tela</h3>
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Parte</th><th>Onde fica</th><th>Para que serve</th></tr>
+<tr><td>Barra superior</td><td>Topo da tela</td><td>Relógio no meio, menu do sistema (rede, som, desligar) à direita.</td></tr>
+<tr><td>Indicador de áreas de trabalho</td><td>Canto superior esquerdo (os pontinhos)</td><td>Clique para abrir a visão geral. Substituiu o antigo botão "Atividades".</td></tr>
+<tr><td>Visão geral</td><td>Tela cheia, ao apertar <kbd>Super</kbd></td><td>Mostra as janelas abertas, a busca e o painel de favoritos (o <em>dash</em>) embaixo.</td></tr>
+<tr><td>Grade de aplicativos</td><td><kbd>Super</kbd>+<kbd>A</kbd> ou o último ícone do dash</td><td>Todos os programas instalados.</td></tr>
+<tr><td>Central de mensagens</td><td>Clique no relógio</td><td>Notificações e calendário.</td></tr>
+</table>
+</div>
+
+<p>A tecla <kbd>Super</kbd> é a que tem o logotipo do Windows na maioria dos teclados.</p>
+
+<h3>Abrir um programa: três formas</h3>
+<ol class="passo">
+  <li><strong>Buscar:</strong> aperte <kbd>Super</kbd>, digite o começo do nome ("term", "fire") e aperte <kbd>Enter</kbd>. É a forma mais rápida.</li>
+  <li><strong>Grade:</strong> <kbd>Super</kbd>+<kbd>A</kbd> e clique no ícone.</li>
+  <li><strong>Favoritos:</strong> na visão geral, clique num ícone do dash. Para fixar um programa ali, clique com o botão direito nele e escolha "Fixar no painel".</li>
+</ol>
+
+<hr>
+
+<h2>Debian x Ubuntu: o mesmo GNOME, cara diferente</h2>
+<p>Os dois usam GNOME, mas o Ubuntu modifica bastante. O Debian não modifica nada além do papel de parede.</p>
+
+<div class="table-wrap">
+<table class="ref">
+<tr><th></th><th>Debian 13</th><th>Ubuntu</th></tr>
+<tr><td>Barra de programas fixa</td><td>Não. Os favoritos só aparecem na visão geral.</td><td>Sim, a "Ubuntu Dock" na lateral.</td></tr>
+<tr><td>Ícones na área de trabalho</td><td>Não</td><td>Sim</td></tr>
+<tr><td>Ícones de bandeja (Discord, Telegram…)</td><td>Não aparecem sem extensão</td><td>Aparecem</td></tr>
+<tr><td>Botões da janela</td><td>Só o "fechar" (×)</td><td>Minimizar, maximizar e fechar</td></tr>
+<tr><td><kbd>Ctrl</kbd>+<kbd>Alt</kbd>+<kbd>T</kbd> abre o terminal</td><td><strong>Não</strong> vem configurado</td><td>Sim</td></tr>
+<tr><td>Tema</td><td>Adwaita (o do GNOME), papel de parede "Ceratopsian"</td><td>Yaru, laranja</td></tr>
+<tr><td>Loja de programas</td><td>GNOME Software, com pacotes do Debian</td><td>App Center, com Snaps</td></tr>
+</table>
+</div>
+
+<div class="tip">
+<strong>Quer o jeito do Ubuntu?</strong>
+<p>Quase tudo dá para ter no Debian com <a href="#extensoes">extensões</a>: a <code>gnome-shell-extension-dashtodock</code> cria a barra fixa e a <code>gnome-shell-extension-appindicator</code> mostra os ícones de bandeja. Os botões de minimizar e maximizar voltam com o app Ajustes (<code>gnome-tweaks</code>), que já vem instalado.</p>
+</div>
+
+<hr>
+
+<h2>Atalhos de teclado</h2>
+<p>Estes são os atalhos que vêm configurados no GNOME do Debian 13. Foram conferidos nos arquivos de configuração padrão do GNOME 48:</p>
+
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Atalho</th><th>O que faz</th></tr>
+<tr><td><kbd>Super</kbd></td><td>Abre e fecha a visão geral</td></tr>
+<tr><td><kbd>Super</kbd>+<kbd>A</kbd></td><td>Grade de aplicativos</td></tr>
+<tr><td><kbd>Alt</kbd>+<kbd>Tab</kbd> ou <kbd>Super</kbd>+<kbd>Tab</kbd></td><td>Alterna entre programas</td></tr>
+<tr><td><kbd>Alt</kbd>+<kbd>F4</kbd></td><td>Fecha a janela</td></tr>
+<tr><td><kbd>Super</kbd>+<kbd>↑</kbd></td><td>Maximiza a janela</td></tr>
+<tr><td><kbd>Super</kbd>+<kbd>H</kbd></td><td>Minimiza (esconde) a janela</td></tr>
+<tr><td><kbd>Super</kbd>+<kbd>L</kbd></td><td>Bloqueia a tela</td></tr>
+<tr><td><kbd>Super</kbd>+<kbd>V</kbd></td><td>Notificações e calendário</td></tr>
+<tr><td><kbd>Super</kbd>+<kbd>S</kbd></td><td>Configurações rápidas (rede, som, energia)</td></tr>
+<tr><td><kbd>PrtSc</kbd></td><td>Ferramenta de captura de tela</td></tr>
+<tr><td><kbd>Shift</kbd>+<kbd>PrtSc</kbd></td><td>Captura a tela inteira na hora</td></tr>
+<tr><td><kbd>Alt</kbd>+<kbd>F2</kbd></td><td>Caixa "Executar um comando"</td></tr>
+<tr><td><kbd>Ctrl</kbd>+<kbd>Alt</kbd>+<kbd>←</kbd>/<kbd>→</kbd></td><td>Muda de área de trabalho virtual</td></tr>
+<tr><td><kbd>Ctrl</kbd>+<kbd>Alt</kbd>+<kbd>Delete</kbd></td><td>Sair da sessão</td></tr>
+</table>
+</div>
+
+<h3>Criando o atalho do terminal</h3>
+<p>Como o <kbd>Ctrl</kbd>+<kbd>Alt</kbd>+<kbd>T</kbd> não vem pronto, vale criar:</p>
+<ol class="passo">
+  <li>Abra <strong>Configurações</strong> → <strong>Teclado</strong> → <strong>Ver e personalizar atalhos</strong>.</li>
+  <li>Entre em <strong>Atalhos personalizados</strong> e clique em <strong>+</strong>.</li>
+  <li>Nome: <code>Terminal</code>. Comando: <code>gnome-terminal</code>. Atalho: aperte <kbd>Ctrl</kbd>+<kbd>Alt</kbd>+<kbd>T</kbd>.</li>
+  <li>Clique em <strong>Adicionar</strong>.</li>
+</ol>
+
+<hr>
+
+<h2>Programas que vêm instalados</h2>
+<p>Ao escolher GNOME no instalador, o Debian instala o conjunto <code>task-gnome-desktop</code>. Numa instalação de servidor, adicionar esse conjunto acrescentaria 1.257 pacotes. Os principais programas são:</p>
+
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Programa</th><th>Pacote</th><th>Para quê</th></tr>
+<tr><td>Firefox ESR</td><td><code>firefox-esr</code></td><td>Navegador</td></tr>
+<tr><td>Terminal</td><td><code>gnome-terminal</code></td><td>Linha de comando (veja <a href="terminal.html">O Terminal</a>)</td></tr>
+<tr><td>Arquivos</td><td><code>nautilus</code></td><td>Gerenciador de arquivos</td></tr>
+<tr><td>Editor de Texto</td><td><code>gnome-text-editor</code></td><td>Editar textos simples</td></tr>
+<tr><td>LibreOffice Writer e Calc</td><td><code>libreoffice-writer</code>, <code>libreoffice-calc</code></td><td>Documentos e planilhas</td></tr>
+<tr><td>Programas</td><td><code>gnome-software</code></td><td>Loja para instalar programas</td></tr>
+<tr><td>Monitor do Sistema</td><td><code>gnome-system-monitor</code></td><td>Ver e fechar processos</td></tr>
+<tr><td>Discos</td><td><code>gnome-disk-utility</code></td><td>Formatar pendrives e ver discos</td></tr>
+<tr><td>Ajustes</td><td><code>gnome-tweaks</code></td><td>Opções escondidas do GNOME</td></tr>
+<tr><td>Visualizador de imagens, documentos e vídeos</td><td><code>loupe</code>, <code>evince</code>, <code>totem</code></td><td>Abrir arquivos</td></tr>
+</table>
+</div>
+
+<h3>Firefox ESR</h3>
+<p>O navegador padrão é o <strong>Firefox ESR</strong> (<em>Extended Support Release</em>, "versão de suporte estendido"). É uma versão do Firefox que muda de recursos só uma vez por ano, mas recebe correções de segurança sempre. Combina com a filosofia de estabilidade do Debian.</p>
+
+<pre class="term">$ apt-cache policy firefox-esr
+firefox-esr:
+  Instalado: 153.5.0esr-1~deb13u1
+  Candidato: 153.5.0esr-1~deb13u1
+…</pre>
+
+<p>No terminal, o processo dele se chama <code>firefox-esr</code>, e cada aba roda num processo separado chamado <code>Isolated Web Co</code>. Isso importa quando você precisar encerrar o navegador pelo terminal: veja <a href="processos.html">ps, pgrep, top</a>. Se quiser o Firefox mais recente, instale pelo <a href="flatpak.html">Flatpak</a>.</p>
+
+<div class="note">
+<strong>Loja sem Flatpak por padrão</strong>
+<p>O GNOME Software do Debian mostra os pacotes do Debian e atualizações de firmware, mas vem sem o suporte a Flatpak. Para ver os programas do Flathub na loja, instale o pacote <code>gnome-software-plugin-flatpak</code> (passo a passo em <a href="flatpak.html">Flatpak</a>).</p>
+</div>
+
+<hr>
+
+<h2 id="extensoes">Extensões</h2>
+<p>Extensões acrescentam recursos ao GNOME. O Debian empacota as mais usadas, então dá para instalar com o <code>apt</code>, como root:</p>
+
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Pacote</th><th>O que faz</th></tr>
+<tr><td><code>gnome-shell-extension-dashtodock</code></td><td>Barra de programas fixa, como no Ubuntu</td></tr>
+<tr><td><code>gnome-shell-extension-appindicator</code></td><td>Ícones de bandeja (Discord, Telegram, Dropbox…)</td></tr>
+<tr><td><code>gnome-shell-extensions</code></td><td>Coleção oficial: menu de aplicativos, lista de janelas e outras</td></tr>
+<tr><td><code>gnome-shell-extension-manager</code></td><td>App para procurar, instalar e configurar extensões</td></tr>
+</table>
+</div>
+
+<pre class="term">$ su -
+Senha:</pre>
+<pre class="term" data-user="root" data-cwd="~">#> apt install gnome-shell-extension-dashtodock gnome-shell-extension-appindicator
+#> exit</pre>
+
+<p>Depois, saia da sessão e entre de novo, e ative as extensões no app <strong>Extensões</strong>.</p>
+
+<hr>
+
+<h2>Outras áreas de trabalho</h2>
+<p>O Debian oferece várias áreas de trabalho, todas oficiais. Elas diferem na aparência e no peso:</p>
+
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Área de trabalho</th><th>Conjunto (task)</th><th>Pacotes numa instalação de servidor</th><th>Perfil</th></tr>
+<tr><td>GNOME</td><td><code>task-gnome-desktop</code></td><td>1.257</td><td>Moderno, padrão</td></tr>
+<tr><td>KDE Plasma</td><td><code>task-kde-desktop</code></td><td>1.871</td><td>Muito configurável, parecido com o Windows</td></tr>
+<tr><td>Xfce</td><td><code>task-xfce-desktop</code></td><td>1.088</td><td>Leve e tradicional</td></tr>
+<tr><td>Cinnamon</td><td><code>task-cinnamon-desktop</code></td><td>—</td><td>A do Linux Mint</td></tr>
+<tr><td>MATE</td><td><code>task-mate-desktop</code></td><td>—</td><td>Clássica, leve</td></tr>
+<tr><td>LXQt e LXDE</td><td><code>task-lxqt-desktop</code>, <code>task-lxde-desktop</code></td><td>—</td><td>As mais leves, para computadores antigos</td></tr>
+</table>
+</div>
+
+<p>Para acrescentar uma área de trabalho depois de instalado, use o <code>tasksel</code> (o mesmo menu do instalador) ou instale o conjunto direto:</p>
+
+<dl class="anatomy">
+  <dt>apt install</dt><dd>Instala pacotes.</dd>
+  <dt>task-xfce-desktop</dt><dd>O conjunto de pacotes da área de trabalho Xfce.</dd>
+</dl>
+
+<pre class="term">$ su -
+Senha:</pre>
+<pre class="term" data-user="root" data-cwd="~">#> apt install task-xfce-desktop
+#> exit</pre>
+
+<p>Com mais de uma instalada, na tela de login clique no seu nome e depois na engrenagem do canto inferior direito para escolher qual usar.</p>
+
+<hr>
+
+<h2>Quando não funciona</h2>
+
+<div class="cenario">
+<strong>"Cadê a barra com os programas?"</strong>
+<p><strong>O que aconteceu:</strong> no GNOME do Debian, a barra de favoritos só aparece na visão geral.</p>
+<p><strong>Como resolver:</strong> aperte <kbd>Super</kbd> para vê-la, ou instale a extensão <code>gnome-shell-extension-dashtodock</code>.</p>
+</div>
+
+<div class="cenario">
+<strong>Ctrl+Alt+T não abre o terminal</strong>
+<p><strong>O que aconteceu:</strong> esse atalho não vem configurado no GNOME do Debian.</p>
+<p><strong>Como resolver:</strong> abra pelo <kbd>Super</kbd> digitando "terminal", ou crie o atalho como mostrado acima.</p>
+</div>
+
+<div class="cenario">
+<strong>O ícone do programa de chat não aparece em cima</strong>
+<p><strong>O que aconteceu:</strong> o GNOME não mostra ícones de bandeja sem extensão.</p>
+<p><strong>Como resolver:</strong> instale <code>gnome-shell-extension-appindicator</code> e ative no app Extensões.</p>
+</div>
+
+<div class="cenario">
+<strong>A interface congelou</strong>
+<p><strong>O que aconteceu:</strong> um programa ou o próprio GNOME parou de responder.</p>
+<p><strong>Como resolver:</strong> siga <a href="travamentos.html">Quando o Sistema Trava</a>: há um terminal de emergência em <kbd>Ctrl</kbd>+<kbd>Alt</kbd>+<kbd>F3</kbd>.</p>
+</div>
+
+<hr>
+
+<h2>Exercícios</h2>
+
+<div class="mc" data-answer="2">
+<p class="mc-q">1. Qual tecla abre a visão geral do GNOME?</p>
+<label><input type="radio" name="q1"> <kbd>Ctrl</kbd>+<kbd>Alt</kbd>+<kbd>T</kbd></label>
+<label><input type="radio" name="q1"> <kbd>Super</kbd></label>
+<label><input type="radio" name="q1"> <kbd>Alt</kbd>+<kbd>F4</kbd></label>
+<label><input type="radio" name="q1"> <kbd>F11</kbd></label>
+</div>
+
+<div class="mc" data-answer="4">
+<p class="mc-q">2. Por que o navegador do Debian se chama "Firefox ESR"?</p>
+<label><input type="radio" name="q2"> Porque é uma cópia não oficial do Firefox.</label>
+<label><input type="radio" name="q2"> Porque é a versão para servidores.</label>
+<label><input type="radio" name="q2"> Porque não recebe atualizações.</label>
+<label><input type="radio" name="q2"> Porque é a versão de suporte estendido: muda de recursos raramente e recebe correções de segurança.</label>
+</div>
+
+<div class="exercise">
+<h3>3. Instalar o Xfce</h3>
+<p>Complete o nome do conjunto de pacotes da área de trabalho Xfce:</p>
+<div class="ex-code">apt install <input data-answer="task-xfce-desktop" aria-label="pacote"></div>
+</div>
+
+<div class="mc" data-answer="1">
+<p class="mc-q">4. Qual atalho mostra todos os aplicativos instalados?</p>
+<label><input type="radio" name="q4"> <kbd>Super</kbd>+<kbd>A</kbd></label>
+<label><input type="radio" name="q4"> <kbd>Super</kbd>+<kbd>L</kbd></label>
+<label><input type="radio" name="q4"> <kbd>Alt</kbd>+<kbd>F2</kbd></label>
+<label><input type="radio" name="q4"> <kbd>Super</kbd>+<kbd>H</kbd></label>
+</div>
+
+<hr>
+
+<h2>Resumo</h2>
+<ul>
+  <li>O Debian 13 usa o GNOME 48 sem modificações: sem barra fixa, sem ícones na área de trabalho.</li>
+  <li><kbd>Super</kbd> abre a visão geral; <kbd>Super</kbd>+<kbd>A</kbd>, todos os aplicativos.</li>
+  <li><kbd>Ctrl</kbd>+<kbd>Alt</kbd>+<kbd>T</kbd> não vem configurado; crie em Configurações → Teclado.</li>
+  <li>O navegador padrão é o Firefox ESR; as abas aparecem como processos <code>Isolated Web Co</code>.</li>
+  <li>Extensões e outras áreas de trabalho (KDE, Xfce, Cinnamon…) se instalam com <code>apt</code>.</li>
+</ul>
+
+<div class="pager"></div>
+
+</div>
+</main>
+</div>
+<script src="assets/site.js"></script>
+</body>
+</html>

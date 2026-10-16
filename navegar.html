@@ -1,0 +1,247 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Debian pwd e cd — saber onde está e mudar de pasta | Guia Debian</title>
+<meta name="description" content="Navegue pelas pastas do Debian com pwd e cd: todas as formas de usar o cd, pushd e popd, os erros reais e um terminal simulado para praticar.">
+<link rel="stylesheet" href="assets/style.css">
+<script>try{var t=localStorage.getItem("tema");if(t)document.documentElement.setAttribute("data-theme",t)}catch(e){}</script>
+</head>
+<body>
+<div class="layout">
+<nav class="sidebar" id="sidebar" aria-label="Tópicos"></nav>
+<main class="main">
+<div class="content">
+
+<div class="pager"></div>
+
+<h1>Debian <span class="hl">pwd e cd</span></h1>
+
+<p class="intro">O terminal está sempre "dentro" de alguma pasta. O <code>pwd</code> diz qual é, e o <code>cd</code> leva você para outra. Com esses dois comandos você anda pelo sistema inteiro, sem mouse.</p>
+
+<div class="note">
+<strong>Você vai aprender</strong>
+<ul>
+  <li>Descobrir em que pasta você está com <code>pwd</code>.</li>
+  <li>As sete formas mais usadas de <code>cd</code>.</li>
+  <li>Guardar e voltar para pastas com <code>pushd</code> e <code>popd</code>.</li>
+  <li>Entender os erros "Arquivo ou diretório inexistente", "Permissão negada" e "Não é um diretório".</li>
+</ul>
+</div>
+
+<hr>
+
+<h2>pwd: onde estou?</h2>
+<p><code>pwd</code> vem de <em>print working directory</em>, "mostre o diretório de trabalho". Ele escreve o caminho completo da pasta atual.</p>
+
+<dl class="anatomy">
+  <dt>pwd</dt><dd>Mostra o caminho absoluto da pasta em que o terminal está.</dd>
+</dl>
+
+<pre class="term">$ pwd
+/home/ana</pre>
+
+<p>O prompt já dá uma pista: <code>ana@notebook:~$</code> tem um <code>~</code> depois dos dois-pontos, que é o apelido de <code>/home/ana</code>. O <code>pwd</code> mostra o nome por extenso.</p>
+
+<h3>pwd -P: o lugar de verdade</h3>
+<p>Quando você entra numa pasta por um atalho (link simbólico), o <code>pwd</code> mostra o atalho. Com <code>-P</code> (de <em>physical</em>, "físico") ele mostra o destino real. No Debian 13, <code>/bin</code> é um atalho para <code>/usr/bin</code>:</p>
+
+<pre class="term">$ cd /bin
+$ pwd
+/bin
+$ pwd -P
+/usr/bin</pre>
+
+<hr>
+
+<h2>cd: mudar de pasta</h2>
+<p><code>cd</code> vem de <em>change directory</em>, "mudar de diretório". Ele não mostra nada quando dá certo: o que muda é o prompt.</p>
+
+<dl class="anatomy">
+  <dt>cd</dt><dd>O comando que troca a pasta atual.</dd>
+  <dt>Documentos</dt><dd>O destino, que pode ser um caminho relativo ou absoluto.</dd>
+</dl>
+
+<pre class="term">$ cd Documentos
+$ pwd
+/home/ana/Documentos</pre>
+
+<p>Repare que o prompt passou de <code>~</code> para <code>~/Documentos</code>. Para conferir o que existe na pasta nova, use <code>ls</code>.</p>
+
+<h3>As formas mais usadas</h3>
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Comando</th><th>Vai para</th></tr>
+<tr><td><code>cd Documentos</code></td><td>A pasta <code>Documentos</code> dentro da atual</td></tr>
+<tr><td><code>cd /etc/apt</code></td><td>Um caminho absoluto, de qualquer lugar</td></tr>
+<tr><td><code>cd ..</code></td><td>A pasta de cima</td></tr>
+<tr><td><code>cd</code> (sozinho)</td><td>Sua pasta pessoal</td></tr>
+<tr><td><code>cd ~</code></td><td>Sua pasta pessoal (o mesmo que <code>cd</code>)</td></tr>
+<tr><td><code>cd -</code></td><td>A pasta anterior (e mostra qual é)</td></tr>
+<tr><td><code>cd /</code></td><td>A raiz do sistema</td></tr>
+</table>
+</div>
+
+<p>Veja uma volta completa:</p>
+
+<pre class="term">$ cd /etc/apt
+$ cd ..
+$ pwd
+/etc
+$ cd -
+/etc/apt
+$ cd
+$ pwd
+/home/ana</pre>
+
+<div class="try" data-goal="cwd:/etc/apt,ran:^\s*cd\s+-\s*$">
+<p class="try-task"><strong>Missão:</strong> vá até <code>/etc/apt</code>, depois para a sua pasta pessoal, e volte para <code>/etc/apt</code> usando <code>cd -</code>.</p>
+</div>
+
+<hr>
+
+<h2>pushd e popd: uma pilha de pastas</h2>
+<p>Quando você precisa visitar uma pasta e depois voltar exatamente para onde estava, o <code>pushd</code> guarda a pasta atual numa pilha e muda de lugar. O <code>popd</code> tira a última da pilha e volta para ela.</p>
+
+<dl class="anatomy">
+  <dt>pushd</dt><dd>Guarda a pasta atual e vai para outra (de <em>push directory</em>, "empurrar diretório").</dd>
+  <dt>/var/log</dt><dd>O destino.</dd>
+</dl>
+
+<pre class="term" data-cwd="~/Documentos">$ pushd /etc
+/etc ~/Documentos                « a pilha: atual primeiro
+$ pushd /var/log
+/var/log /etc ~/Documentos
+$ popd
+/etc ~/Documentos
+$ popd
+~/Documentos</pre>
+
+<p>O <code>dirs -v</code> mostra a pilha numerada, sem mudar de pasta. É útil em scripts e quando você alterna entre várias pastas de trabalho.</p>
+
+<hr>
+
+<h2>Formas diferentes de chegar ao mesmo lugar</h2>
+<p>Estando em <code>~/Documentos/projetos</code>, todos estes levam à pasta pessoal:</p>
+
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Comando</th><th>Como funciona</th><th>Quando usar</th></tr>
+<tr><td><code>cd</code></td><td>Sem argumento, vai para casa</td><td>O mais rápido</td></tr>
+<tr><td><code>cd ~</code></td><td>O til é a pasta pessoal</td><td>Quando você vai continuar o caminho: <code>cd ~/Downloads</code></td></tr>
+<tr><td><code>cd ../..</code></td><td>Sobe dois níveis</td><td>Quando você sabe a distância</td></tr>
+<tr><td><code>cd /home/ana</code></td><td>Caminho absoluto</td><td>Em scripts</td></tr>
+<tr><td><code>cd "$HOME"</code></td><td>A variável com a pasta pessoal</td><td>Em scripts que outras pessoas vão rodar</td></tr>
+</table>
+</div>
+
+<hr>
+
+<h2>Quando não funciona</h2>
+
+<div class="cenario">
+<strong>"Arquivo ou diretório inexistente"</strong>
+<pre class="term">$ cd nada
+bash: cd: nada: Arquivo ou diretório inexistente</pre>
+<p><strong>O que aconteceu:</strong> não existe pasta com esse nome a partir de onde você está. Pode ser erro de digitação, maiúscula trocada ou pasta errada.</p>
+<p><strong>Como resolver:</strong> rode <code>ls</code> para ver os nomes certos e use <kbd>Tab</kbd> para completar.</p>
+</div>
+
+<div class="cenario">
+<strong>"Permissão negada"</strong>
+<pre class="term">$ cd /root
+bash: cd: /root: Permissão negada</pre>
+<p><strong>O que aconteceu:</strong> a pasta existe, mas você não tem permissão para entrar. No Debian, <code>/root</code> e as pastas pessoais dos outros usuários são fechadas.</p>
+<p><strong>Como resolver:</strong> se for necessário, use <code>su -</code> para virar root (veja <a href="root-su-sudo.html">root, su e sudo</a>).</p>
+</div>
+
+<div class="cenario">
+<strong>"Não é um diretório"</strong>
+<pre class="term">$ cd .bashrc
+bash: cd: .bashrc: Não é um diretório</pre>
+<p><strong>O que aconteceu:</strong> o <code>cd</code> só entra em pastas, e <code>.bashrc</code> é um arquivo.</p>
+<p><strong>Como resolver:</strong> para ver o conteúdo de um arquivo, use <code>cat</code> ou <code>less</code> (veja <a href="ver-arquivos.html">cat, less, head, tail</a>).</p>
+</div>
+
+<div class="cenario">
+<strong>"número excessivo de argumentos"</strong>
+<pre class="term">$ cd /etc /tmp
+bash: cd: número excessivo de argumentos</pre>
+<p><strong>O que aconteceu:</strong> o <code>cd</code> aceita um destino só. Isso também acontece com nomes que têm espaço, como <code>cd Área de trabalho</code>.</p>
+<p><strong>Como resolver:</strong> passe um destino só, e coloque entre aspas nomes com espaço.</p>
+</div>
+
+<div class="try" data-goal="cwd:/var/log">
+<p class="try-task"><strong>Missão:</strong> provoque de propósito os erros acima (<code>cd nada</code>, <code>cd /root</code>, <code>cd frutas.txt</code>) e termine dentro de <code>/var/log</code>.</p>
+</div>
+
+<hr>
+
+<h2>Referência</h2>
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Comando</th><th>Descrição</th></tr>
+<tr><td><code>pwd</code></td><td>Mostra a pasta atual</td></tr>
+<tr><td><code>pwd -P</code></td><td>Mostra a pasta atual sem atalhos (caminho físico)</td></tr>
+<tr><td><code>cd PASTA</code></td><td>Entra na pasta</td></tr>
+<tr><td><code>cd</code> / <code>cd ~</code></td><td>Vai para a pasta pessoal</td></tr>
+<tr><td><code>cd ..</code></td><td>Sobe um nível</td></tr>
+<tr><td><code>cd -</code></td><td>Volta para a pasta anterior</td></tr>
+<tr><td><code>pushd PASTA</code></td><td>Guarda a atual na pilha e vai para PASTA</td></tr>
+<tr><td><code>popd</code></td><td>Volta para a última pasta guardada</td></tr>
+<tr><td><code>dirs -v</code></td><td>Mostra a pilha numerada</td></tr>
+</table>
+</div>
+
+<hr>
+
+<h2>Exercícios</h2>
+
+<div class="exercise">
+<h3>1. Voltar para casa</h3>
+<p>Qual comando, com <strong>duas letras</strong>, leva você para a sua pasta pessoal de qualquer lugar?</p>
+<div class="ex-code"><input data-answer="cd" aria-label="comando"></div>
+</div>
+
+<div class="exercise">
+<h3>2. Pasta anterior</h3>
+<p>Complete para voltar à pasta em que você estava antes:</p>
+<div class="ex-code">cd <input data-answer="-" aria-label="argumento"></div>
+</div>
+
+<div class="mc" data-answer="2">
+<p class="mc-q">3. O prompt mostra <code>ana@notebook:~/Documentos$</code>. O que o <code>pwd</code> vai responder?</p>
+<label><input type="radio" name="q3"> <code>~/Documentos</code></label>
+<label><input type="radio" name="q3"> <code>/home/ana/Documentos</code></label>
+<label><input type="radio" name="q3"> <code>Documentos</code></label>
+<label><input type="radio" name="q3"> <code>/Documentos</code></label>
+</div>
+
+<div class="mc" data-answer="3">
+<p class="mc-q">4. Você deu <code>cd /bin</code>. O que <code>pwd -P</code> mostra no Debian 13?</p>
+<label><input type="radio" name="q4"> <code>/bin</code></label>
+<label><input type="radio" name="q4"> <code>/sbin</code></label>
+<label><input type="radio" name="q4"> <code>/usr/bin</code></label>
+<label><input type="radio" name="q4"> Um erro, porque <code>/bin</code> não existe.</label>
+</div>
+
+<hr>
+
+<h2>Resumo</h2>
+<ul>
+  <li><code>pwd</code> mostra onde você está; <code>pwd -P</code> ignora os atalhos.</li>
+  <li><code>cd</code> muda de pasta e não mostra nada quando dá certo; o prompt muda.</li>
+  <li><code>cd</code> sozinho vai para casa, <code>cd ..</code> sobe, <code>cd -</code> volta.</li>
+  <li><code>pushd</code>/<code>popd</code> guardam pastas numa pilha.</li>
+  <li>Os erros dizem exatamente o problema: inexistente, permissão ou "não é um diretório".</li>
+</ul>
+
+<div class="pager"></div>
+
+</div>
+</main>
+</div>
+<script src="assets/site.js"></script>
+</body>
+</html>

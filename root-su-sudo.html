@@ -1,0 +1,325 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Debian root, su e sudo — como ser administrador | Guia Debian</title>
+<meta name="description" content="Por que o Debian pede a senha de root, a diferença entre su e su -, como instalar e liberar o sudo para o seu usuário e as mensagens reais de cada passo.">
+<link rel="stylesheet" href="assets/style.css">
+<script>try{var t=localStorage.getItem("tema");if(t)document.documentElement.setAttribute("data-theme",t)}catch(e){}</script>
+</head>
+<body>
+<div class="layout">
+<nav class="sidebar" id="sidebar" aria-label="Tópicos"></nav>
+<main class="main">
+<div class="content">
+
+<div class="pager"></div>
+
+<h1>Debian <span class="hl">root, su e sudo</span></h1>
+
+<p class="intro">Quem vem do Ubuntu estranha: no Debian, <code>sudo apt update</code> costuma responder <code>bash: sudo: comando não encontrado</code>. Isso acontece porque o Debian oferece dois jeitos de administrar o sistema, e a escolha é feita na instalação. Nesta aula você entende os dois e aprende a usar cada um.</p>
+
+<div class="note">
+<strong>Você vai aprender</strong>
+<ul>
+  <li>Quem é o <strong>root</strong> e por que o instalador pede a senha dele.</li>
+  <li>A diferença entre <code>su</code> e <code>su -</code> (e a armadilha do <code>reboot</code> que "não existe").</li>
+  <li>Rodar um único comando como root com <code>su -c</code>.</li>
+  <li>Instalar o <code>sudo</code> e liberá-lo para o seu usuário.</li>
+  <li>As mensagens reais de cada erro, e quando usar cada caminho.</li>
+</ul>
+</div>
+
+<hr>
+
+<h2>Root, o administrador</h2>
+<p>Todo Linux tem um usuário chamado <strong>root</strong> (raiz), o administrador. Ele pode tudo: instalar programas, mexer em qualquer arquivo, criar usuários e reiniciar a máquina. A sua usuária do dia a dia (nos exemplos, a <strong>ana</strong>) não pode fazer essas coisas, e isso é proposital: um erro seu não estraga o sistema inteiro.</p>
+
+<p>Durante a instalação, o Debian pergunta a <strong>senha do root</strong>. O que você responde ali define como vai administrar o sistema:</p>
+
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Na instalação você…</th><th>Resultado</th><th>Como administrar</th></tr>
+<tr><td><strong>Definiu</strong> uma senha de root</td><td>O root pode entrar; a sua usuária <strong>não</strong> fica no grupo <code>sudo</code>. Numa instalação sem área de trabalho, nem o programa <code>sudo</code> é instalado.</td><td><code>su -</code> com a senha do root (ou instale e libere o <code>sudo</code>, mais abaixo).</td></tr>
+<tr><td>Deixou a senha de root <strong>em branco</strong></td><td>O root fica bloqueado; o instalador instala o <code>sudo</code> e coloca a sua usuária no grupo <code>sudo</code>.</td><td><code>sudo comando</code> com a <strong>sua</strong> senha, igual ao Ubuntu.</td></tr>
+</table>
+</div>
+
+<p>A máquina dos exemplos foi instalada do primeiro jeito, o mais comum em tutoriais de Debian. Veja os grupos da ana: não há <code>sudo</code> na lista.</p>
+
+<pre class="term">$ id
+uid=1000(ana) gid=1000(ana) grupos=1000(ana),24(cdrom),25(floppy),29(audio),30(dip),44(video),46(plugdev),100(users),101(netdev)
+$ sudo apt update
+bash: sudo: comando não encontrado</pre>
+
+<hr>
+
+<h2>su: virar root</h2>
+<p><code>su</code> vem de <em>substitute user</em>, "trocar de usuário". Sem nome, ele troca para o root. Ele pede a senha <strong>do root</strong>, e não a sua.</p>
+
+<dl class="anatomy">
+  <dt>su</dt><dd>Troca de usuário (para o root, se você não disser outro).</dd>
+  <dt>-</dt><dd>Faz um <strong>login completo</strong>: carrega o ambiente do root (PATH, pasta pessoal, variáveis).</dd>
+</dl>
+
+<pre class="term">$ su -
+Senha:                                     « a senha do root; nada aparece ao digitar
+#> whoami
+root
+#> pwd
+/root
+#> exit
+sair
+$ whoami
+ana</pre>
+
+<p>O prompt muda de <code>$</code> para <code>#</code>: é o sinal de que você está como root. Faça o que precisa e saia com <code>exit</code> (ou <kbd>Ctrl</kbd>+<kbd>D</kbd>) assim que terminar.</p>
+
+<div class="try" data-goal="file:/etc/teste-root,ran:^\s*exit">
+<p class="try-task"><strong>Missão:</strong> vire root com <code>su -</code>, confira com <code>whoami</code> e <code>pwd</code>, crie o arquivo <code>/etc/teste-root</code> com <code>touch</code> e volte para a ana com <code>exit</code>. Depois tente criar <code>/etc/teste-ana</code> como ana e veja o erro.</p>
+</div>
+
+<h3>su x su -: a armadilha do PATH</h3>
+<p>Sem o hífen, o <code>su</code> vira root mas <strong>mantém o ambiente da ana</strong>, inclusive o <code>PATH</code>, a lista de pastas onde o shell procura programas. O PATH da ana não tem <code>/usr/sbin</code>, onde ficam os comandos de administração. O resultado é um root que "não acha" o <code>reboot</code>:</p>
+
+<pre class="term">$ su
+Senha:
+#> pwd
+/home/ana                                « continuou na pasta da ana
+#> echo $PATH
+/usr/local/bin:/usr/bin:/bin:/usr/games  « sem /usr/sbin
+#> reboot
+bash: reboot: comando não encontrado
+#> exit</pre>
+
+<p>Com o hífen, o PATH do root é carregado e tudo funciona:</p>
+
+<pre class="term">$ su -
+Senha:
+#> echo $PATH
+/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+#> command -v reboot usermod adduser
+/usr/sbin/reboot
+/usr/sbin/usermod
+/usr/sbin/adduser</pre>
+
+<div class="tip">
+<strong>Regra prática</strong>
+<p>Use sempre <code>su -</code>, com o hífen. O <code>su</code> sozinho só serve quando você precisa continuar na mesma pasta e com as mesmas variáveis.</p>
+</div>
+
+<h3>Um comando só: su -c</h3>
+<p>Para rodar <strong>um</strong> comando como root e voltar na hora, use <code>-c</code> (de <em>command</em>), com o comando entre aspas:</p>
+
+<dl class="anatomy">
+  <dt>su</dt><dd>Trocar para o root.</dd>
+  <dt>-</dt><dd>Com o ambiente completo do root.</dd>
+  <dt>-c</dt><dd>Rodar o comando a seguir e voltar.</dd>
+  <dt>'apt update'</dt><dd>O comando, entre aspas para chegar inteiro ao root.</dd>
+</dl>
+
+<pre class="term">$ su - -c 'apt update'
+Senha:
+Atingido:1 http://security.debian.org/debian-security trixie-security InRelease
+Atingido:2 http://deb.debian.org/debian trixie InRelease
+Atingido:3 http://deb.debian.org/debian trixie-updates InRelease
+Todos os pacotes estão atualizados.
+$                                          « já voltou para a ana</pre>
+
+<hr>
+
+<h2>Instalar e liberar o sudo</h2>
+<p>Se você prefere o jeito do Ubuntu, com <code>sudo</code> e a sua própria senha, dá para mudar em três passos. Todos são feitos como root.</p>
+
+<ol class="passo">
+  <li><strong>Vire root e instale o sudo.</strong>
+<pre class="term">$ su -
+Senha:
+#> apt install sudo</pre>
+  Numa instalação com área de trabalho (GNOME, KDE…), o <code>sudo</code> geralmente já veio instalado, e o <code>apt</code> só avisa que ele já é a versão mais nova.</li>
+  <li><strong>Coloque a ana no grupo sudo.</strong>
+<dl class="anatomy">
+  <dt>usermod</dt><dd>Modifica um usuário (fica em <code>/usr/sbin</code>: por isso o <code>su -</code>).</dd>
+  <dt>-a</dt><dd><strong>Acrescenta</strong> (<em>append</em>) ao grupo, sem tirar dos outros.</dd>
+  <dt>-G sudo</dt><dd>O grupo.</dd>
+  <dt>ana</dt><dd>A usuária.</dd>
+</dl>
+<pre class="term">#> usermod -aG sudo ana
+#> exit</pre>
+  Outra forma, que faz o mesmo: <code>adduser ana sudo</code>.</li>
+  <li><strong>Saia da sessão e entre de novo.</strong> Os grupos são lidos no login. Na mesma janela, nada muda ainda:
+<pre class="term">$ id
+uid=1000(ana) gid=1000(ana) grupos=1000(ana),24(cdrom),25(floppy),29(audio),30(dip),44(video),46(plugdev),100(users),101(netdev)</pre>
+  Depois de sair e entrar (ou abrir um novo login por SSH), o <code>27(sudo)</code> aparece:
+<pre class="term">$ id
+uid=1000(ana) gid=1000(ana) grupos=1000(ana),24(cdrom),25(floppy),27(sudo),29(audio),30(dip),44(video),46(plugdev),100(users),101(netdev)
+$ sudo whoami
+[sudo] senha para ana:                    « agora é a senha da ANA
+root</pre></li>
+</ol>
+
+<div class="warning">
+<strong>Atenção ao -a</strong>
+<p><code>usermod -G sudo ana</code>, sem o <code>-a</code>, tira a ana de <strong>todos</strong> os outros grupos (cdrom, audio, video…) e deixa só o sudo. Escreva sempre <code>-aG</code>.</p>
+</div>
+
+<hr>
+
+<h2>Comparando com o Ubuntu</h2>
+<div class="table-wrap">
+<table class="ref">
+<tr><th></th><th>Debian (com senha de root)</th><th>Ubuntu</th></tr>
+<tr><td>Conta root</td><td>Ativa, com senha própria</td><td>Bloqueada</td></tr>
+<tr><td>sudo</td><td>Não instalado (servidor) ou instalado sem a usuária no grupo (desktop)</td><td>Instalado; o primeiro usuário já está no grupo <code>sudo</code></td></tr>
+<tr><td>Como administrar</td><td><code>su -</code> + senha do root</td><td><code>sudo</code> + sua senha</td></tr>
+<tr><td>Comandos de <code>/usr/sbin</code> no PATH do usuário</td><td>Não</td><td>Sim</td></tr>
+</table>
+</div>
+
+<h3>Qual usar?</h3>
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Forma</th><th>Exemplo</th><th>Melhor quando…</th></tr>
+<tr><td><code>su -</code></td><td><code>su -</code> … <code>exit</code></td><td>Você vai fazer várias tarefas de administração seguidas.</td></tr>
+<tr><td><code>su - -c</code></td><td><code>su - -c 'apt update'</code></td><td>É um comando só e você não tem sudo.</td></tr>
+<tr><td><code>sudo</code></td><td><code>sudo apt update</code></td><td>O computador tem mais de um administrador (cada um com a própria senha, e tudo fica registrado no log).</td></tr>
+<tr><td>Login como root</td><td>no TTY: <code>root</code> + senha</td><td>Recuperação de emergência. Evite no dia a dia.</td></tr>
+</table>
+</div>
+
+<hr>
+
+<h2>Boas práticas</h2>
+<ul>
+  <li>Fique como root o mínimo possível. Fez o que precisava? <code>exit</code>.</li>
+  <li>Leia o comando duas vezes antes de apertar <kbd>Enter</kbd> com o prompt <code>#</code>.</li>
+  <li>Guarde a senha do root num gerenciador de senhas: sem ela (e sem sudo) você não administra a máquina.</li>
+  <li>Não deixe o root entrar por SSH com senha. O Debian já vem com <code>PermitRootLogin prohibit-password</code> (só chave). Veja <a href="ssh.html">SSH</a>.</li>
+  <li>Para dar permissões específicas a alguém, use arquivos em <code>/etc/sudoers.d/</code> editados com <code>visudo</code>, nunca o <code>/etc/sudoers</code> direto.</li>
+</ul>
+
+<hr>
+
+<h2>Quando não funciona</h2>
+
+<div class="cenario">
+<strong>"bash: sudo: comando não encontrado"</strong>
+<p><strong>O que aconteceu:</strong> o pacote <code>sudo</code> não está instalado (instalação com senha de root e sem área de trabalho).</p>
+<p><strong>Como resolver:</strong> use <code>su -</code>, ou instale e libere o sudo com os três passos acima.</p>
+</div>
+
+<div class="cenario">
+<strong>"ana is not in the sudoers file."</strong>
+<pre class="term">$ sudo apt update
+[sudo] senha para ana:
+ana is not in the sudoers file.
+This incident has been reported to the administrator.</pre>
+<p><strong>O que aconteceu:</strong> o sudo está instalado, mas a ana não está no grupo <code>sudo</code>. Repare que o pedido de senha vem em português, mas o aviso vem em inglês ("ana não está no arquivo sudoers. Este incidente foi relatado ao administrador."). A tentativa fica registrada no log do sistema.</p>
+<p><strong>Como resolver:</strong> como root, <code>usermod -aG sudo ana</code>, e depois saia e entre de novo.</p>
+</div>
+
+<div class="cenario">
+<strong>"Sinto muito, tente novamente."</strong>
+<pre class="term">$ sudo whoami
+[sudo] senha para ana:
+Sinto muito, tente novamente.
+[sudo] senha para ana:
+Sinto muito, tente novamente.
+[sudo] senha para ana:
+sudo: 3 tentativas de senha incorreta</pre>
+<p><strong>O que aconteceu:</strong> no sudo, a senha é a <strong>sua</strong> (da ana), e não a do root. Depois de 3 erros, ele desiste.</p>
+<p><strong>Como resolver:</strong> digite a sua senha com calma; nada aparece enquanto você digita.</p>
+</div>
+
+<div class="cenario">
+<strong>"su: Falha de autenticação"</strong>
+<pre class="term">$ su -
+Senha:
+su: Falha de autenticação</pre>
+<p><strong>O que aconteceu:</strong> a senha digitada não é a do root. É o erro mais comum de quem vem do Ubuntu e digita a própria senha.</p>
+<p><strong>Como resolver:</strong> digite a senha do root definida na instalação. Se a instalação foi feita com a senha de root em branco, o root está bloqueado e você deve usar <code>sudo</code>.</p>
+</div>
+
+<div class="cenario">
+<strong>Já coloquei a ana no grupo sudo e continua dando erro</strong>
+<p><strong>O que aconteceu:</strong> a sessão atual ainda usa a lista de grupos antiga. O <code>id</code> não mostra <code>27(sudo)</code>.</p>
+<p><strong>Como resolver:</strong> saia da sessão gráfica (ou do SSH) e entre de novo. Reiniciar também resolve.</p>
+</div>
+
+<div class="cenario">
+<strong>Como root, "reboot: comando não encontrado"</strong>
+<p><strong>O que aconteceu:</strong> você usou <code>su</code> sem o hífen, e o PATH continua o da ana.</p>
+<p><strong>Como resolver:</strong> <code>exit</code> e entre de novo com <code>su -</code>.</p>
+</div>
+
+<hr>
+
+<h2>Referência</h2>
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Comando</th><th>Descrição</th></tr>
+<tr><td><code>su -</code></td><td>Vira root com ambiente completo (pede a senha do root)</td></tr>
+<tr><td><code>su</code></td><td>Vira root mantendo o ambiente atual</td></tr>
+<tr><td><code>su - -c 'comando'</code></td><td>Roda um comando como root e volta</td></tr>
+<tr><td><code>su - joao</code></td><td>Vira outro usuário (pede a senha dele)</td></tr>
+<tr><td><code>exit</code> ou <kbd>Ctrl</kbd>+<kbd>D</kbd></td><td>Sai do root</td></tr>
+<tr><td><code>apt install sudo</code></td><td>Instala o sudo (como root)</td></tr>
+<tr><td><code>usermod -aG sudo ana</code></td><td>Põe a ana no grupo sudo (como root)</td></tr>
+<tr><td><code>sudo comando</code></td><td>Roda como root com a sua senha</td></tr>
+<tr><td><code>sudo -i</code></td><td>Abre um shell de root pelo sudo</td></tr>
+<tr><td><code>sudo -l</code></td><td>Mostra o que você pode fazer com sudo (no grupo sudo: <code>(ALL : ALL) ALL</code>, tudo)</td></tr>
+</table>
+</div>
+
+<hr>
+
+<h2>Exercícios</h2>
+
+<div class="exercise">
+<h3>1. Login completo</h3>
+<p>Complete para virar root carregando o ambiente completo dele:</p>
+<div class="ex-code">su <input data-answer="-|-l|--login" aria-label="opção"></div>
+</div>
+
+<div class="exercise">
+<h3>2. Liberar o sudo</h3>
+<p>Como root, complete para acrescentar a ana ao grupo sudo sem tirá-la dos outros grupos:</p>
+<div class="ex-code">usermod <input data-answer="-aG|-a -G" aria-label="opções"> sudo ana</div>
+</div>
+
+<div class="mc" data-answer="2">
+<p class="mc-q">3. Qual senha o <code>su -</code> pede?</p>
+<label><input type="radio" name="q3"> A sua (da ana).</label>
+<label><input type="radio" name="q3"> A do root.</label>
+<label><input type="radio" name="q3"> Nenhuma.</label>
+<label><input type="radio" name="q3"> A do Wi-Fi.</label>
+</div>
+
+<div class="mc" data-answer="4">
+<p class="mc-q">4. Depois de <code>su</code> (sem hífen), o root digita <code>reboot</code> e recebe "comando não encontrado". Por quê?</p>
+<label><input type="radio" name="q4"> O root não pode reiniciar.</label>
+<label><input type="radio" name="q4"> Falta instalar o reboot.</label>
+<label><input type="radio" name="q4"> A senha estava errada.</label>
+<label><input type="radio" name="q4"> O PATH continuou o da ana, sem <code>/usr/sbin</code>.</label>
+</div>
+
+<hr>
+
+<h2>Resumo</h2>
+<ul>
+  <li>Se o Debian foi instalado com senha de root, administre com <code>su -</code> e a senha do root.</li>
+  <li>Use sempre <code>su -</code>, com hífen: sem ele, o PATH não tem <code>/usr/sbin</code>.</li>
+  <li><code>su - -c 'comando'</code> roda um comando só.</li>
+  <li>Para usar sudo: <code>apt install sudo</code>, <code>usermod -aG sudo ana</code>, sair e entrar de novo.</li>
+  <li>Saia do root com <code>exit</code> assim que terminar.</li>
+</ul>
+
+<div class="pager"></div>
+
+</div>
+</main>
+</div>
+<script src="assets/site.js"></script>
+</body>
+</html>

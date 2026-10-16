@@ -1,0 +1,249 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Debian Flatpak — programas do Flathub | Guia Debian</title>
+<meta name="description" content="Instale programas recentes no Debian com Flatpak e Flathub: instalar o flatpak, adicionar o Flathub, procurar, instalar, rodar, atualizar e remover, e quando preferir o apt.">
+<link rel="stylesheet" href="assets/style.css">
+<script>try{var t=localStorage.getItem("tema");if(t)document.documentElement.setAttribute("data-theme",t)}catch(e){}</script>
+</head>
+<body>
+<div class="layout">
+<nav class="sidebar" id="sidebar" aria-label="Tópicos"></nav>
+<main class="main">
+<div class="content">
+
+<div class="pager"></div>
+
+<h1>Debian <span class="hl">Flatpak</span></h1>
+
+<p class="intro">O Debian estável prefere programas testados a programas novos: a versão de cada pacote fica "congelada" durante os cerca de dois anos de vida da versão. Quando você quer a versão mais recente de um aplicativo de desktop (um editor de imagens, um player, um app de chat), o caminho mais usado no Debian é o <strong>Flatpak</strong>, com a loja <strong>Flathub</strong>.</p>
+
+<div class="note">
+<strong>Você vai aprender</strong>
+<ul>
+  <li>O que é o Flatpak e por que ele convive com o apt.</li>
+  <li>Instalar o <code>flatpak</code> e adicionar o Flathub.</li>
+  <li>Procurar, instalar, rodar, atualizar e remover aplicativos.</li>
+  <li>Quando usar Flatpak e quando usar o apt.</li>
+</ul>
+</div>
+
+<hr>
+
+<h2>O que é o Flatpak</h2>
+<p>Um aplicativo Flatpak vem com quase tudo de que precisa dentro dele, e roda isolado do resto do sistema (numa "caixa de areia", a <em>sandbox</em>). As partes comuns entre aplicativos, como as bibliotecas do GNOME ou do KDE, ficam em pacotes compartilhados chamados <strong>runtimes</strong>.</p>
+
+<div class="table-wrap">
+<table class="ref">
+<tr><th></th><th>apt (pacotes .deb)</th><th>Flatpak</th></tr>
+<tr><td>De onde vem</td><td>Repositórios do Debian</td><td>Flathub (ou outros remotos)</td></tr>
+<tr><td>Versão</td><td>A do Debian estável (testada, às vezes antiga)</td><td>Geralmente a mais nova</td></tr>
+<tr><td>Quem empacota</td><td>Mantenedores do Debian</td><td>Os próprios autores ou a comunidade do Flathub</td></tr>
+<tr><td>Espaço em disco</td><td>Menor (bibliotecas compartilhadas com o sistema)</td><td>Maior (o primeiro app baixa um runtime de centenas de MB)</td></tr>
+<tr><td>Isolamento</td><td>Nenhum</td><td>Roda numa sandbox com permissões</td></tr>
+<tr><td>Bom para</td><td>Sistema, ferramentas de terminal, servidores</td><td>Aplicativos de desktop</td></tr>
+</table>
+</div>
+
+<div class="note">
+<strong>E o Snap?</strong>
+<p>No Ubuntu, a loja padrão de aplicativos usa Snap. O Debian não usa Snap por padrão (o pacote <code>snapd</code> existe, mas é pouco usado). Na comunidade Debian, o caminho comum para apps recentes é o Flatpak.</p>
+</div>
+
+<hr>
+
+<h2>Instalar o Flatpak e adicionar o Flathub</h2>
+<p>São dois passos, feitos uma vez só, como root:</p>
+
+<ol class="passo">
+  <li><strong>Instale o programa flatpak.</strong>
+<pre class="term">$ su -
+Senha:
+#> apt install flatpak</pre></li>
+  <li><strong>Adicione o Flathub</strong>, o repositório (chamado de <em>remoto</em>) com os aplicativos.
+<dl class="anatomy">
+  <dt>flatpak remote-add</dt><dd>Adiciona um remoto.</dd>
+  <dt>--if-not-exists</dt><dd>Não reclama se ele já estiver adicionado.</dd>
+  <dt>flathub</dt><dd>O nome que você dá ao remoto.</dd>
+  <dt>https://dl.flathub.org/repo/flathub.flatpakrepo</dt><dd>O endereço oficial do Flathub.</dd>
+</dl>
+<pre class="term">#> flatpak remote-add --if-not-exists flathub https://dl.flathub.org/repo/flathub.flatpakrepo
+#> flatpak remotes
+Nome    Opções
+flathub system</pre></li>
+</ol>
+
+<p><code>system</code> quer dizer que o Flathub vale para todos os usuários da máquina.</p>
+
+<h3>Ver os apps do Flatpak na loja gráfica</h3>
+<p>Se você usa o GNOME, instale também o complemento que faz o aplicativo <strong>Programas</strong> (GNOME Software) mostrar os apps do Flathub. No KDE, o equivalente é o do Discover:</p>
+
+<pre class="term">#> apt install gnome-software-plugin-flatpak</pre>
+
+<p>No KDE Plasma, o pacote é <code>plasma-discover-backend-flatpak</code>.</p>
+
+<div class="tip">
+<strong>Saia e entre de novo</strong>
+<p>Depois de instalar o Flatpak pela primeira vez, saia da sessão e entre de novo (ou reinicie). Só assim os ícones dos apps instalados aparecem no menu.</p>
+</div>
+
+<hr>
+
+<h2>Procurar, instalar e rodar</h2>
+<p>Cada app tem um <strong>ID</strong> no formato de endereço invertido, como <code>org.gnome.Calculator</code>. É ele que você usa nos comandos.</p>
+
+<dl class="anatomy">
+  <dt>flatpak search</dt><dd>Procura no Flathub.</dd>
+  <dt>calculator</dt><dd>O termo. Funciona melhor em inglês, porque os nomes e descrições estão em inglês.</dd>
+</dl>
+
+<pre class="term" id="fp-search">$ flatpak search calculator
+Nome          Descrição                         ID de aplicativo          Versão   Ramo    Remotos
+Calculadora   Perform arithmetic, scientific…   org.gnome.Calculator      48.1     stable  flathub
+Qalculate!    Powerful and easy to use…         io.github.Qalculate       5.5.0    stable  flathub</pre>
+
+<p>Os resultados e as versões mudam com o tempo: a lista acima é um exemplo do formato. Os títulos das colunas são os do Flatpak do Debian em português. Se nada combinar, a resposta é <code>Nenhuma correspondência localizada</code>.</p>
+
+<p>Para instalar, diga o remoto e o ID:</p>
+
+<dl class="anatomy">
+  <dt>flatpak install</dt><dd>Instala um aplicativo.</dd>
+  <dt>flathub</dt><dd>De qual remoto.</dd>
+  <dt>org.gnome.Calculator</dt><dd>O ID do app.</dd>
+</dl>
+
+<pre class="term">#> flatpak install flathub org.gnome.Calculator</pre>
+
+<p>O Flatpak mostra uma tabela com o que vai baixar (o app e, na primeira vez, o runtime, que pode ter algumas centenas de MB) e pergunta <code>Prosseguir com essas alterações para a instalação da sistema? [Y/n]</code>. Ao final, aparece <code>Instalação concluída.</code> e o app vai para o menu. Pelo terminal, ele roda assim:</p>
+
+<pre class="term">$ flatpak run org.gnome.Calculator</pre>
+
+<div class="note">
+<strong>Instalar só para você, sem root</strong>
+<p>Com <code>--user</code>, o Flatpak instala na sua pasta pessoal e não pede o administrador: <code>flatpak install --user flathub org.gnome.Calculator</code>. Para isso, o remoto também precisa existir para o usuário: <code>flatpak remote-add --user --if-not-exists flathub https://dl.flathub.org/repo/flathub.flatpakrepo</code>.</p>
+</div>
+
+<hr>
+
+<h2>Listar, atualizar e remover</h2>
+
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Comando</th><th>O que faz</th></tr>
+<tr><td><code>flatpak list</code></td><td>Lista apps e runtimes instalados</td></tr>
+<tr><td><code>flatpak list --app</code></td><td>Só os aplicativos</td></tr>
+<tr><td><code>flatpak update</code></td><td>Atualiza todos os apps e runtimes (o <code>apt upgrade</code> <strong>não</strong> atualiza Flatpaks)</td></tr>
+<tr><td><code>flatpak info ID</code></td><td>Detalhes de um app instalado</td></tr>
+<tr><td><code>flatpak uninstall ID</code></td><td>Remove o app</td></tr>
+<tr><td><code>flatpak uninstall --unused</code></td><td>Remove runtimes que nenhum app usa mais</td></tr>
+<tr><td><code>flatpak override --user --nofilesystem=home ID</code></td><td>Tira uma permissão de um app</td></tr>
+</table>
+</div>
+
+<div class="warning">
+<strong>Atualize os dois mundos</strong>
+<p>Programas do apt e do Flatpak se atualizam separadamente. Na sua rotina, rode <code>apt update &amp;&amp; apt upgrade</code> <strong>e</strong> <code>flatpak update</code>. O aplicativo Programas do GNOME cuida dos dois pela interface.</p>
+</div>
+
+<hr>
+
+<h2>Flatpak ou apt?</h2>
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Situação</th><th>Use</th></tr>
+<tr><td>Ferramentas de terminal (htop, git, curl)</td><td>apt</td></tr>
+<tr><td>Servidores e serviços (nginx, ssh, banco de dados)</td><td>apt</td></tr>
+<tr><td>App de desktop que você quer na versão mais nova</td><td>Flatpak</td></tr>
+<tr><td>App que não existe nos repositórios do Debian</td><td>Flatpak</td></tr>
+<tr><td>Computador com pouco espaço em disco</td><td>apt</td></tr>
+</table>
+</div>
+
+<p>Outra opção para versões mais novas sem sair do apt são os <a href="backports.html">backports</a>.</p>
+
+<hr>
+
+<h2>Quando não funciona</h2>
+
+<div class="cenario">
+<strong>"bash: flatpak: comando não encontrado"</strong>
+<p><strong>O que aconteceu:</strong> o Flatpak não vem instalado no Debian.</p>
+<p><strong>Como resolver:</strong> como root, <code>apt install flatpak</code>.</p>
+</div>
+
+<div class="cenario">
+<strong>"Nenhum remoto" ou a busca não acha nada</strong>
+<p><strong>O que aconteceu:</strong> o Flathub ainda não foi adicionado.</p>
+<p><strong>Como resolver:</strong> rode o <code>flatpak remote-add</code> desta aula e confira com <code>flatpak remotes</code>.</p>
+</div>
+
+<div class="cenario">
+<strong>"Nada corresponde a … no remoto flathub"</strong>
+<p><strong>O que aconteceu:</strong> o ID está escrito errado, ou o app não existe no Flathub.</p>
+<p><strong>Como resolver:</strong> confira o ID exato com <code>flatpak search</code>; maiúsculas e minúsculas contam (<code>org.gnome.Calculator</code>).</p>
+</div>
+
+<div class="cenario">
+<strong>Instalei, mas o app não aparece no menu</strong>
+<p><strong>O que aconteceu:</strong> a sessão ainda não carregou a pasta de atalhos do Flatpak.</p>
+<p><strong>Como resolver:</strong> saia e entre de novo. Enquanto isso, rode com <code>flatpak run ID</code>.</p>
+</div>
+
+<div class="cenario">
+<strong>O app não consegue abrir arquivos de uma pasta</strong>
+<p><strong>O que aconteceu:</strong> a sandbox limita o acesso do app a pastas.</p>
+<p><strong>Como resolver:</strong> veja as permissões com <code>flatpak info --show-permissions ID</code> e libere uma pasta com <code>flatpak override --user --filesystem=~/Documentos ID</code>. O app Flatseal (no Flathub) faz isso pela interface.</p>
+</div>
+
+<hr>
+
+<h2>Exercícios</h2>
+
+<div class="exercise">
+<h3>1. Adicionar o Flathub</h3>
+<p>Complete o subcomando que adiciona um remoto:</p>
+<div class="ex-code">flatpak <input data-answer="remote-add" aria-label="subcomando"> --if-not-exists flathub https://dl.flathub.org/repo/flathub.flatpakrepo</div>
+</div>
+
+<div class="exercise">
+<h3>2. Atualizar</h3>
+<p>Qual comando atualiza todos os aplicativos Flatpak?</p>
+<div class="ex-code">flatpak <input data-answer="update" aria-label="subcomando"></div>
+</div>
+
+<div class="mc" data-answer="4">
+<p class="mc-q">3. O <code>apt upgrade</code> atualiza os apps instalados pelo Flatpak?</p>
+<label><input type="radio" name="q3"> Sim, sempre.</label>
+<label><input type="radio" name="q3"> Só os do Flathub.</label>
+<label><input type="radio" name="q3"> Só se for root.</label>
+<label><input type="radio" name="q3"> Não; use <code>flatpak update</code>.</label>
+</div>
+
+<div class="mc" data-answer="2">
+<p class="mc-q">4. Para instalar o htop (ferramenta de terminal) no Debian, o melhor caminho é:</p>
+<label><input type="radio" name="q4"> Flatpak</label>
+<label><input type="radio" name="q4"> apt</label>
+<label><input type="radio" name="q4"> Snap</label>
+<label><input type="radio" name="q4"> Baixar um .exe</label>
+</div>
+
+<hr>
+
+<h2>Resumo</h2>
+<ul>
+  <li>Flatpak traz apps de desktop recentes, isolados numa sandbox.</li>
+  <li>Instale com <code>apt install flatpak</code> e adicione o Flathub com <code>flatpak remote-add</code>.</li>
+  <li><code>flatpak install flathub ID</code>, <code>flatpak run ID</code>, <code>flatpak update</code>, <code>flatpak uninstall ID</code>.</li>
+  <li>Use o apt para o sistema e ferramentas de terminal; Flatpak para apps de desktop novos.</li>
+</ul>
+
+<div class="pager"></div>
+
+</div>
+</main>
+</div>
+<script src="assets/site.js"></script>
+</body>
+</html>

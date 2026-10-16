@@ -1,0 +1,465 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Debian mount e fstab — montar discos | Guia Debian</title>
+<meta name="description" content="Aprenda a montar e desmontar discos no Debian com mount, umount e o /etc/fstab: cada parte explicada, o fstab real do Debian 13 linha por linha, um laboratório sem risco com arquivo-imagem e os erros mais comuns.">
+<link rel="stylesheet" href="assets/style.css">
+<script>try{var t=localStorage.getItem("tema");if(t)document.documentElement.setAttribute("data-theme",t)}catch(e){}</script>
+</head>
+<body>
+<div class="layout">
+<nav class="sidebar" id="sidebar" aria-label="Tópicos"></nav>
+<main class="main">
+<div class="content">
+
+<div class="pager"></div>
+
+<h1>Debian <span class="hl">mount e fstab</span></h1>
+
+<p class="intro"><strong>Montar</strong> é ligar uma partição a uma pasta, para que os arquivos dela apareçam ali. No desktop, o GNOME faz isso sozinho quando você conecta um pendrive. Num servidor, num segundo HD ou quando algo dá errado, você faz pelo terminal com <code>mount</code>. Para montar automaticamente a cada boot, existe o arquivo <code>/etc/fstab</code>.</p>
+
+<div class="note">
+<strong>Você vai aprender</strong>
+<ul>
+  <li>O que é um ponto de montagem e como ver o que está montado.</li>
+  <li>Montar e desmontar à mão com <code>mount</code> e <code>umount</code>, entendendo cada parte.</li>
+  <li>A ler o <code>/etc/fstab</code> real do Debian, linha por linha.</li>
+  <li>Praticar sem risco, usando um arquivo como se fosse um disco.</li>
+  <li>Configurar um HD extra para montar sozinho no boot, sem travar o sistema.</li>
+</ul>
+</div>
+
+<div class="tip">
+<strong>Montar exige o root</strong>
+<p>No Debian instalado com senha de root, a usuária comum não tem <code>sudo</code>. Os comandos de montagem desta aula são rodados depois de <code>su -</code>, e aparecem com o prompt <code>root@notebook:~#</code>. Reveja em <a href="root-su-sudo.html">root, su e sudo</a>.</p>
+</div>
+
+<hr>
+
+<h2>Antes dos comandos: uma árvore só</h2>
+<p>No Windows, cada disco vira uma letra: C:, D:, E:. No Linux existe uma árvore única que começa em <code>/</code>. Os outros discos são "pendurados" em pastas dessa árvore. A pasta onde um disco é pendurado se chama <strong>ponto de montagem</strong>.</p>
+
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Partição</th><th>Ponto de montagem</th><th>Quem montou</th></tr>
+<tr><td><code>/dev/sda1</code></td><td><code>/</code></td><td>O sistema, no boot (está no fstab).</td></tr>
+<tr><td><code>/dev/sda5</code></td><td>nenhum (é a swap)</td><td>O sistema, no boot (está no fstab).</td></tr>
+<tr><td><code>/dev/sdb1</code> (pendrive)</td><td><code>/media/ana/PENDRIVE</code></td><td>O GNOME, ao conectar.</td></tr>
+<tr><td>Um HD extra</td><td><code>/mnt/backup</code> ou <code>/dados</code></td><td>Você, com <code>mount</code> ou fstab.</td></tr>
+</table>
+</div>
+
+<p>Por convenção, <code>/media</code> é para montagens automáticas e <code>/mnt</code> é para montagens temporárias feitas à mão. O instalador do Debian também cria <code>/media/cdrom0</code> (e um atalho <code>/media/cdrom</code>) para o leitor de DVD.</p>
+
+<hr>
+
+<h2>Ver o que está montado</h2>
+<p>O <code>findmnt</code> (de <em>find mount</em>) mostra as montagens. Para uma pasta específica, passe o caminho. Ele funciona como usuária comum:</p>
+
+<dl class="anatomy">
+  <dt>findmnt</dt><dd>O programa: lista o que está montado.</dd>
+  <dt>/</dt><dd>Mostra só a montagem da pasta <code>/</code>.</dd>
+</dl>
+
+<pre class="term">$ findmnt /
+TARGET SOURCE    FSTYPE OPTIONS
+/      /dev/sda1 ext4   rw,relatime,errors=remount-ro</pre>
+
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Coluna</th><th>Significado</th></tr>
+<tr><td><code>TARGET</code></td><td>O ponto de montagem (a pasta).</td></tr>
+<tr><td><code>SOURCE</code></td><td>A partição que está ali.</td></tr>
+<tr><td><code>FSTYPE</code></td><td>O sistema de arquivos.</td></tr>
+<tr><td><code>OPTIONS</code></td><td>As opções: <code>rw</code> = leitura e escrita, <code>ro</code> = só leitura. <code>errors=remount-ro</code> é uma escolha do instalador do Debian: se o disco der erro, o sistema passa a só leitura para não estragar mais nada.</td></tr>
+</table>
+</div>
+
+<p>Outras formas de ver as montagens:</p>
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Comando</th><th>Quando usar</th></tr>
+<tr><td><code>findmnt</code></td><td>Ver tudo em árvore, inclusive montagens internas do sistema (<code>/proc</code>, <code>/sys</code>…).</td></tr>
+<tr><td><code>findmnt -t ext4,vfat</code></td><td>Só os sistemas de arquivos de disco de verdade.</td></tr>
+<tr><td><code>df -h</code></td><td>Ver os discos com o espaço livre (veja <a href="discos.html">lsblk, df, du</a>).</td></tr>
+<tr><td><code>lsblk</code></td><td>Ver discos montados e não montados (coluna <code>MOUNTPOINTS</code> vazia).</td></tr>
+<tr><td><code>mount</code> (sem nada)</td><td>A forma antiga: uma linha por montagem. No Debian 13 são mais de 20 linhas, quase todas internas.</td></tr>
+</table>
+</div>
+
+<hr>
+
+<h2>Laboratório sem risco: um arquivo que finge ser um disco</h2>
+<p>Para praticar sem tocar em nenhum disco de verdade, crie um arquivo, formate-o e use-o como disco. O Linux faz isso com os <strong>dispositivos loop</strong>: um arquivo vira <code>/dev/loop0</code>. Tudo o que você aprender aqui vale igual para um pendrive ou um HD.</p>
+
+<ol class="passo">
+<li><strong>Crie um arquivo de 64 MB e formate-o como ext4.</strong>
+<dl class="anatomy">
+  <dt>truncate -s 64M hd.img</dt><dd>Cria o arquivo <code>hd.img</code> com 64 MB (vazio, não ocupa espaço de verdade até ser usado).</dd>
+  <dt>mkfs.ext4 -q -L DADOS hd.img</dt><dd>Formata como ext4 (<code>-q</code> = sem falar muito; <code>-L</code> = rótulo "DADOS").</dd>
+</dl>
+<pre class="term" data-user="root" data-cwd="/tmp/lab">#> truncate -s 64M hd.img
+#> mkfs.ext4 -q -L DADOS hd.img</pre>
+</li>
+<li><strong>Transforme o arquivo num dispositivo.</strong> O <code>losetup</code> (de <em>loop setup</em>) liga o arquivo a um <code>/dev/loopN</code> livre e mostra qual escolheu:
+<pre class="term" data-user="root" data-cwd="/tmp/lab">#> losetup -f --show hd.img
+/dev/loop0                                     « o "disco" novo
+#> lsblk -f /dev/loop0
+NAME  FSTYPE FSVER LABEL UUID                                 FSAVAIL FSUSE% MOUNTPOINTS
+loop0 ext4   1.0   DADOS fb1d2c8d-ee57-44f8-b7f8-a43bf0439a12</pre>
+<p><code>-f</code> = primeiro loop livre; <code>--show</code> = mostra o nome escolhido.</p>
+</li>
+<li><strong>Continue as próximas seções usando <code>/dev/loop0</code></strong> no lugar de <code>/dev/sdb1</code>. No fim, desfaça com <code>umount</code> e <code>losetup -d /dev/loop0</code>.</li>
+</ol>
+
+<hr>
+
+<h2>Montar à mão: mount</h2>
+<p>Vamos montar o "HD" na pasta <code>/mnt/dados</code>. São dois passos.</p>
+
+<ol class="passo">
+<li><strong>Crie a pasta que vai servir de ponto de montagem.</strong> Ela precisa existir antes.
+<pre class="term" data-user="root">#> mkdir -p /mnt/dados</pre>
+</li>
+<li><strong>Monte.</strong>
+<dl class="anatomy">
+  <dt>mount</dt><dd>O programa que monta.</dd>
+  <dt>/dev/loop0</dt><dd>O quê: a partição (num HD de verdade, algo como <code>/dev/sdb1</code>).</dd>
+  <dt>/mnt/dados</dt><dd>Onde: o ponto de montagem.</dd>
+</dl>
+<pre class="term" data-user="root">#> mount /dev/loop0 /mnt/dados
+#> findmnt /mnt/dados
+TARGET     SOURCE     FSTYPE OPTIONS
+/mnt/dados /dev/loop0 ext4   rw,relatime
+#> df -h /mnt/dados
+Sist. Arq.      Tam. Usado Disp. Uso% Montado em
+/dev/loop0       55M   46K   51M   1% /mnt/dados
+#> ls -l /mnt/dados
+total 12
+drwx------ 2 root root 12288 out 15 21:14 lost+found       « todo ext4 novo tem esta pasta</pre>
+</li>
+</ol>
+
+<p>Mais uma vez, silêncio significa sucesso: o <code>mount</code> não mostra nada quando dá certo. Ele descobre sozinho o tipo (aqui, ext4). Para forçar um tipo, use <code>-t</code>: <code>mount -t vfat /dev/sdb1 /mnt/pendrive</code>.</p>
+
+<div class="note">
+<strong>Para que serve o lost+found?</strong>
+<p>É onde a verificação do disco (<code>fsck</code>) coloca pedaços de arquivos recuperados depois de um desligamento brusco. Não apague.</p>
+</div>
+
+<h3>Opções de montagem: <code>-o</code></h3>
+<p>A opção <code>-o</code> (de <em>options</em>) passa ajustes separados por vírgula, sem espaço.</p>
+
+<dl class="anatomy">
+  <dt>mount</dt><dd>Montar.</dd>
+  <dt>-o ro</dt><dd>Opção: <code>ro</code> = só leitura (<em>read-only</em>).</dd>
+  <dt>/dev/loop0 /mnt/dados</dt><dd>O quê e onde.</dd>
+</dl>
+
+<pre class="term" data-user="root">#> mount -o ro /dev/loop0 /mnt/dados
+#> findmnt -o TARGET,SOURCE,FSTYPE,OPTIONS /mnt/dados
+TARGET     SOURCE     FSTYPE OPTIONS
+/mnt/dados /dev/loop0 ext4   ro,relatime
+#> touch /mnt/dados/teste
+touch: não foi possível tocar '/mnt/dados/teste': Sistema de arquivos somente para leitura</pre>
+
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Opção</th><th>Para quê</th></tr>
+<tr><td><code>ro</code> / <code>rw</code></td><td>Só leitura / leitura e escrita. <code>ro</code> é ótimo para examinar um disco sem risco.</td></tr>
+<tr><td><code>uid=1000,gid=1000</code></td><td>Em FAT32, exFAT e NTFS (que não têm donos), define quem é o dono dos arquivos. Sem isso, só o root grava.</td></tr>
+<tr><td><code>noexec</code></td><td>Impede rodar programas a partir desse disco.</td></tr>
+<tr><td><code>nofail</code></td><td>No fstab: se o disco não estiver conectado, o boot continua.</td></tr>
+<tr><td><code>user,noauto</code></td><td>No fstab: qualquer usuário pode montar, mas não monta no boot (é o que o Debian usa para o DVD).</td></tr>
+<tr><td><code>remount,rw</code></td><td>Remonta como leitura e escrita algo que está só leitura (ex.: depois de um <code>errors=remount-ro</code>).</td></tr>
+</table>
+</div>
+
+<p>Para descobrir o seu número de usuário (o <code>uid</code>), rode <code>id -u</code>. O primeiro usuário criado no Debian é o 1000.</p>
+
+<hr>
+
+<h2>Desmontar: umount</h2>
+<p>Repare: é <code>umount</code>, sem o "n". Desmontar grava no disco o que ainda estava na memória. Sempre desmonte antes de tirar um pendrive, ou arquivos podem ficar corrompidos.</p>
+
+<dl class="anatomy">
+  <dt>umount</dt><dd>O programa que desmonta.</dd>
+  <dt>/mnt/dados</dt><dd>A pasta ou a partição (<code>/dev/loop0</code>); os dois funcionam.</dd>
+</dl>
+
+<pre class="term" data-user="root">#> umount /mnt/dados
+#> findmnt /mnt/dados
+#> echo $?
+1                              « 1 = nada montado ali; deu certo
+#> umount /mnt/dados
+umount: /mnt/dados: não montado.</pre>
+
+<p>Para terminar o laboratório, solte o loop: <code>losetup -d /dev/loop0</code> e apague o arquivo <code>hd.img</code>.</p>
+
+<hr>
+
+<h2>Formas diferentes de montar</h2>
+
+<h3>Forma 1: o desktop</h3>
+<p>No GNOME, conecte o pendrive: ele aparece no app Arquivos e é montado em <code>/media/ana/RÓTULO</code>, sem pedir senha. Para desmontar, clique no ícone de ejetar ao lado do nome.</p>
+
+<h3>Forma 2: udisksctl, sem root (só no desktop)</h3>
+<p>O <code>udisksctl</code> faz pelo terminal o mesmo que o GNOME: monta em <code>/media/ana</code> e não pede senha para discos removíveis. Ele faz parte do pacote <code>udisks2</code>, que vem com os ambientes de desktop; numa instalação de servidor ele não existe.</p>
+<pre class="term">$ udisksctl mount -b /dev/sdb1
+Mounted /dev/sdb1 at /media/ana/PENDRIVE
+$ udisksctl unmount -b /dev/sdb1
+Unmounted /dev/sdb1.
+$ udisksctl power-off -b /dev/sdb          « desliga o pendrive para remover com segurança</pre>
+<p><code>-b</code> vem de <em>block device</em>. Saída ilustrativa: o texto pode variar conforme a versão.</p>
+
+<h3>Forma 3: mount, à mão</h3>
+<p>É o que você aprendeu acima. Use para montagens temporárias, em servidores ou quando precisa de opções especiais.</p>
+
+<h3>Forma 4: /etc/fstab, automático no boot</h3>
+<p>Para um HD que fica sempre conectado. É o assunto da próxima seção.</p>
+
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Forma</th><th>Precisa de root?</th><th>Melhor quando…</th></tr>
+<tr><td>Desktop</td><td>Não</td><td>Pendrive no dia a dia.</td></tr>
+<tr><td><code>udisksctl</code></td><td>Não (removíveis)</td><td>Pendrive pelo terminal, num Debian com desktop.</td></tr>
+<tr><td><code>mount</code></td><td>Sim</td><td>Montagem temporária ou com opções especiais.</td></tr>
+<tr><td><code>/etc/fstab</code></td><td>Sim, para editar</td><td>Disco fixo que deve montar sozinho a cada boot.</td></tr>
+</table>
+</div>
+
+<hr>
+
+<h2>/etc/fstab: montar sozinho no boot</h2>
+<p><code>fstab</code> vem de <em>file systems table</em>, "tabela de sistemas de arquivos". Cada linha diz ao sistema: "monte isto, ali, desse jeito". Este é o fstab de um Debian 13 recém-instalado (qualquer usuário pode ler):</p>
+
+<pre class="term">$ cat /etc/fstab
+# /etc/fstab: static file system information.
+#
+# Use 'blkid' to print the universally unique identifier for a
+# device; this may be used with UUID= as a more robust way to name devices
+# that works even if disks are added and removed. See fstab(5).
+#
+# systemd generates mount units based on this file, see systemd.mount(5).
+# Please run 'systemctl daemon-reload' after making changes here.
+#
+# &lt;file system&gt; &lt;mount point&gt;   &lt;type&gt;  &lt;options&gt;       &lt;dump&gt;  &lt;pass&gt;
+# / was on /dev/sda1 during installation
+UUID=50185294-cee5-49de-a27c-2cf995361c67 /               ext4    errors=remount-ro 0       1
+# swap was on /dev/sda5 during installation
+UUID=889d958f-02ec-4d04-9252-01fabc01bb17 none            swap    sw              0       0
+/dev/sr0        /media/cdrom0   udf,iso9660 user,noauto     0       0</pre>
+
+<p>Os comentários do próprio arquivo já dão duas dicas importantes: use <code>UUID=</code> e rode <code>systemctl daemon-reload</code> depois de editar. As três linhas de verdade são:</p>
+
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Linha</th><th>O que faz</th></tr>
+<tr><td><code>UUID=5018… / ext4 errors=remount-ro 0 1</code></td><td>Monta a partição do sistema em <code>/</code>. Se der erro de disco, ela vira só leitura. Verificada primeiro no boot (<code>1</code>).</td></tr>
+<tr><td><code>UUID=889d… none swap sw 0 0</code></td><td>Liga a partição de swap. Não tem pasta (<code>none</code>).</td></tr>
+<tr><td><code>/dev/sr0 /media/cdrom0 udf,iso9660 user,noauto 0 0</code></td><td>O leitor de DVD: não monta no boot (<code>noauto</code>), mas qualquer usuário pode montar com <code>mount /media/cdrom0</code> (<code>user</code>). Só aparece se você instalou a partir de um CD/DVD/ISO.</td></tr>
+</table>
+</div>
+
+<p>Cada linha tem seis colunas, separadas por espaços ou tabs:</p>
+
+<dl class="anatomy">
+  <dt>UUID=fb1d…</dt><dd>1. O quê: a partição. Use o UUID: o nome <code>/dev/sdb1</code> pode mudar se você trocar um cabo de lugar.</dd>
+  <dt>/dados</dt><dd>2. Onde: o ponto de montagem (a pasta precisa existir).</dd>
+  <dt>ext4</dt><dd>3. Tipo do sistema de arquivos.</dd>
+  <dt>defaults,nofail</dt><dd>4. Opções. <code>defaults</code> é o padrão; <code>nofail</code> evita travar o boot se o disco faltar.</dd>
+  <dt>0</dt><dd>5. <em>dump</em>: coluna antiga de backup. Use sempre <code>0</code>.</dd>
+  <dt>2</dt><dd>6. Ordem de verificação no boot: <code>1</code> para o <code>/</code>, <code>2</code> para os outros discos, <code>0</code> para não verificar.</dd>
+</dl>
+
+<h3>Passo a passo: um HD extra em /dados</h3>
+<p>Os passos abaixo valem para um HD de verdade (<code>/dev/sdb1</code>). Para treinar, use o <code>/dev/loop0</code> do laboratório.</p>
+
+<ol class="passo">
+<li><strong>Ache o UUID da partição do HD</strong> (como root, o <code>blkid</code> está disponível):
+<pre class="term" data-user="root">#> blkid /dev/loop0
+/dev/loop0: LABEL="DADOS" UUID="fb1d2c8d-ee57-44f8-b7f8-a43bf0439a12" BLOCK_SIZE="1024" TYPE="ext4"</pre>
+</li>
+<li><strong>Crie a pasta e faça uma cópia do fstab atual</strong>, para poder voltar atrás:
+<pre class="term" data-user="root">#> mkdir -p /dados
+#> cp /etc/fstab /etc/fstab.bak</pre>
+</li>
+<li><strong>Acrescente a linha no fim do arquivo</strong> com <code>nano /etc/fstab</code> (veja <a href="editores.html">nano e vim</a>):
+<pre class="file" data-file="/etc/fstab (linha nova)">UUID=fb1d2c8d-ee57-44f8-b7f8-a43bf0439a12  /dados  ext4  defaults,nofail  0  2</pre>
+</li>
+<li><strong>Confira o arquivo antes de reiniciar.</strong> O <code>findmnt --verify</code> procura erros. Num Debian instalado por DVD/ISO, ele sempre mostra um aviso sobre o leitor de DVD vazio, o que é normal:
+<pre class="term" data-user="root">#> findmnt --verify
+
+0 erro de análise, 0 erro, 1 aviso
+/media/cdrom0
+   [W] não foi possível detectar o tipo de sistema de arquivos em disco (Mídia não encontrada)   « normal: não há DVD</pre>
+<p>O que importa é <strong>0 erro</strong>. Avisos <code>[W]</code> merecem uma lida; erros <code>[E]</code> precisam ser corrigidos.</p>
+</li>
+<li><strong>Teste sem reiniciar.</strong> O <code>systemctl daemon-reload</code> avisa o sistema que o fstab mudou (o próprio arquivo pede isso), e o <code>mount -a</code> monta tudo o que está no fstab e ainda não está montado:
+<pre class="term" data-user="root">#> systemctl daemon-reload
+#> mount -a
+#> findmnt /dados
+TARGET SOURCE     FSTYPE OPTIONS
+/dados /dev/loop0 ext4   rw,relatime</pre>
+<p>Se o <code>mount -a</code> mostrar qualquer erro, <strong>não reinicie</strong>: corrija a linha ou volte o backup com <code>cp /etc/fstab.bak /etc/fstab</code>.</p>
+</li>
+<li><strong>Dê a pasta para a sua usuária</strong>, porque um ext4 novo pertence ao root:
+<pre class="term" data-user="root">#> chown ana:ana /dados</pre>
+</li>
+</ol>
+
+<h3>Como o findmnt --verify mostra um erro</h3>
+<p>Veja o que acontece se a linha nova tiver um UUID errado e outra linha tiver um tipo digitado errado (<code>ext44</code>). O teste foi feito numa <strong>cópia</strong> do fstab, com <code>--tab-file</code>:</p>
+
+<pre class="term" data-user="root">#> findmnt --verify --tab-file /tmp/fstab.teste
+/media/cdrom0
+   [W] não foi possível detectar o tipo de sistema de arquivos em disco (Mídia não encontrada)
+/dados
+   [E] alvo não alcançável na inicialização: Arquivo ou diretório inexistente   « a pasta /dados não existe
+   [E] fonte não alcançável na inicialização: UUID=0000-ERRADO                   « UUID que não existe
+/backup
+   [E] alvo não alcançável na inicialização: Arquivo ou diretório inexistente
+   [W] fonte não alcançável: /dev/sdb1: Arquivo ou diretório inexistente
+   [W] ext44 parece não possuir suporte no kernel atual                          « erro de digitação no tipo
+   [W] não foi possível detectar o tipo de sistema de arquivos em disco (Arquivo ou diretório inexistente)
+
+0 erro de análise, 3 erros, 4 avisos</pre>
+
+<div class="tip">
+<strong>Treine com uma cópia</strong>
+<p>Copie o fstab (<code>cp /etc/fstab /tmp/fstab.teste</code>), edite a cópia e verifique com <code>findmnt --verify --tab-file /tmp/fstab.teste</code>. Assim você aprende a ler os erros sem nenhum risco.</p>
+</div>
+
+<div class="warning">
+<strong>Um fstab errado pode impedir o boot</strong>
+<p>Sem <code>nofail</code>, se o disco não for encontrado, o sistema espera 90 segundos e para no <strong>modo de emergência</strong> (uma tela de texto, em inglês, que pede a senha do root). Sempre rode <code>findmnt --verify</code> e <code>mount -a</code> antes de reiniciar. Se acontecer, digite a senha do root, corrija o arquivo com <code>nano /etc/fstab</code> e reinicie. Veja <a href="recuperacao.html">Recuperar um Sistema</a>.</p>
+</div>
+
+<hr>
+
+<h2>Quando não funciona</h2>
+
+<div class="cenario">
+<strong>"é necessário ser superusuário para montar"</strong>
+<pre class="term">$ mount /dev/sda1 /mnt
+mount: /mnt: é necessário ser superusuário para montar.
+       dmesg(1) pode ter mais informação após uma chamada a montar o sistema falhada.</pre>
+<p><strong>O que aconteceu:</strong> só o root pode montar com <code>mount</code> (exceto entradas do fstab marcadas com <code>user</code>, como o DVD).</p>
+<p><strong>Como resolver:</strong> entre como root com <code>su -</code> e repita. No desktop, para pendrives, use o app Arquivos ou <code>udisksctl</code>, que não pedem senha.</p>
+</div>
+
+<div class="cenario">
+<strong>"o ponto de montagem não existe"</strong>
+<pre class="term" data-user="root">#> mount /dev/loop0 /mnt/usb
+mount: /mnt/usb: o ponto de montagem não existe.
+       dmesg(1) pode ter mais informação após uma chamada a montar o sistema falhada.</pre>
+<p><strong>Como resolver:</strong> crie a pasta antes: <code>mkdir -p /mnt/usb</code>.</p>
+</div>
+
+<div class="cenario">
+<strong>"Can't lookup blockdev": o dispositivo não existe</strong>
+<pre class="term" data-user="root">#> mount /dev/sdz9 /mnt/dados
+mount: /mnt/dados: fsconfig() falhou: /dev/sdz9: Can't lookup blockdev.
+       dmesg(1) pode ter mais informação após uma chamada a montar o sistema falhada.</pre>
+<p><strong>O que aconteceu:</strong> o nome está errado ou o pendrive não foi detectado. A parte "Can't lookup blockdev" vem do kernel e fica em inglês.</p>
+<p><strong>Como resolver:</strong> confira o nome com <code>lsblk</code>. Se o pendrive não aparece, troque de porta USB e veja as mensagens do kernel com <code>dmesg | tail</code> (como root).</p>
+</div>
+
+<div class="cenario">
+<strong>"o alvo está ocupado" ao desmontar</strong>
+<pre class="term" data-user="root">#> umount /mnt/dados
+umount: /mnt/dados: o alvo está ocupado.
+#> lsof /mnt/dados
+COMMAND   PID USER  FD   TYPE DEVICE SIZE/OFF NODE NAME
+bash    11032 ana  cwd    DIR    7,0     1024    2 /mnt/dados          « um terminal está dentro da pasta</pre>
+<p><strong>O que aconteceu:</strong> algum programa está usando arquivos do disco. Muitas vezes é um terminal que está dentro da pasta (<code>cwd</code> = pasta atual).</p>
+<p><strong>Como resolver:</strong> saia da pasta com <code>cd</code> ou feche o programa e tente de novo. O <code>lsof</code> vem instalado no Debian; o <code>fuser</code>, não (está no pacote <code>psmisc</code>).</p>
+</div>
+
+<div class="cenario">
+<strong>"tipo de sistema de arquivos incorreto"</strong>
+<pre class="term" data-user="root">#> mount -t vfat /dev/loop0 /mnt/dados
+mount: /mnt/dados: tipo de sistema de arquivos incorreto, opção inválida, superbloco inválido em /dev/loop0, página de código ou programa auxiliar faltando ou outro erro.
+       dmesg(1) pode ter mais informação após uma chamada a montar o sistema falhada.</pre>
+<p><strong>O que aconteceu:</strong> o tipo informado com <code>-t</code> está errado (o disco é ext4), a partição está danificada ou falta o programa do sistema de arquivos (para exFAT/NTFS, instale <code>exfatprogs</code> ou <code>ntfs-3g</code>).</p>
+<p><strong>Como resolver:</strong> tire o <code>-t</code> e deixe o <code>mount</code> descobrir, ou confira o tipo com <code>lsblk -f</code>.</p>
+</div>
+
+<hr>
+
+<h2>Referência</h2>
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Comando</th><th>O que faz</th></tr>
+<tr><td><code>findmnt</code> / <code>findmnt /pasta</code></td><td>Mostra as montagens</td></tr>
+<tr><td><code>findmnt --verify</code></td><td>Confere o <code>/etc/fstab</code> (<code>--tab-file</code> para outro arquivo)</td></tr>
+<tr><td><code>mount DISPOSITIVO PASTA</code></td><td>Monta (root)</td></tr>
+<tr><td><code>mount -t TIPO -o OPÇÕES …</code></td><td>Monta com tipo e opções</td></tr>
+<tr><td><code>mount -a</code></td><td>Monta tudo do fstab que ainda não está montado</td></tr>
+<tr><td><code>mount -o remount,rw /</code></td><td>Volta a permitir escrita no <code>/</code></td></tr>
+<tr><td><code>umount PASTA</code></td><td>Desmonta</td></tr>
+<tr><td><code>losetup -f --show arquivo.img</code> / <code>losetup -d /dev/loop0</code></td><td>Liga / solta um arquivo-imagem como disco</td></tr>
+<tr><td><code>systemctl daemon-reload</code></td><td>Avisa o systemd que o fstab mudou</td></tr>
+<tr><td><code>udisksctl mount -b /dev/sdb1</code></td><td>Monta um removível sem root (desktop)</td></tr>
+</table>
+</div>
+
+<hr>
+
+<h2>Exercícios</h2>
+
+<div class="exercise">
+<h3>1. Montar</h3>
+<p>Complete para montar <code>/dev/sdb1</code> na pasta <code>/mnt/backup</code>:</p>
+<div class="ex-code">mount <input data-answer="/dev/sdb1 /mnt/backup" aria-label="argumentos"></div>
+</div>
+
+<div class="exercise">
+<h3>2. Só leitura</h3>
+<p>Complete para montar só para leitura:</p>
+<div class="ex-code">mount -o <input data-answer="ro" aria-label="opção"> /dev/sdb1 /mnt/backup</div>
+</div>
+
+<div class="exercise">
+<h3>3. Conferir antes de reiniciar</h3>
+<p>Complete o comando que procura erros no fstab:</p>
+<div class="ex-code">findmnt <input data-answer="--verify" aria-label="opção"></div>
+</div>
+
+<div class="mc" data-answer="3">
+<p class="mc-q">4. Num Debian recém-instalado, o <code>findmnt --verify</code> mostra "0 erro, 1 aviso" sobre o <code>/media/cdrom0</code>. O que fazer?</p>
+<label><input type="radio" name="q4"> Apagar a linha do DVD imediatamente, senão o boot trava.</label>
+<label><input type="radio" name="q4"> Reinstalar o sistema.</label>
+<label><input type="radio" name="q4"> Nada: é só o leitor de DVD vazio, e a linha tem <code>noauto</code>.</label>
+<label><input type="radio" name="q4"> Trocar <code>/dev/sr0</code> pelo UUID.</label>
+</div>
+
+<div class="mc" data-answer="2">
+<p class="mc-q">5. Para que serve <code>nofail</code> numa linha do fstab?</p>
+<label><input type="radio" name="q5"> Impede que o disco falhe.</label>
+<label><input type="radio" name="q5"> Deixa o boot continuar se o disco não estiver conectado.</label>
+<label><input type="radio" name="q5"> Monta só para leitura.</label>
+<label><input type="radio" name="q5"> Verifica o disco a cada boot.</label>
+</div>
+
+<hr>
+
+<h2>Resumo</h2>
+<ul>
+  <li>Montar = ligar uma partição a uma pasta. Veja com <code>findmnt</code>.</li>
+  <li>No Debian sem sudo, <code>mount</code> e <code>umount</code> são feitos como root (<code>su -</code>).</li>
+  <li>O fstab do Debian usa <code>UUID=</code>, <code>errors=remount-ro</code> no <code>/</code>, uma partição de swap e uma linha para o DVD.</li>
+  <li>Antes de reiniciar: <code>findmnt --verify</code>, <code>systemctl daemon-reload</code> e <code>mount -a</code>.</li>
+  <li>Use <code>nofail</code> em discos extras e pratique com arquivos-imagem e <code>losetup</code>.</li>
+</ul>
+
+<div class="pager"></div>
+
+</div>
+</main>
+</div>
+<script src="assets/site.js"></script>
+</body>
+</html>

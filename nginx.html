@@ -1,0 +1,353 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Debian nginx — servidor web e proxy reverso | Guia Debian</title>
+<meta name="description" content="Aprenda o nginx no Debian 13: instalar, sites-available e sites-enabled, publicar um site, ler logs, proxy reverso para uma aplicação, e os erros reais (502, 403, IPv6, conflito com o Apache).">
+<link rel="stylesheet" href="assets/style.css">
+<script>try{var t=localStorage.getItem("tema");if(t)document.documentElement.setAttribute("data-theme",t)}catch(e){}</script>
+</head>
+<body>
+<div class="layout">
+<nav class="sidebar" id="sidebar" aria-label="Tópicos"></nav>
+<main class="main">
+<div class="content">
+
+<div class="pager"></div>
+
+<h1>Debian <span class="hl">Servidor Web (nginx)</span></h1>
+
+<p class="intro">O <strong>nginx</strong> (pronuncia-se "engine-x") é um servidor web leve e rápido, muito usado também como <strong>proxy reverso</strong>: ele fica na frente de uma aplicação (Node, Python, PHP) e repassa os visitantes para ela. No Debian, ele segue a mesma ideia de pastas <code>sites-available</code> e <code>sites-enabled</code> do <a href="apache.html">Apache</a>.</p>
+
+<div class="note">
+<strong>Você vai aprender</strong>
+<ul>
+  <li>Instalar o nginx e conferir se ele respondeu.</li>
+  <li>Onde fica cada arquivo em <code>/etc/nginx</code>.</li>
+  <li>Publicar um site com um bloco <code>server</code>.</li>
+  <li>Ler os logs e entender os códigos 200, 403, 404 e 502.</li>
+  <li>Colocar o nginx na frente de uma aplicação (proxy reverso).</li>
+</ul>
+</div>
+
+<p>Comandos como <strong>root</strong> (<code>su -</code>) na máquina fictícia <strong>servidor</strong>. As saídas vêm de um Debian 13 real com nginx 1.26.3. O nginx responde em inglês.</p>
+
+<hr>
+
+<h2>Conceito: o caminho de um pedido</h2>
+<ol>
+  <li>O navegador pede <code>http://meusite.local/</code> para o IP do servidor, porta 80.</li>
+  <li>O nginx olha o cabeçalho <code>Host</code> e escolhe o bloco <code>server</code> cujo <code>server_name</code> combina.</li>
+  <li>Esse bloco diz o que fazer: entregar um arquivo de uma pasta (<code>root</code>) ou repassar para uma aplicação (<code>proxy_pass</code>).</li>
+  <li>Se nenhum <code>server_name</code> combinar, quem responde é o bloco marcado como <code>default_server</code>.</li>
+</ol>
+
+<hr>
+
+<h2>Instalar e testar</h2>
+<pre class="term" data-host="servidor" data-user="root">#> apt install nginx
+#> systemctl status nginx --no-pager
+● nginx.service - A high performance web server and a reverse proxy server
+     Loaded: loaded (/usr/lib/systemd/system/nginx.service; enabled; preset: enabled)    « liga no boot
+     Active: active (running) since Thu 2026-10-15 23:07:41 -03; 4min 14s ago
+       Docs: man:nginx(8)
+   Main PID: 138003 (nginx)
+      Tasks: 3 (limit: 4638)
+     Memory: 3M (peak: 7M)
+        CPU: 93ms
+     CGroup: /system.slice/nginx.service
+             ├─138003 "nginx: master process /usr/sbin/nginx -g daemon on; master_process on;"   « o "gerente"
+             ├─138005 "nginx: worker process"                                                   « quem atende
+             └─138006 "nginx: worker process"
+#> curl -I http://localhost
+HTTP/1.1 200 OK
+Server: nginx
+Date: Fri, 16 Oct 2026 02:11:56 GMT
+Content-Type: text/html</pre>
+
+<p>Num servidor recém-instalado, o navegador mostra <strong>"Welcome to nginx!"</strong>: é o arquivo <code>/var/www/html/index.nginx-debian.html</code>, que o pacote do Debian coloca lá.</p>
+
+<hr>
+
+<h2>Onde fica cada coisa</h2>
+<pre class="term" data-host="servidor" data-user="root">#> ls /etc/nginx
+conf.d          koi-win            nginx.conf       sites-enabled
+fastcgi.conf    mime.types         proxy_params     snippets
+fastcgi_params  modules-available  scgi_params      uwsgi_params
+koi-utf         modules-enabled    sites-available  win-utf
+#> ls -l /etc/nginx/sites-enabled
+total 0
+lrwxrwxrwx 1 root root 34 out 15 23:07 default -&gt; /etc/nginx/sites-available/default</pre>
+
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Caminho</th><th>O que guarda</th></tr>
+<tr><td><code>nginx.conf</code></td><td>Configuração principal; inclui os outros arquivos</td></tr>
+<tr><td><code>sites-available/</code></td><td>Os sites configurados</td></tr>
+<tr><td><code>sites-enabled/</code></td><td>Atalhos para os sites ligados</td></tr>
+<tr><td><code>conf.d/</code></td><td>Outro lugar para configurações (arquivos <code>.conf</code>), vazio no Debian</td></tr>
+<tr><td><code>snippets/</code></td><td>Trechos reaproveitáveis (ex.: configuração de SSL)</td></tr>
+<tr><td><code>proxy_params</code></td><td>Cabeçalhos padrão para proxy reverso</td></tr>
+<tr><td><code>/var/log/nginx/</code></td><td><code>access.log</code> e <code>error.log</code></td></tr>
+</table>
+</div>
+
+<div class="note">
+<strong>Diferença para o Apache</strong>
+<p>O nginx do Debian também usa <code>sites-available</code> e <code>sites-enabled</code>, mas <strong>não tem</strong> um comando como o <code>a2ensite</code>. Você liga um site criando o atalho com <code>ln -s</code> e desliga apagando o atalho com <code>rm</code>.</p>
+</div>
+
+<p>O site padrão, sem os comentários:</p>
+<pre class="file" data-file="/etc/nginx/sites-available/default (sem os comentários)">server {
+	listen 80 default_server;
+	listen [::]:80 default_server;
+	root /var/www/html;
+	index index.html index.htm index.nginx-debian.html;
+	server_name _;
+	location / {
+		try_files $uri $uri/ =404;
+	}
+}</pre>
+
+<hr>
+
+<h2>Publicar o seu primeiro site</h2>
+
+<ol class="passo">
+  <li><strong>Crie a pasta e a página.</strong>
+<pre class="term" data-host="servidor" data-user="root">#> mkdir -p /var/www/meusite
+#> echo '&lt;h1&gt;Olá do nginx&lt;/h1&gt;' &gt; /var/www/meusite/index.html</pre></li>
+  <li><strong>Escreva o bloco <code>server</code>.</strong> Cada linha de configuração termina com <code>;</code>, e cada bloco fica entre <code>{ }</code>:
+<pre class="file" data-file="/etc/nginx/sites-available/meusite">server {
+    listen 80;                       # escuta no IPv4
+    listen [::]:80;                  # escuta no IPv6 (não esqueça!)
+    server_name meusite.local;       # o nome que o visitante digita
+    root /var/www/meusite;           # a pasta com os arquivos
+    index index.html;                # o arquivo aberto quando pedem só "/"
+    location / {
+        try_files $uri $uri/ =404;   # o arquivo, a pasta, ou erro 404
+    }
+}</pre></li>
+  <li><strong>Ligue o site</strong> criando o atalho:
+<dl class="anatomy">
+  <dt>ln -s</dt><dd>Cria um link simbólico (atalho). Veja <a href="links.html">Links</a>.</dd>
+  <dt>/etc/nginx/sites-available/meusite</dt><dd>O arquivo de verdade.</dd>
+  <dt>/etc/nginx/sites-enabled/</dt><dd>Onde o atalho é criado.</dd>
+</dl>
+<pre class="term" data-host="servidor" data-user="root">#> ln -s /etc/nginx/sites-available/meusite /etc/nginx/sites-enabled/</pre></li>
+  <li><strong>Teste a configuração</strong>:
+<pre class="term" data-host="servidor" data-user="root">#> nginx -t
+nginx: the configuration file /etc/nginx/nginx.conf syntax is ok
+nginx: configuration file /etc/nginx/nginx.conf test is successful</pre></li>
+  <li><strong>Recarregue e teste</strong> fingindo o nome com <code>-H "Host: …"</code>:
+<pre class="term" data-host="servidor" data-user="root">#> systemctl reload nginx
+#> curl -H "Host: meusite.local" http://localhost
+&lt;h1&gt;Olá do nginx&lt;/h1&gt;</pre></li>
+</ol>
+
+<hr>
+
+<h2>Ler os logs</h2>
+<pre class="term" data-host="servidor" data-user="root">#> curl -I -H "Host: meusite.local" http://localhost/nada
+HTTP/1.1 404 Not Found
+#> tail -2 /var/log/nginx/access.log
+127.0.0.1 - - [15/Oct/2026:23:12:31 -0300] "GET / HTTP/1.1" 200 23 "-" "curl/8.14.1"
+::1 - - [15/Oct/2026:23:12:44 -0300] "HEAD /nada HTTP/1.1" 404 0 "-" "curl/8.14.1"     « o pedido que falhou</pre>
+
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Código</th><th>Significa</th><th>Causa comum</th></tr>
+<tr><td><code>200</code></td><td>OK</td><td>Tudo certo</td></tr>
+<tr><td><code>404</code></td><td>Não encontrado</td><td>O arquivo não existe na pasta do <code>root</code></td></tr>
+<tr><td><code>403</code></td><td>Proibido</td><td>Pasta sem <code>index.html</code> ou sem permissão de leitura</td></tr>
+<tr><td><code>502</code></td><td>Bad Gateway</td><td>A aplicação atrás do proxy está fora do ar</td></tr>
+</table>
+</div>
+
+<p>Para cada erro, o <code>error.log</code> diz o motivo exato. Acompanhe ao vivo com <code>tail -f /var/log/nginx/error.log</code>.</p>
+
+<hr>
+
+<h2>Proxy reverso: nginx na frente de uma aplicação</h2>
+<p>Muitas aplicações (Node, Python, Go) escutam numa porta alta, como a 3000, só no próprio servidor. O nginx recebe o visitante na porta 80 e repassa. Para testar, suba um "aplicativo" de mentira com o servidor embutido do Python:</p>
+
+<pre class="term" data-host="servidor" data-user="root" data-cwd="/tmp/app">#> echo "resposta da aplicacao" &gt; index.html
+#> python3 -m http.server 3000 --bind 127.0.0.1 &amp;</pre>
+
+<pre class="file" data-file="/etc/nginx/sites-available/app">server {
+    listen 80;
+    listen [::]:80;
+    server_name app.local;
+    location / {
+        proxy_pass http://127.0.0.1:3000;   # para onde repassar
+        include proxy_params;               # cabeçalhos padrão do Debian
+    }
+}</pre>
+
+<dl class="anatomy">
+  <dt>proxy_pass http://127.0.0.1:3000</dt><dd>Repassa o pedido para a aplicação na porta 3000 da própria máquina.</dd>
+  <dt>include proxy_params</dt><dd>Inclui o arquivo <code>/etc/nginx/proxy_params</code>, que envia à aplicação o nome pedido e o IP real do visitante.</dd>
+</dl>
+
+<pre class="term" data-host="servidor" data-user="root">#> ln -s /etc/nginx/sites-available/app /etc/nginx/sites-enabled/
+#> nginx -t &amp;&amp; systemctl reload nginx
+nginx: the configuration file /etc/nginx/nginx.conf syntax is ok
+nginx: configuration file /etc/nginx/nginx.conf test is successful
+#> curl -H "Host: app.local" http://localhost
+resposta da aplicacao                                      « veio da aplicação, através do nginx</pre>
+
+<p>O <code>proxy_params</code> do Debian 13 termina com estas linhas (antes delas há um comentário explicando por que o Debian passou a usar <code>$host</code> em vez de <code>$http_host</code>, por segurança):</p>
+<pre class="file" data-file="/etc/nginx/proxy_params (final)">proxy_set_header Host $host;
+proxy_set_header X-Real-IP $remote_addr;
+proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+proxy_set_header X-Forwarded-Proto $scheme;</pre>
+
+<hr>
+
+<h2>Desligar um site e o nginx</h2>
+<pre class="term" data-host="servidor" data-user="root">#> rm /etc/nginx/sites-enabled/app                    « apaga só o atalho; o arquivo continua em sites-available
+#> nginx -t &amp;&amp; systemctl reload nginx
+#> systemctl disable --now nginx                       « para e não liga mais no boot</pre>
+
+<hr>
+
+<h2>Quando não funciona</h2>
+
+<div class="cenario">
+<strong>Instalei o nginx e aparece "Apache2 Debian Default Page"</strong>
+<pre class="term" data-host="servidor" data-user="root">#> curl -sI http://localhost | grep Server
+Server: nginx
+#> curl -s http://localhost | grep -i "&lt;title&gt;"
+    &lt;title&gt;Apache2 Debian Default Page: It works&lt;/title&gt;
+#> ls /var/www/html
+index.html  index.nginx-debian.html</pre>
+<p><strong>O que aconteceu:</strong> o Apache já tinha sido instalado e deixou o seu <code>index.html</code> na pasta padrão. Quem responde é o nginx (<code>Server: nginx</code>), mas ele procura primeiro o <code>index.html</code>.</p>
+<p><strong>Como resolver:</strong> é só o arquivo de boas-vindas; troque pelo seu site ou apague o <code>/var/www/html/index.html</code>.</p>
+</div>
+
+<div class="cenario">
+<strong>O site novo não aparece, só o padrão</strong>
+<p><strong>O que aconteceu:</strong> o bloco tinha só <code>listen 80;</code>. O <code>curl http://localhost</code> (e muitos navegadores) conecta pelo IPv6 (<code>::1</code>); como o seu site não escuta em IPv6, quem responde é o <code>default_server</code>.</p>
+<p><strong>Como resolver:</strong> adicione <code>listen [::]:80;</code> ao bloco, rode <code>nginx -t</code> e recarregue. Confira também se o atalho existe em <code>sites-enabled</code> e se o <code>server_name</code> está certo.</p>
+</div>
+
+<div class="cenario">
+<strong>502 Bad Gateway</strong>
+<pre class="term" data-host="servidor" data-user="root">#> curl -I -H "Host: app.local" http://localhost
+HTTP/1.1 502 Bad Gateway
+#> tail -1 /var/log/nginx/error.log
+2026/10/15 23:12:49 [error] 140499#140499: *7 connect() failed (111: Connection refused) while connecting to upstream, client: ::1, server: app.local, request: "HEAD / HTTP/1.1", upstream: "http://127.0.0.1:3000/", host: "app.local"</pre>
+<p><strong>O que aconteceu:</strong> o nginx está bem; quem caiu foi a aplicação (<code>Connection refused</code> na porta 3000).</p>
+<p><strong>Como resolver:</strong> confira se a aplicação está rodando (<code>ss -tlnp | grep 3000</code>, <code>systemctl status app</code>) e se a porta do <code>proxy_pass</code> é a mesma da aplicação.</p>
+</div>
+
+<div class="cenario">
+<strong>403 Forbidden: "directory index … is forbidden"</strong>
+<pre class="term" data-host="servidor" data-user="root">#> tail -1 /var/log/nginx/error.log
+2026/10/15 23:12:44 [error] 140436#140436: *4 directory index of "/var/www/meusite/" is forbidden, client: ::1, server: meusite.local, request: "HEAD / HTTP/1.1", host: "meusite.local"</pre>
+<p><strong>O que aconteceu:</strong> a pasta não tem o arquivo citado no <code>index</code> (aqui, o <code>index.html</code> sumiu).</p>
+<p><strong>Como resolver:</strong> crie o <code>index.html</code> ou ajuste a linha <code>index</code>. Se o arquivo existir, confira as permissões: o nginx roda como <code>www-data</code>.</p>
+</div>
+
+<div class="cenario">
+<strong>Erros de sintaxe</strong>
+<pre class="term" data-host="servidor" data-user="root">#> nginx -t
+2026/10/15 23:12:44 [emerg] 140484#140484: directive "index" is not terminated by ";" in /etc/nginx/sites-enabled/meusite:7
+nginx: configuration file /etc/nginx/nginx.conf test failed
+#> nginx -t
+2026/10/15 23:12:44 [emerg] 140482#140482: unexpected end of file, expecting "}" in /etc/nginx/sites-enabled/meusite:10
+nginx: configuration file /etc/nginx/nginx.conf test failed
+#> nginx -t
+2026/10/15 23:12:10 [emerg] 139951#139951: unknown directive "try_file" in /etc/nginx/sites-enabled/meusite:9
+nginx: configuration file /etc/nginx/nginx.conf test failed</pre>
+<p><strong>Como resolver:</strong> o erro diz o arquivo e a linha. Os três casos mais comuns são: <code>;</code> esquecido, <code>}</code> faltando e palavra digitada errado.</p>
+</div>
+
+<div class="cenario">
+<strong>Apache e nginx brigando pela porta 80</strong>
+<pre class="term" data-host="servidor" data-user="root">#> systemctl start apache2
+Job for apache2.service failed because the control process exited with error code.
+See "systemctl status apache2.service" and "journalctl -xeu apache2.service" for details.
+#> journalctl -u apache2 -n 3 --no-pager
+out 15 23:11:56 servidor apachectl[139863]: (98)Address already in use: AH00072: make_sock: could not bind to address [::]:80
+out 15 23:11:56 servidor apachectl[139863]: (98)Address already in use: AH00072: make_sock: could not bind to address 0.0.0.0:80
+out 15 23:11:56 servidor apachectl[139863]: AH00015: Unable to open logs</pre>
+<p><strong>O que aconteceu:</strong> só um programa pode escutar na porta 80. O nginx chegou primeiro.</p>
+<p><strong>Como resolver:</strong> escolha um dos dois (<code>systemctl disable --now apache2</code>) ou coloque um deles em outra porta.</p>
+</div>
+
+<div class="cenario">
+<strong>"nginx: comando não encontrado" como ana</strong>
+<p><strong>O que aconteceu:</strong> o <code>nginx</code> fica em <code>/usr/sbin</code>, fora do PATH dos usuários comuns no Debian.</p>
+<p><strong>Como resolver:</strong> <code>su -</code> e rode de novo.</p>
+</div>
+
+<hr>
+
+<h2>Referência rápida</h2>
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Comando</th><th>O que faz</th></tr>
+<tr><td><code>apt install nginx</code></td><td>Instala e já inicia o nginx</td></tr>
+<tr><td><code>nginx -t</code></td><td>Testa a configuração</td></tr>
+<tr><td><code>nginx -T</code></td><td>Mostra toda a configuração carregada, já juntada</td></tr>
+<tr><td><code>systemctl reload nginx</code></td><td>Aplica mudanças sem derrubar conexões</td></tr>
+<tr><td><code>ln -s /etc/nginx/sites-available/X /etc/nginx/sites-enabled/</code></td><td>Liga um site</td></tr>
+<tr><td><code>rm /etc/nginx/sites-enabled/X</code></td><td>Desliga um site</td></tr>
+<tr><td><code>tail -f /var/log/nginx/error.log</code></td><td>Acompanha os erros</td></tr>
+<tr><td><code>ss -tlnp | grep :80</code></td><td>Mostra quem está usando a porta 80</td></tr>
+</table>
+</div>
+
+<hr>
+
+<h2>Exercícios</h2>
+
+<div class="exercise">
+<h3>1. Antes de recarregar</h3>
+<p>Complete para testar a configuração do nginx:</p>
+<div class="ex-code">nginx <input data-answer="-t" aria-label="opção"></div>
+</div>
+
+<div class="exercise">
+<h3>2. Repassar para a aplicação</h3>
+<p>Complete a linha que repassa os pedidos para a aplicação na porta 8080:</p>
+<div class="ex-code"><input data-answer="proxy_pass" aria-label="diretiva"> http://127.0.0.1:8080;</div>
+</div>
+
+<div class="mc" data-answer="1">
+<p class="mc-q">3. O site retorna 502 Bad Gateway. Onde está o problema mais provável?</p>
+<label><input type="radio" name="q3"> Na aplicação por trás do proxy, que não está respondendo.</label>
+<label><input type="radio" name="q3"> No DNS do visitante.</label>
+<label><input type="radio" name="q3"> Na permissão da pasta <code>/var/www</code>.</label>
+<label><input type="radio" name="q3"> No certificado HTTPS.</label>
+</div>
+
+<div class="mc" data-answer="4">
+<p class="mc-q">4. Como se liga um site no nginx do Debian?</p>
+<label><input type="radio" name="q4"> <code>a2ensite meusite</code></label>
+<label><input type="radio" name="q4"> <code>nginx --enable meusite</code></label>
+<label><input type="radio" name="q4"> Editando o <code>/etc/hosts</code></label>
+<label><input type="radio" name="q4"> Criando um atalho em <code>sites-enabled</code> com <code>ln -s</code></label>
+</div>
+
+<hr>
+
+<h2>Resumo</h2>
+<ul>
+  <li>O nginx do Debian usa <code>sites-available</code> + <code>sites-enabled</code>, ligados com <code>ln -s</code>.</li>
+  <li>Cada site é um bloco <code>server</code>; toda linha termina em <code>;</code>. Inclua <code>listen 80;</code> e <code>listen [::]:80;</code>.</li>
+  <li><code>nginx -t</code> sempre antes do <code>systemctl reload nginx</code>.</li>
+  <li><code>proxy_pass</code> + <code>include proxy_params</code> colocam o nginx na frente de uma aplicação; 502 = aplicação fora do ar.</li>
+  <li>Apache e nginx não podem usar a mesma porta ao mesmo tempo.</li>
+</ul>
+
+<div class="pager"></div>
+
+</div>
+</main>
+</div>
+<script src="assets/site.js"></script>
+</body>
+</html>

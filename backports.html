@@ -1,0 +1,319 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Debian Backports e Pinning — versões mais novas sem trocar de Debian | Guia Debian</title>
+<meta name="description" content="Como usar o trixie-backports no Debian 13: ativar o repositório, instalar com apt install -t, ler prioridades no apt policy, fixar versões com pinning em /etc/apt/preferences.d e por que não misturar testing (FrankenDebian).">
+<link rel="stylesheet" href="assets/style.css">
+<script>try{var t=localStorage.getItem("tema");if(t)document.documentElement.setAttribute("data-theme",t)}catch(e){}</script>
+</head>
+<body>
+<div class="layout">
+<nav class="sidebar" id="sidebar" aria-label="Tópicos"></nav>
+<main class="main">
+<div class="content">
+
+<div class="pager"></div>
+
+<h1>Debian <span class="hl">Backports e Pinning</span></h1>
+
+<p class="intro">O Debian estável não muda as versões dos programas durante a vida dele: recebe só correções. Isso o torna confiável, mas às vezes você precisa de uma versão mais nova de um programa específico. O <strong>backports</strong> resolve isso sem trocar o resto do sistema, e o <strong>pinning</strong> deixa você escolher, pacote por pacote, de onde cada um vem.</p>
+
+<div class="note">
+<strong>Você vai aprender</strong>
+<ul>
+  <li>O que é o <code>trixie-backports</code> e o que significa o <code>~bpo13</code> numa versão.</li>
+  <li>A ativar o backports e instalar um pacote dele com <code>apt install -t</code>.</li>
+  <li>A ler as prioridades (100, 500) no <code>apt policy</code>.</li>
+  <li>A usar o pinning em <code>/etc/apt/preferences.d</code>.</li>
+  <li>Por que misturar testing ou unstable no estável cria um "FrankenDebian".</li>
+</ul>
+</div>
+
+<div class="tip">
+<strong>Pré-requisito</strong>
+<p>Esta aula supõe que você já leu <a href="repositorios.html">Repositórios (sources)</a>. Todos os comandos que mudam o sistema são feitos como root (<code>su -</code>).</p>
+</div>
+
+<hr>
+
+<h2>O que é o backports</h2>
+<p>A equipe do Debian pega o pacote de uma versão mais nova (da <em>testing</em>), recompila para as bibliotecas do Debian 13 e publica num repositório à parte, o <code>trixie-backports</code>. Você continua no Debian 13 e escolhe, um a um, quais programas vêm de lá.</p>
+
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Origem</th><th>Exemplo de versão do curl</th><th>Característica</th></tr>
+<tr><td><code>trixie</code> (estável)</td><td><code>8.14.1-2+deb13u5</code></td><td>Versão "congelada" do lançamento</td></tr>
+<tr><td><code>trixie-security</code></td><td><code>8.14.1-2+deb13u7</code></td><td>A mesma versão, com correções de segurança</td></tr>
+<tr><td><code>trixie-backports</code></td><td><code>8.21.0-2~bpo13+1</code></td><td>Versão nova, recompilada para o 13</td></tr>
+</table>
+</div>
+
+<dl class="anatomy">
+  <dt>8.21.0</dt><dd>A versão do programa (do curl em si).</dd>
+  <dt>-2</dt><dd>A revisão do pacote no Debian.</dd>
+  <dt>~bpo13+1</dt><dd>"Backport para o Debian 13, primeira compilação". O <code>~</code> faz essa versão ser considerada <strong>menor</strong> que a <code>8.21.0-2</code> oficial, para que um upgrade futuro para o Debian 14 a substitua naturalmente.</dd>
+</dl>
+
+<hr>
+
+<h2>Ativar o trixie-backports</h2>
+<p>É só uma linha a mais, num arquivo próprio em <code>/etc/apt/sources.list.d/</code>. Como root:</p>
+
+<pre class="term" data-user="root">#> echo "deb http://deb.debian.org/debian trixie-backports main non-free-firmware" &gt; /etc/apt/sources.list.d/backports.list
+#> apt update
+…
+Obter:5 http://deb.debian.org/debian trixie-backports/main amd64 Packages [285 kB]
+Obter:6 http://deb.debian.org/debian trixie-backports/main Translation-en [223 kB]
+Obter:7 http://deb.debian.org/debian trixie-backports/non-free-firmware amd64 Packages [6.564 B]
+…</pre>
+
+<p>Se preferir o formato novo (veja <a href="repositorios.html">Repositórios</a>), o arquivo <code>/etc/apt/sources.list.d/backports.sources</code> fica assim:</p>
+
+<pre class="file" data-file="/etc/apt/sources.list.d/backports.sources">Types: deb
+URIs: http://deb.debian.org/debian
+Suites: trixie-backports
+Components: main non-free-firmware
+Signed-By: /usr/share/keyrings/debian-archive-keyring.gpg</pre>
+
+<div class="note">
+<strong>Ativar não instala nada</strong>
+<p>Depois do <code>apt update</code>, nenhum pacote muda de versão. O backports fica "de reserva": o apt só usa um pacote de lá quando você pede.</p>
+</div>
+
+<hr>
+
+<h2>Por que nada muda sozinho: as prioridades</h2>
+<p>O <code>apt policy</code> mostra cada versão com um número na frente, a <strong>prioridade</strong>:</p>
+
+<pre class="term">$ apt policy curl
+curl:
+  Instalado: (nenhum)
+  Candidato: 8.14.1-2+deb13u7                               « o que o apt install escolheria
+  Tabela de versão:
+     8.21.0-2~bpo13+1 100                                    « backports: prioridade 100
+        100 http://deb.debian.org/debian trixie-backports/main amd64 Packages
+     8.14.1-2+deb13u7 500                                    « segurança: prioridade 500
+        500 http://security.debian.org/debian-security trixie-security/main amd64 Packages
+     8.14.1-2+deb13u5 500
+        500 http://deb.debian.org/debian trixie/main amd64 Packages</pre>
+
+<p>A regra do apt é: <strong>primeiro a maior prioridade, depois a maior versão</strong>. As versões do estável têm 500; as do backports, 100. Por isso a <code>8.21</code>, mesmo sendo mais nova, perde.</p>
+
+<p>De onde vem o 100? O próprio repositório se declara assim no arquivo <code>Release</code>:</p>
+
+<pre class="term">$ grep -E "^(Suite|NotAutomatic|ButAutomaticUpgrades)" /var/lib/apt/lists/deb.debian.org_debian_dists_trixie-backports_InRelease
+Suite: stable-backports
+NotAutomatic: yes                « não instale daqui sem pedir (prioridade 1)…
+ButAutomaticUpgrades: yes        « …mas atualize o que já veio daqui (prioridade 100)</pre>
+
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Prioridade</th><th>Efeito</th><th>Quem tem</th></tr>
+<tr><td><code>1000</code> ou mais</td><td>Instala mesmo que seja um <em>downgrade</em></td><td>Só com pinning manual</td></tr>
+<tr><td><code>500</code></td><td>Padrão: instala e atualiza normalmente</td><td>trixie, trixie-security, trixie-updates</td></tr>
+<tr><td><code>100</code></td><td>Não instala sozinho; só atualiza o que já veio dali</td><td>trixie-backports; a versão já instalada (<code>/var/lib/dpkg/status</code>)</td></tr>
+<tr><td><code>1</code> a <code>99</code></td><td>Só instala se você pedir explicitamente</td><td>Repositórios com <code>NotAutomatic</code> sem atualização automática</td></tr>
+<tr><td>menor que 0</td><td>Nunca instala</td><td>Pinning para bloquear um pacote</td></tr>
+</table>
+</div>
+
+<hr>
+
+<h2>Instalar do backports: <code>apt install -t</code></h2>
+
+<dl class="anatomy">
+  <dt>apt install</dt><dd>Instalar, como sempre.</dd>
+  <dt>-t trixie-backports</dt><dd><strong>Alvo</strong> (<em>target</em>): nesta instalação, trate o backports como se tivesse prioridade alta. Vale para o pacote e para as dependências que ele exigir de lá.</dd>
+  <dt>cockpit</dt><dd>O pacote (um painel de administração pelo navegador).</dd>
+</dl>
+
+<p>Compare o que o apt faria com e sem o <code>-t</code>, usando <code>-s</code> (simular, sem instalar):</p>
+
+<pre class="term" data-user="root">#> apt-get -s install cockpit | grep "^Inst cockpit "
+Inst cockpit (337-1+deb13u2 Debian:13.7/stable, Debian-Security:13/stable-security [all])
+#> apt-get -s install -t trixie-backports cockpit | grep "^Inst cockpit "
+Inst cockpit (368-1~bpo13+1 Debian Backports:stable-backports [all])</pre>
+
+<p>Sem o <code>-t</code>, vem a versão 337 do estável. Com ele, a 368 do backports. Para instalar de verdade, é o mesmo comando sem o <code>-s</code>:</p>
+
+<pre class="term" data-user="root">#> apt install -t trixie-backports cockpit</pre>
+
+<h3>Formas diferentes de escolher a origem</h3>
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Comando</th><th>O que faz</th><th>Quando usar</th></tr>
+<tr><td><code>apt install -t trixie-backports pacote</code></td><td>Prefere o backports para o pacote e o que ele precisar de lá</td><td>A forma recomendada pelo Debian</td></tr>
+<tr><td><code>apt install pacote/trixie-backports</code></td><td>Pega <strong>só esse</strong> pacote do backports</td><td>Quando as dependências do estável já servem</td></tr>
+<tr><td><code>apt install pacote=8.21.0-2~bpo13+1</code></td><td>Uma versão exata</td><td>Para repetir a mesma versão em várias máquinas</td></tr>
+<tr><td>Pinning (abaixo)</td><td>Regra permanente</td><td>Quando o pacote deve vir sempre do backports</td></tr>
+</table>
+</div>
+
+<h3>Depois de instalado</h3>
+<p>Graças ao <code>ButAutomaticUpgrades</code>, um pacote instalado do backports continua sendo atualizado pelo backports no <code>apt upgrade</code> comum. Para ver quais pacotes da máquina vieram de lá:</p>
+
+<pre class="term">$ apt list --installed 2&gt;/dev/null | grep backports
+cockpit/stable-backports,now 368-1~bpo13+1 all [instalado]</pre>
+
+<hr>
+
+<h2>Pinning: regras permanentes</h2>
+<p><strong>Pinning</strong> ("alfinetar") é mudar a prioridade de pacotes com um arquivo em <code>/etc/apt/preferences.d/</code>. Exemplo: o curl deve vir sempre do backports.</p>
+
+<pre class="file" data-file="/etc/apt/preferences.d/curl-backports">Package: curl
+Pin: release n=trixie-backports
+Pin-Priority: 500</pre>
+
+<dl class="anatomy">
+  <dt>Package: curl</dt><dd>A quais pacotes a regra vale. Aceita vários separados por espaço e curingas (<code>libcurl*</code>).</dd>
+  <dt>Pin: release n=trixie-backports</dt><dd>A qual origem. <code>n=</code> é o codinome da suíte; <code>a=stable-backports</code> também funciona.</dd>
+  <dt>Pin-Priority: 500</dt><dd>A nova prioridade: igual à do estável, então ganha a versão mais alta, a do backports.</dd>
+</dl>
+
+<pre class="term">$ apt policy curl
+curl:
+  Instalado: (nenhum)
+  Candidato: 8.21.0-2~bpo13+1                         « agora o backports ganha
+  Tabela de versão:
+     8.21.0-2~bpo13+1 500                              « prioridade efetiva 500
+        100 http://deb.debian.org/debian trixie-backports/main amd64 Packages
+     8.14.1-2+deb13u7 500
+        500 http://security.debian.org/debian-security trixie-security/main amd64 Packages
+     8.14.1-2+deb13u5 500
+        500 http://deb.debian.org/debian trixie/main amd64 Packages</pre>
+
+<p>Repare: a linha do repositório continua com <code>100</code>, mas a versão ganhou <code>500</code>, que é a prioridade dada pela sua regra. O <code>apt policy</code> sem nome de pacote lista todas as regras em vigor no fim, em "Pacotes alfinetados (pinned)".</p>
+
+<h3>Outros usos do pinning</h3>
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Objetivo</th><th>Regra</th></tr>
+<tr><td>Nunca instalar um pacote</td><td><code>Package: snapd</code> · <code>Pin: release *</code> · <code>Pin-Priority: -1</code></td></tr>
+<tr><td>Segurar uma versão exata</td><td><code>Package: nginx</code> · <code>Pin: version 1.26.*</code> · <code>Pin-Priority: 1001</code></td></tr>
+<tr><td>Só segurar, sem arquivo</td><td><code>apt-mark hold nginx</code> (e <code>apt-mark unhold</code> para soltar)</td></tr>
+</table>
+</div>
+
+<hr>
+
+<h2>Por que não misturar testing: o "FrankenDebian"</h2>
+<p>É tentador acrescentar a linha da <code>testing</code> (<code>forky</code>) ou da <code>unstable</code> (<code>sid</code>) para ter "tudo mais novo". Não faça isso num Debian estável.</p>
+
+<ul>
+  <li>Os pacotes da testing são compilados para as bibliotecas da testing. Instalar um deles puxa uma <code>libc6</code> nova, que puxa dezenas de outras, e em pouco tempo o sistema é metade 13, metade 14.</li>
+  <li>Essa mistura não é testada por ninguém. Atualizações começam a falhar com dependências impossíveis, e a próxima atualização de versão vira uma loteria.</li>
+  <li>A equipe de segurança não cobre a testing como cobre o estável.</li>
+</ul>
+
+<p>A própria documentação do Debian chama essa mistura de <strong>FrankenDebian</strong>. Se você precisa de um programa mais novo, a ordem de preferência é: backports; o repositório oficial do fabricante para Debian 13; um <a href="flatpak.html">Flatpak</a>; um container. Se você quer tudo mais novo, instale a testing inteira numa máquina separada, sabendo o que isso significa (veja <a href="versoes.html">Versões do Debian</a>).</p>
+
+<hr>
+
+<h2>Quando não funciona</h2>
+
+<div class="cenario">
+<strong>"apt install pacote" não pega a versão do backports</strong>
+<pre class="term" data-user="root">#> apt-get -s install cockpit | grep "^Inst cockpit "
+Inst cockpit (337-1+deb13u2 Debian:13.7/stable, Debian-Security:13/stable-security [all])</pre>
+<p><strong>O que aconteceu:</strong> é o comportamento esperado: o backports tem prioridade 100.</p>
+<p><strong>Como resolver:</strong> use <code>-t trixie-backports</code> ou uma regra de pinning.</p>
+</div>
+
+<div class="cenario">
+<strong>"-t trixie-backports" diz que o valor é inválido</strong>
+<pre class="term" data-user="root">#> apt install -t trixie-backports cockpit
+Erro: O valor 'trixie-backports' é inválido para APT::Default-Release, pois essa versão não está disponível nas fontes
+#> apt install cockpit/trixie-backports
+Erro: Release 'trixie-backports' para 'cockpit' não foi encontrada</pre>
+<p><strong>O que aconteceu:</strong> para o apt, a suíte <code>trixie-backports</code> não existe: o repositório não foi ativado, ou você não rodou o <code>apt update</code> depois de ativá-lo.</p>
+<p><strong>Como resolver:</strong> confira o arquivo em <code>/etc/apt/sources.list.d/</code>, rode <code>apt update</code> e veja com <code>apt policy cockpit</code> se a versão <code>~bpo13</code> aparece.</p>
+</div>
+
+<div class="cenario">
+<strong>Quero voltar à versão do estável</strong>
+<pre class="term" data-user="root">#> apt install cockpit/trixie</pre>
+<p><strong>O que acontece:</strong> o apt instala a versão do estável, que é menor: um <em>downgrade</em>. Ele pede confirmação. Depois, apague a regra de pinning (se houver) para o backports não voltar no próximo upgrade.</p>
+</div>
+
+<hr>
+
+<h2>Referência</h2>
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Comando / arquivo</th><th>Para quê</th></tr>
+<tr><td><code>/etc/apt/sources.list.d/backports.list</code></td><td>Liga o <code>trixie-backports</code></td></tr>
+<tr><td><code>apt policy pacote</code></td><td>Versões, origens e prioridades</td></tr>
+<tr><td><code>apt list -a pacote</code></td><td>Todas as versões disponíveis, em linhas curtas</td></tr>
+<tr><td><code>apt install -t trixie-backports pacote</code></td><td>Instala do backports</td></tr>
+<tr><td><code>apt install pacote/trixie-backports</code></td><td>Só esse pacote do backports</td></tr>
+<tr><td><code>apt-get -s install …</code></td><td>Simula, para ver o que aconteceria</td></tr>
+<tr><td><code>/etc/apt/preferences.d/</code></td><td>Regras de pinning</td></tr>
+<tr><td><code>apt-mark hold</code> / <code>unhold</code></td><td>Segura / solta a versão de um pacote</td></tr>
+</table>
+</div>
+
+<pre class="term">$ apt list -a curl
+Listando...
+curl/stable-backports 8.21.0-2~bpo13+1 amd64
+curl/stable-security 8.14.1-2+deb13u7 amd64
+curl/stable 8.14.1-2+deb13u5 amd64</pre>
+
+<hr>
+
+<h2>Exercícios</h2>
+
+<div class="exercise">
+<h3>1. Instalar do backports</h3>
+<p>Complete para instalar o <code>cockpit</code> do backports:</p>
+<div class="ex-code">apt install <input data-answer="-t trixie-backports|--target-release trixie-backports" aria-label="opção"> cockpit</div>
+</div>
+
+<div class="exercise">
+<h3>2. A prioridade padrão</h3>
+<p>Qual é a prioridade das versões do repositório estável (<code>trixie</code>)?</p>
+<div class="ex-code"><input data-answer="500" aria-label="prioridade"></div>
+</div>
+
+<div class="exercise">
+<h3>3. Regra de pinning</h3>
+<p>Complete a linha que escolhe a origem numa regra de pinning:</p>
+<div class="ex-code">Pin: release <input data-answer="n=trixie-backports|a=stable-backports" aria-label="origem"></div>
+</div>
+
+<div class="mc" data-answer="2">
+<p class="mc-q">4. O que significa <code>~bpo13+1</code> na versão <code>8.21.0-2~bpo13+1</code>?</p>
+<label><input type="radio" name="q4"> Uma versão de teste instável.</label>
+<label><input type="radio" name="q4"> Um backport para o Debian 13, recompilado uma vez.</label>
+<label><input type="radio" name="q4"> Uma versão do Ubuntu.</label>
+<label><input type="radio" name="q4"> Uma correção de segurança.</label>
+</div>
+
+<div class="mc" data-answer="3">
+<p class="mc-q">5. Por que não adicionar a <code>testing</code> no sources.list de um Debian estável?</p>
+<label><input type="radio" name="q5"> Porque a testing é paga.</label>
+<label><input type="radio" name="q5"> Porque o apt não aceita duas suítes.</label>
+<label><input type="radio" name="q5"> Porque os pacotes puxam bibliotecas novas e misturam duas versões do Debian.</label>
+<label><input type="radio" name="q5"> Porque a testing não tem firmware.</label>
+</div>
+
+<hr>
+
+<h2>Resumo</h2>
+<ul>
+  <li>O <code>trixie-backports</code> traz versões novas recompiladas para o Debian 13 (<code>~bpo13</code>).</li>
+  <li>Ativá-lo não muda nada: ele tem prioridade 100, contra 500 do estável.</li>
+  <li>Para instalar de lá: <code>apt install -t trixie-backports pacote</code>; depois, ele se atualiza pelo backports.</li>
+  <li>Pinning em <code>/etc/apt/preferences.d/</code> muda prioridades de forma permanente.</li>
+  <li>Nunca misture testing ou unstable no estável: é o "FrankenDebian".</li>
+</ul>
+
+<div class="pager"></div>
+
+</div>
+</main>
+</div>
+<script src="assets/site.js"></script>
+</body>
+</html>

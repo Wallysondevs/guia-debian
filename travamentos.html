@@ -1,0 +1,364 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Debian Quando o Sistema Trava — TTY, SysRq e REISUB | Guia Debian</title>
+<meta name="description" content="O que fazer quando o Debian trava: forçar saída, abrir um TTY com Ctrl+Alt+F3, reiniciar o GDM com su -, acessar por SSH e usar as teclas SysRq (REISUB) com o valor 438 do Debian explicado bit a bit.">
+<link rel="stylesheet" href="assets/style.css">
+<script>try{var t=localStorage.getItem("tema");if(t)document.documentElement.setAttribute("data-theme",t)}catch(e){}</script>
+</head>
+<body>
+<div class="layout">
+<nav class="sidebar" id="sidebar" aria-label="Tópicos"></nav>
+<main class="main">
+<div class="content">
+
+<div class="pager"></div>
+
+<h1>Debian <span class="hl">Quando o Sistema Trava</span></h1>
+
+<p class="intro">A tela congelou, o mouse não responde, nada abre. Antes de segurar o botão de energia, existem saídas mais seguras. A principal é um terminal "escondido", fora da interface gráfica, que você abre com <kbd>Ctrl</kbd>+<kbd>Alt</kbd>+<kbd>F3</kbd>. Esta aula mostra o que fazer, na ordem certa, num Debian 13.</p>
+
+<div class="note">
+<strong>Você vai aprender</strong>
+<ul>
+  <li>A ordem do que tentar, do mais leve ao mais pesado.</li>
+  <li>O que é um <strong>TTY</strong> e como usá-lo para salvar uma sessão travada.</li>
+  <li>Como reiniciar só a interface gráfica, usando <code>su -</code> (o Debian não traz <code>sudo</code>).</li>
+  <li>As "teclas mágicas" <strong>SysRq</strong> (REISUB) e por que, no Debian, só algumas funcionam.</li>
+  <li>Como descobrir a causa depois que o computador voltar.</li>
+</ul>
+</div>
+
+<div class="tip">
+<strong>Treine antes de precisar</strong>
+<p>Leia esta página com calma e teste os atalhos com o computador funcionando. Na hora do aperto, você vai saber o que fazer.</p>
+</div>
+
+<hr>
+
+<h2>O que fazer, na ordem</h2>
+<ol class="passo">
+  <li><strong>Espere 30 segundos.</strong> Às vezes o sistema só está ocupado (disco ou memória no limite). Se a luz do disco pisca ou o ventilador acelera, ele está trabalhando.</li>
+  <li><strong>Feche o programa travado.</strong> Se só uma janela parou, use "Forçar saída" ou o <a href="kill.html">kill</a>.</li>
+  <li><strong>Abra um TTY</strong> com <kbd>Ctrl</kbd>+<kbd>Alt</kbd>+<kbd>F3</kbd>. De lá, encerre o culpado ou reinicie a interface.</li>
+  <li><strong>Acesse por SSH</strong> de outro computador, se a máquina tiver o servidor SSH.</li>
+  <li><strong>Use as teclas SysRq</strong> (<kbd>Alt</kbd>+<kbd>SysRq</kbd>+<kbd>R</kbd>, <kbd>S</kbd>, <kbd>U</kbd>, <kbd>B</kbd>) para reiniciar com os discos em segurança.</li>
+  <li><strong>Último recurso:</strong> segure o botão de energia por 5 a 10 segundos.</li>
+</ol>
+
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Atalho</th><th>O que faz</th><th>Quando usar</th></tr>
+<tr><td><kbd>Ctrl</kbd>+<kbd>Alt</kbd>+<kbd>F3</kbd> … <kbd>F6</kbd></td><td>Abre um terminal de texto (TTY) fora da interface</td><td>A interface gráfica travou</td></tr>
+<tr><td><kbd>Ctrl</kbd>+<kbd>Alt</kbd>+<kbd>F2</kbd></td><td>Volta para a sua sessão gráfica (às vezes é <kbd>F1</kbd>)</td><td>Depois de resolver no TTY</td></tr>
+<tr><td><kbd>Super</kbd>, digite "terminal", <kbd>Enter</kbd></td><td>Abre o terminal normal. No GNOME do Debian, o <kbd>Ctrl</kbd>+<kbd>Alt</kbd>+<kbd>T</kbd> do Ubuntu <strong>não</strong> vem configurado (veja como criar em <a href="ref-atalhos.html">Atalhos de Teclado</a>)</td><td>Só um programa travou</td></tr>
+<tr><td><kbd>Alt</kbd>+<kbd>SysRq</kbd>+<kbd>R</kbd> <kbd>S</kbd> <kbd>U</kbd> <kbd>B</kbd></td><td>Retoma o teclado, grava os discos, protege e reinicia</td><td>Nem o TTY responde</td></tr>
+<tr><td>Botão de energia (5–10 s)</td><td>Desliga na marra</td><td>Nada mais funciona</td></tr>
+</table>
+</div>
+
+<hr>
+
+<h2>Passos 1 e 2: um programa travado</h2>
+<p>Se o mouse ainda se mexe e só uma janela parou, depois de alguns segundos o GNOME mostra o aviso <strong>"… não está respondendo"</strong>, com os botões <strong>Esperar</strong> e <strong>Forçar saída</strong>. "Forçar saída" fecha o programa e perde o que não foi salvo.</p>
+
+<p>Pelo terminal comum, você acha o programa pelo nome e o encerra. Exemplo com o Firefox, que no Debian se chama <code>firefox-esr</code>:</p>
+
+<pre class="term">$ pgrep -l firefox
+2210 firefox-esr
+$ pkill firefox-esr</pre>
+
+<p>Detalhes em <a href="processos.html">ps, pgrep, top</a> e <a href="kill.html">Encerrar Programas</a>.</p>
+
+<hr>
+
+<h2>Passo 3: o TTY, o terminal fora da interface</h2>
+<p>O Linux tem vários <strong>consoles virtuais</strong>, chamados de <strong>TTY</strong> (de <em>teletypewriter</em>, os antigos terminais de teletipo). A interface gráfica ocupa um deles; os outros ficam disponíveis em modo texto. Como não dependem do GNOME, continuam funcionando quando a interface trava.</p>
+
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Console</th><th>Atalho</th><th>No Debian 13 com GNOME</th></tr>
+<tr><td>TTY1</td><td><kbd>Ctrl</kbd>+<kbd>Alt</kbd>+<kbd>F1</kbd></td><td>Tela de login gráfica (GDM)</td></tr>
+<tr><td>TTY2</td><td><kbd>Ctrl</kbd>+<kbd>Alt</kbd>+<kbd>F2</kbd></td><td>A sua sessão gráfica, depois do login</td></tr>
+<tr><td>TTY3 a TTY6</td><td><kbd>Ctrl</kbd>+<kbd>Alt</kbd>+<kbd>F3</kbd> … <kbd>F6</kbd></td><td>Consoles de texto livres</td></tr>
+</table>
+</div>
+
+<div class="note">
+<strong>Servidor sem interface</strong>
+<p>Num Debian instalado sem área de trabalho (como a máquina de laboratório deste guia), o TTY1 já é um console de texto com o login <code>notebook login:</code>.</p>
+</div>
+
+<h3>Entrando no TTY</h3>
+<p>Aperte <kbd>Ctrl</kbd>+<kbd>Alt</kbd>+<kbd>F3</kbd>. A tela fica preta com um pedido de login. Digite seu usuário, aperte <kbd>Enter</kbd> e depois a senha.</p>
+
+<pre class="term" data-title="tty3">Debian GNU/Linux 13 notebook tty3
+
+notebook login: ana
+Password:                                   « a senha não aparece enquanto você digita
+Linux notebook 6.12.111+deb13-amd64 #1 SMP PREEMPT_DYNAMIC Debian 6.12.111-1 (2026-09-28) x86_64
+
+The programs included with the Debian GNU/Linux system are free software;
+the exact distribution terms for each program are described in the
+individual files in /usr/share/doc/*/copyright.
+
+Debian GNU/Linux comes with ABSOLUTELY NO WARRANTY, to the extent
+permitted by applicable law.
+$ whoami
+ana</pre>
+
+<p>A mensagem de boas-vindas do Debian (o "MOTD", de <em>message of the day</em>) aparece em inglês mesmo com o sistema em português. Repare também que o pedido de senha diz <code>Password:</code>: quem pergunta é o programa de login, e ele vem em inglês. Se errar, aparece <code>Login incorrect</code> e você tenta de novo.</p>
+
+<h3>Descobrindo e encerrando o culpado</h3>
+<p>Já dentro do TTY, veja quem está gastando mais CPU (processador) ou memória:</p>
+
+<dl class="anatomy">
+  <dt>ps aux</dt><dd>Lista todos os processos (veja <a href="processos.html">ps, pgrep, top</a>).</dd>
+  <dt>--sort=-%cpu</dt><dd>Ordena pela coluna %CPU, do maior para o menor (o <code>-</code> inverte).</dd>
+  <dt>| head -5</dt><dd>Mostra só as 5 primeiras linhas.</dd>
+</dl>
+
+<pre class="term" data-title="tty3">$ ps aux --sort=-%cpu | head -5
+USER         PID %CPU %MEM    VSZ   RSS TTY      STAT START   TIME COMMAND
+ana         2210 98.7 41.3 9184004 1658432 ?     Rl   09:12  14:03 /usr/lib/firefox-esr/firefox-esr   « o culpado
+ana         1534  6.1  4.2 5302180 171776 ?      Ssl  08:00   1:12 /usr/bin/gnome-shell
+root         640  0.2  0.2 330280 11264 ?        Ssl  08:00   0:02 /usr/sbin/NetworkManager --no-daemon
+ana         2950  0.1  0.9 653348 38912 ?        Ssl  08:01   0:01 /usr/libexec/gnome-terminal-server
+$ kill 2210</pre>
+
+<p>Se o processo não morrer em alguns segundos, use o sinal que não pode ser ignorado: <code>kill -9 2210</code>. Para voltar à interface, aperte <kbd>Ctrl</kbd>+<kbd>Alt</kbd>+<kbd>F2</kbd>.</p>
+
+<h3>Reiniciar só a interface gráfica</h3>
+<p>Se a interface inteira travou (e não um programa), reinicie o <strong>GDM</strong>, o gerenciador de login do GNOME. No Debian o serviço se chama <code>gdm</code>, com o apelido <code>gdm3</code>. Como isso exige o administrador, e o Debian não tem <code>sudo</code> por padrão, use <code>su -</code> (veja <a href="root-su-sudo.html">root, su e sudo</a>):</p>
+
+<dl class="anatomy">
+  <dt>su -</dt><dd>Vira o usuário root, pedindo a <strong>senha do root</strong>.</dd>
+  <dt>systemctl restart gdm</dt><dd>Reinicia o serviço da tela de login e da sessão gráfica.</dd>
+</dl>
+
+<pre class="term" data-title="tty3">$ su -
+Senha:
+#> systemctl restart gdm</pre>
+
+<div class="warning">
+<strong>Atenção: isso fecha a sua sessão</strong>
+<p>Reiniciar o GDM encerra todos os programas abertos na interface. O que não foi salvo se perde. A tela de login volta em alguns segundos (às vezes no TTY1: <kbd>Ctrl</kbd>+<kbd>Alt</kbd>+<kbd>F1</kbd>).</p>
+</div>
+
+<p>Duas alternativas, também como root: <code>loginctl terminate-user ana</code> encerra só a sessão da ana, e <code>systemctl reboot</code> reinicia a máquina inteira de forma limpa.</p>
+
+<div class="note">
+<strong>Por que "reboot" sozinho não funciona para a ana?</strong>
+<p>No Debian, o <code>PATH</code> do usuário comum não inclui <code>/sbin</code>. Digitando <code>reboot</code> como ana, o resultado é <code>bash: reboot: comando não encontrado</code>. Como root (depois do <code>su -</code>), funciona.</p>
+</div>
+
+<hr>
+
+<h2>Passo 4: por SSH, de outro computador</h2>
+<p>Se o teclado não responde nem no TTY, mas a máquina ainda está na rede, outro computador pode entrar nela por SSH e fazer o mesmo trabalho do TTY. Isso exige que o servidor SSH esteja instalado (no instalador do Debian é a opção "servidor SSH"):</p>
+
+<pre class="term" data-host="outro-pc">$ ssh ana@192.168.0.15
+ana@192.168.0.15's password:
+$ su -
+Senha:
+#> systemctl restart gdm</pre>
+
+<p>Veja <a href="ssh.html">SSH</a>.</p>
+
+<hr>
+
+<h2>Passo 5: as teclas mágicas SysRq (REISUB)</h2>
+<p>A tecla <strong>SysRq</strong> (de <em>System Request</em>, "pedido ao sistema") fala direto com o kernel, sem passar pela interface nem pelos programas. Ela costuma estar na mesma tecla do <kbd>Print Screen</kbd> (<kbd>PrtSc</kbd>). Em notebooks, às vezes é preciso segurar <kbd>Fn</kbd> também.</p>
+
+<p>A sequência clássica é <strong>REISUB</strong>. Segure <kbd>Alt</kbd>+<kbd>SysRq</kbd> e aperte as letras <strong>devagar</strong>, uma a cada 1 ou 2 segundos:</p>
+
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Tecla</th><th>Nome</th><th>O que faz</th><th>No Debian (padrão 438)</th></tr>
+<tr><td><kbd>R</kbd></td><td>unRaw</td><td>Tira o teclado do controle da interface gráfica</td><td>Funciona</td></tr>
+<tr><td><kbd>E</kbd></td><td>tErminate</td><td>Pede para todos os processos fecharem (sinal TERM)</td><td><strong>Bloqueada</strong></td></tr>
+<tr><td><kbd>I</kbd></td><td>kIll</td><td>Mata todos os processos (sinal KILL)</td><td><strong>Bloqueada</strong></td></tr>
+<tr><td><kbd>S</kbd></td><td>Sync</td><td>Grava nos discos o que está na memória</td><td>Funciona</td></tr>
+<tr><td><kbd>U</kbd></td><td>Unmount</td><td>Remonta os discos como só leitura</td><td>Funciona</td></tr>
+<tr><td><kbd>B</kbd></td><td>reBoot</td><td>Reinicia imediatamente</td><td>Funciona</td></tr>
+</table>
+</div>
+
+<p>Uma frase para lembrar a ordem: "<strong>R</strong>einiciar <strong>E</strong>m <strong>I</strong>ntervalos <strong>S</strong>eguros <strong>U</strong>sando <strong>B</strong>om senso".</p>
+
+<h3>Por que E e I não funcionam: o número 438</h3>
+<p>O kernel só obedece às funções liberadas na configuração <code>kernel.sysrq</code>. Veja o valor no Debian:</p>
+
+<pre class="term">$ cat /proc/sys/kernel/sysrq
+438</pre>
+
+<p>Esse valor vem de um arquivo de configuração padrão do systemd no Debian:</p>
+
+<pre class="file" data-file="/usr/lib/sysctl.d/50-default.conf (trecho)"># System Request functionality of the kernel (SYNC)
+#
+# Use kernel.sysrq = 1 to allow all keys.
+# See https://docs.kernel.org/admin-guide/sysrq.html for a list
+# of values and keys.
+kernel.sysrq = 0x01b6</pre>
+
+<p><code>0x01b6</code> é o número 438 escrito em hexadecimal. Ele é uma <strong>soma</strong> de funções, cada uma com seu valor:</p>
+
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Valor</th><th>Função liberada</th><th>Teclas</th><th>Está em 438?</th></tr>
+<tr><td>2</td><td>Nível de log do console</td><td>0 a 9</td><td>Sim</td></tr>
+<tr><td>4</td><td>Controle do teclado</td><td>R (e K)</td><td>Sim</td></tr>
+<tr><td>8</td><td>Informações de depuração</td><td>P, T, M…</td><td>Não</td></tr>
+<tr><td>16</td><td>Sincronizar discos</td><td>S</td><td>Sim</td></tr>
+<tr><td>32</td><td>Remontar só leitura</td><td>U</td><td>Sim</td></tr>
+<tr><td>64</td><td>Mandar sinais aos processos</td><td>E, I (e F)</td><td><strong>Não</strong></td></tr>
+<tr><td>128</td><td>Reiniciar e desligar</td><td>B, O</td><td>Sim</td></tr>
+<tr><td>256</td><td>Prioridade de tarefas de tempo real</td><td>N</td><td>Sim</td></tr>
+</table>
+</div>
+
+<p>A conta: 2 + 4 + 16 + 32 + 128 + 256 = <strong>438</strong>. Falta o 64, por isso E e I estão bloqueadas.</p>
+
+<div class="tip">
+<strong>Comparando com o Ubuntu</strong>
+<p>O Ubuntu usa <code>176</code> (16 + 32 + 128): lá só S, U e B funcionam. O Debian libera um pouco mais (o R e o N), mas também bloqueia E e I.</p>
+</div>
+
+<h3>Liberando todas as teclas</h3>
+<p>Para testar agora, até o próximo reinício (como root):</p>
+
+<pre class="term">$ su -
+Senha:
+#> echo 1 &gt; /proc/sys/kernel/sysrq
+#> cat /proc/sys/kernel/sysrq
+1</pre>
+
+<p>Para deixar permanente, crie um arquivo seu em <code>/etc/sysctl.d/</code> (ele vale mais que o de <code>/usr/lib/sysctl.d/</code>) e recarregue:</p>
+
+<pre class="file" data-file="/etc/sysctl.d/90-sysrq.conf">kernel.sysrq = 1</pre>
+
+<pre class="term">#> sysctl --system</pre>
+
+<div class="warning">
+<strong>Atenção</strong>
+<p>Com <code>kernel.sysrq = 1</code>, qualquer pessoa com acesso ao teclado pode, por exemplo, matar todos os programas. Em computadores de uso compartilhado, avalie antes.</p>
+</div>
+
+<h3>Em máquina virtual</h3>
+<p>No VirtualBox, a combinação costuma ser capturada pelo seu computador, não pela VM. Use o menu <strong>Entrada → Teclado</strong> ou a tecla Host (normalmente o <kbd>Ctrl</kbd> da direita) com <kbd>F3</kbd> para trocar de TTY.</p>
+
+<hr>
+
+<h2>Passo 6: o botão de energia</h2>
+<p>Se nada respondeu, segure o botão de energia por 5 a 10 segundos. É como puxar a tomada: o que estava sendo gravado pode se corromper. O Debian costuma verificar o disco sozinho no próximo boot.</p>
+
+<hr>
+
+<h2>Depois que voltar: descubra a causa</h2>
+<p>O registro do sistema (<em>journal</em>) guarda o que aconteceu antes do travamento. O <code>-b -1</code> mostra o boot <strong>anterior</strong>, e o <code>-p err</code> só os erros:</p>
+
+<pre class="term">$ su -
+Senha:
+#> journalctl -b -1 -p err --no-pager | tail -5
+out 15 09:40:11 notebook kernel: Out of memory: Killed process 2210 (firefox-esr) total-vm:9184004kB
+out 15 09:40:58 notebook gnome-shell[1534]: JS ERROR: …</pre>
+
+<p>A linha <code>Out of memory</code> indica que a memória acabou. Veja <a href="journalctl.html">Logs (journalctl)</a>.</p>
+
+<div class="note">
+<strong>Por que usar o root aqui?</strong>
+<p>Como ana, o <code>journalctl</code> mostra só os seus próprios registros e avisa: <code>Hint: You are currently not seeing messages from other users and the system.</code> No Debian a ana não está no grupo <code>adm</code> nem no <code>systemd-journal</code>, que dão acesso a tudo.</p>
+</div>
+
+<hr>
+
+<h2>Quando não funciona</h2>
+
+<div class="cenario">
+<strong>Ctrl+Alt+F3 não faz nada</strong>
+<p><strong>O que aconteceu:</strong> o kernel ou a placa de vídeo travaram de verdade, ou você está numa máquina virtual que captura o atalho.</p>
+<p><strong>Como resolver:</strong> espere um pouco e tente de novo. Em VM, use o menu do VirtualBox. Se nada vier, passe para o SSH ou o SysRq.</p>
+</div>
+
+<div class="cenario">
+<strong>"su: Falha de autenticação"</strong>
+<pre class="term">$ su -
+Senha:
+su: Falha de autenticação</pre>
+<p><strong>O que aconteceu:</strong> o <code>su</code> pede a senha do <strong>root</strong>, não a sua. Ela foi definida na instalação do Debian.</p>
+<p><strong>Como resolver:</strong> digite a senha do root com calma (nada aparece na tela). Se o sistema foi instalado sem senha de root, o seu usuário tem <code>sudo</code>: use <code>sudo systemctl restart gdm</code>.</p>
+</div>
+
+<div class="cenario">
+<strong>"bash: reboot: comando não encontrado"</strong>
+<p><strong>O que aconteceu:</strong> você estava como ana, e o <code>reboot</code> fica em <code>/usr/sbin</code>, fora do seu <code>PATH</code>.</p>
+<p><strong>Como resolver:</strong> faça <code>su -</code> antes e rode <code>systemctl reboot</code> (ou <code>reboot</code>).</p>
+</div>
+
+<div class="cenario">
+<strong>REISUB não reiniciou</strong>
+<p><strong>O que aconteceu:</strong> o atalho exige segurar <kbd>Alt</kbd>+<kbd>SysRq</kbd> o tempo todo. Em muitos notebooks a SysRq precisa de <kbd>Fn</kbd>. Também pode ser que o <code>kernel.sysrq</code> esteja em 0.</p>
+<p><strong>Como resolver:</strong> confira com <code>cat /proc/sys/kernel/sysrq</code> e treine com o computador funcionando, usando só <kbd>Alt</kbd>+<kbd>SysRq</kbd>+<kbd>S</kbd> (que é inofensivo: só grava os discos).</p>
+</div>
+
+<hr>
+
+<h2>Exercícios</h2>
+
+<div class="exercise">
+<h3>1. O terminal de emergência</h3>
+<p>Qual tecla de função, junto com <kbd>Ctrl</kbd>+<kbd>Alt</kbd>, abre o primeiro console de texto livre?</p>
+<div class="ex-code">Ctrl+Alt+<input data-answer="F3|f3" aria-label="tecla"></div>
+</div>
+
+<div class="exercise">
+<h3>2. Reiniciar a interface</h3>
+<p>Como root, complete o comando que reinicia o gerenciador de login do GNOME no Debian:</p>
+<div class="ex-code">systemctl restart <input data-answer="gdm|gdm3|gdm.service" aria-label="serviço"></div>
+</div>
+
+<div class="mc" data-answer="3">
+<p class="mc-q">3. Com <code>kernel.sysrq = 438</code>, quais letras de REISUB funcionam?</p>
+<label><input type="radio" name="q3"> Todas</label>
+<label><input type="radio" name="q3"> Só S, U e B</label>
+<label><input type="radio" name="q3"> R, S, U e B</label>
+<label><input type="radio" name="q3"> Nenhuma</label>
+</div>
+
+<div class="mc" data-answer="2">
+<p class="mc-q">4. Você está no TTY como ana e digita <code>reboot</code>. O que acontece?</p>
+<label><input type="radio" name="q4"> O computador reinicia.</label>
+<label><input type="radio" name="q4"> Aparece <code>bash: reboot: comando não encontrado</code>.</label>
+<label><input type="radio" name="q4"> Ele pede a senha do root.</label>
+<label><input type="radio" name="q4"> Abre o GDM.</label>
+</div>
+
+<div class="mc" data-answer="1">
+<p class="mc-q">5. Qual valor falta em 438 para liberar as teclas E e I?</p>
+<label><input type="radio" name="q5"> 64</label>
+<label><input type="radio" name="q5"> 8</label>
+<label><input type="radio" name="q5"> 128</label>
+<label><input type="radio" name="q5"> 16</label>
+</div>
+
+<hr>
+
+<h2>Resumo</h2>
+<ul>
+  <li>Vá do mais leve ao mais pesado: esperar, forçar saída, TTY, SSH, SysRq, botão.</li>
+  <li><kbd>Ctrl</kbd>+<kbd>Alt</kbd>+<kbd>F3</kbd> abre um console de texto; <kbd>F2</kbd> volta à sessão gráfica.</li>
+  <li>No Debian, ações de administrador usam <code>su -</code> e a senha do root; o GDM reinicia com <code>systemctl restart gdm</code>.</li>
+  <li>O Debian usa <code>kernel.sysrq = 438</code>: R, S, U e B funcionam; E e I não.</li>
+  <li>Depois do susto, procure a causa com <code>journalctl -b -1 -p err</code>.</li>
+</ul>
+
+<div class="pager"></div>
+
+</div>
+</main>
+</div>
+<script src="assets/site.js"></script>
+</body>
+</html>

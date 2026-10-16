@@ -1,0 +1,388 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Debian Ansible — automatizar servidores com playbooks | Guia Debian</title>
+<meta name="description" content="Ansible no Debian 13: instalar, inventário, comandos ad-hoc, playbook comentado, --check, --diff, idempotência, become com su (sem sudo) e os erros mais comuns, testado num Debian real.">
+<link rel="stylesheet" href="assets/style.css">
+<script>try{var t=localStorage.getItem("tema");if(t)document.documentElement.setAttribute("data-theme",t)}catch(e){}</script>
+</head>
+<body>
+<div class="layout">
+<nav class="sidebar" id="sidebar" aria-label="Tópicos"></nav>
+<main class="main">
+<div class="content">
+
+<div class="pager"></div>
+
+<h1>Debian <span class="hl">Ansible</span></h1>
+
+<p class="intro">Configurar um servidor à mão é fácil. Configurar dez servidores <strong>do mesmo jeito</strong>, e lembrar daqui a um ano o que foi feito, não é. O <strong>Ansible</strong> resolve isso: você descreve o estado que quer ("o pacote tal instalado, o usuário tal criado, o serviço tal ativo") num arquivo de texto, e ele chega lá, em uma máquina ou em cem, por SSH.</p>
+
+<div class="note">
+<strong>Você vai aprender</strong>
+<ul>
+  <li>As peças do Ansible: máquina de controle, inventário, módulo, tarefa e playbook.</li>
+  <li>Rodar comandos avulsos (<em>ad-hoc</em>) e um playbook completo.</li>
+  <li>Testar antes com <code>--check</code> e <code>--diff</code>.</li>
+  <li>O que é <strong>idempotência</strong>, e por que rodar duas vezes não estraga nada.</li>
+  <li>Como o Ansible vira root num Debian sem sudo.</li>
+</ul>
+</div>
+
+<p>Tudo nesta página foi rodado no Debian 13 de laboratório, com ansible-core 2.19.11, contra a própria máquina (<code>localhost</code>).</p>
+
+<hr>
+
+<h2>Conceito: as peças</h2>
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Peça</th><th>O que é</th><th>Exemplo</th></tr>
+<tr><td><strong>Máquina de controle</strong></td><td>Onde o Ansible está instalado e de onde você manda</td><td>O seu notebook</td></tr>
+<tr><td><strong>Hosts gerenciados</strong></td><td>As máquinas configuradas. Só precisam de SSH e Python, nada de agente</td><td><code>servidor</code>, <code>web1</code>, <code>web2</code></td></tr>
+<tr><td><strong>Inventário</strong></td><td>A lista de hosts, separados em grupos</td><td><code>inventario.ini</code></td></tr>
+<tr><td><strong>Módulo</strong></td><td>Uma "ferramenta" pronta</td><td><code>apt</code>, <code>user</code>, <code>copy</code>, <code>service</code></td></tr>
+<tr><td><strong>Tarefa</strong></td><td>Um módulo com parâmetros</td><td>"instale o pacote tree"</td></tr>
+<tr><td><strong>Playbook</strong></td><td>Arquivo YAML com uma lista de tarefas para um grupo de hosts</td><td><code>maquina.yml</code></td></tr>
+</table>
+</div>
+
+<hr>
+
+<h2>Instalar</h2>
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Pacote do Debian</th><th>O que traz</th><th>Para quem</th></tr>
+<tr><td><code>ansible-core</code> (2.19)</td><td>O motor e os módulos básicos (<code>ansible.builtin</code>)</td><td>A maioria: é tudo o que esta aula usa</td></tr>
+<tr><td><code>ansible</code> (12.0)</td><td>O core + centenas de coleções da comunidade (bem maior)</td><td>Quem usa módulos de nuvem, redes, bancos…</td></tr>
+<tr><td><code>pipx install ansible</code></td><td>A versão mais nova, isolada do sistema</td><td>Quem precisa de um recurso recente</td></tr>
+</table>
+</div>
+
+<pre class="term">$ su -
+Senha:</pre>
+<pre class="term" data-user="root" data-cwd="/root">#> apt install ansible-core
+#> ansible --version
+ansible [core 2.19.11]
+  config file = None
+  configured module search path = ['/root/.ansible/plugins/modules', '/usr/share/ansible/plugins/modules']
+  ansible python module location = /usr/lib/python3/dist-packages/ansible
+  ansible collection location = /root/.ansible/collections:/usr/share/ansible/collections
+  executable location = /usr/bin/ansible</pre>
+
+<p>O Ansible só precisa estar na máquina de controle. Nos servidores basta o SSH funcionando (veja <a href="ssh.html">SSH</a>) e o Python 3, que o Debian já traz.</p>
+
+<hr>
+
+<h2>O inventário</h2>
+<pre class="file" data-file="inventario.ini"># Grupo de servidores web, acessados por SSH
+[web]
+web1.lan
+web2.lan ansible_user=ana
+
+# Para os exemplos desta aula: a própria máquina, sem SSH
+[locais]
+localhost ansible_connection=local</pre>
+
+<dl class="anatomy">
+  <dt>[web]</dt><dd>Nome do grupo. Você manda comandos para o grupo inteiro de uma vez.</dd>
+  <dt>web2.lan ansible_user=ana</dt><dd>Um host, com uma variável: conectar como <code>ana</code>.</dd>
+  <dt>ansible_connection=local</dt><dd>Não usa SSH: roda direto na máquina de controle.</dd>
+</dl>
+
+<hr>
+
+<h2>Comandos avulsos (<em>ad-hoc</em>)</h2>
+
+<dl class="anatomy">
+  <dt>ansible</dt><dd>O comando para tarefas avulsas (o de playbooks é <code>ansible-playbook</code>).</dd>
+  <dt>localhost</dt><dd>Para quem: um host ou um grupo do inventário.</dd>
+  <dt>-m ping</dt><dd>O módulo. O <code>ping</code> do Ansible não é o ping de rede: ele confere se consegue entrar e rodar Python.</dd>
+</dl>
+
+<pre class="term" data-user="root" data-cwd="/root">#> ansible localhost -m ping
+[WARNING]: No inventory was parsed, only implicit localhost is available
+localhost | SUCCESS => {
+    "changed": false,              « nada foi alterado
+    "ping": "pong"                 « respondeu
+}</pre>
+
+<p>O módulo <code>setup</code> coleta os <strong>fatos</strong> da máquina, que você pode usar nos playbooks:</p>
+
+<pre class="term" data-user="root" data-cwd="/root">#> ansible localhost -m setup -a "filter=ansible_distribution*"
+localhost | SUCCESS => {
+    "ansible_facts": {
+        "ansible_distribution": "Debian",
+        "ansible_distribution_file_parsed": true,
+        "ansible_distribution_file_path": "/etc/os-release",
+        "ansible_distribution_file_variety": "Debian",
+        "ansible_distribution_major_version": "13",
+        "ansible_distribution_minor_version": "7",
+        "ansible_distribution_release": "trixie",
+        "ansible_distribution_version": "13.7"
+    },
+…</pre>
+
+<hr>
+
+<h2>Um playbook, linha por linha</h2>
+
+<pre class="file" data-file="maquina.yml">- name: Prepara a máquina do jeito da equipe   # o "play": um nome…
+  hosts: locais                                # …e para quais hosts
+  tasks:
+    - name: Instala ferramentas                # cada tarefa tem um nome legível
+      ansible.builtin.apt:                     # módulo apt
+        name: [tree, ncdu]
+        state: present                         # "presente": instale se faltar
+        lock_timeout: 3000                     # espera o apt liberar (padrão: 60 s)
+
+    - name: Cria o usuário deploy
+      ansible.builtin.user:
+        name: deploy
+        shell: /bin/bash
+
+    - name: Cria a pasta do app
+      ansible.builtin.file:
+        path: /opt/app
+        state: directory
+        owner: deploy
+        mode: "0755"                           # entre aspas: senão o YAML lê como número
+
+    - name: Escreve o aviso
+      ansible.builtin.copy:
+        dest: /opt/app/LEIAME.txt
+        content: "Servidor gerenciado pelo Ansible. Não edite à mão.\n"
+
+    - name: Garante o cron rodando e ativo no boot
+      ansible.builtin.service:
+        name: cron
+        state: started
+        enabled: true</pre>
+
+<div class="tip">
+<strong>YAML: a indentação é tudo</strong>
+<p>Use sempre espaços (nunca Tab) e alinhe os níveis. Um espaço a mais ou a menos muda o significado ou dá erro de sintaxe.</p>
+</div>
+
+<h3>1. Testar sem mudar nada: <code>--check</code></h3>
+<pre class="term" data-user="root" data-cwd="/root/ansible-lab">#> ansible-playbook -i inventario.ini maquina.yml --check
+PLAY [Prepara a máquina do jeito da equipe] ************************************
+TASK [Gathering Facts] *********************************************************
+ok: [localhost]
+TASK [Instala ferramentas] *****************************************************
+changed: [localhost]                                   « "mudaria", se fosse de verdade
+TASK [Cria o usuário deploy] ***************************************************
+changed: [localhost]
+TASK [Cria a pasta do app] *****************************************************
+[WARNING]: failed to look up user deploy. Create user up to this point in real play
+changed: [localhost]
+TASK [Escreve o aviso] *********************************************************
+changed: [localhost]
+TASK [Garante o cron rodando e ativo no boot] **********************************
+ok: [localhost]                                        « já está como pedido
+PLAY RECAP *********************************************************************
+localhost                  : ok=6    changed=4    unreachable=0    failed=0    skipped=0    rescued=0    ignored=0</pre>
+
+<p>O aviso da pasta aparece porque, no modo de teste, o usuário <code>deploy</code> ainda não foi criado de verdade. É esperado.</p>
+
+<h3>2. Aplicar de verdade</h3>
+<pre class="term" data-user="root" data-cwd="/root/ansible-lab">#> ansible-playbook -i inventario.ini maquina.yml
+PLAY [Prepara a máquina do jeito da equipe] ************************************
+TASK [Gathering Facts] *********************************************************
+ok: [localhost]
+TASK [Instala ferramentas] *****************************************************
+changed: [localhost]
+TASK [Cria o usuário deploy] ***************************************************
+changed: [localhost]
+TASK [Cria a pasta do app] *****************************************************
+changed: [localhost]
+TASK [Escreve o aviso] *********************************************************
+changed: [localhost]
+TASK [Garante o cron rodando e ativo no boot] **********************************
+ok: [localhost]
+PLAY RECAP *********************************************************************
+localhost                  : ok=6    changed=4    unreachable=0    failed=0    skipped=0    rescued=0    ignored=0
+#> cat /opt/app/LEIAME.txt
+Servidor gerenciado pelo Ansible. Não edite à mão.
+#> id deploy
+uid=1001(deploy) gid=1001(deploy) grupos=1001(deploy)</pre>
+
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Palavra</th><th>Significado</th></tr>
+<tr><td><code>ok</code></td><td>Já estava como pedido: nada foi feito</td></tr>
+<tr><td><code>changed</code></td><td>O Ansible alterou algo para chegar ao estado pedido</td></tr>
+<tr><td><code>failed</code></td><td>A tarefa deu erro (e o resto do play para naquele host)</td></tr>
+<tr><td><code>unreachable</code></td><td>Não conseguiu nem entrar no host (SSH)</td></tr>
+<tr><td><code>skipped</code></td><td>Tarefa pulada por uma condição (<code>when:</code>)</td></tr>
+</table>
+</div>
+
+<h3>3. Rodar de novo: idempotência</h3>
+<pre class="term" data-user="root" data-cwd="/root/ansible-lab">#> ansible-playbook -i inventario.ini maquina.yml
+…
+TASK [Instala ferramentas] *****************************************************
+ok: [localhost]
+TASK [Cria o usuário deploy] ***************************************************
+ok: [localhost]
+TASK [Cria a pasta do app] *****************************************************
+ok: [localhost]
+TASK [Escreve o aviso] *********************************************************
+ok: [localhost]
+TASK [Garante o cron rodando e ativo no boot] **********************************
+ok: [localhost]
+PLAY RECAP *********************************************************************
+localhost                  : ok=6    changed=0    unreachable=0    failed=0    skipped=0    rescued=0    ignored=0</pre>
+
+<p>Na segunda vez, tudo aparece como <code>ok</code> e <code>changed=0</code>. Isso é <strong>idempotência</strong>: o Ansible compara o estado atual com o pedido e só mexe no que falta. Rodar o mesmo playbook de novo, todo dia, é seguro, e é assim que você corrige uma máquina que alguém alterou à mão.</p>
+
+<h3>4. Ver o que mudaria num arquivo: <code>--diff</code></h3>
+<p>Trocando "à mão." por "à mão!" no playbook:</p>
+<pre class="term" data-user="root" data-cwd="/root/ansible-lab">#> ansible-playbook -i inventario.ini maquina.yml --check --diff
+…
+TASK [Escreve o aviso] *********************************************************
+--- before
++++ after: /opt/app/LEIAME.txt
+@@ -0,0 +1 @@
++Servidor gerenciado pelo Ansible. Não edite à mão!
+
+changed: [localhost]
+…</pre>
+
+<hr>
+
+<h2>Virar root num Debian sem sudo: <code>become</code></h2>
+<p>Instalar pacotes e criar usuários exige root. Quando o Ansible entra num servidor como usuário comum, ele precisa "virar" root, o que se chama <strong>become</strong>. O padrão é usar <code>sudo</code>, mas num Debian instalado com senha de root ele não existe. Diga ao Ansible para usar o <code>su</code>:</p>
+
+<pre class="file" data-file="trecho do playbook">- name: Configura os servidores web
+  hosts: web
+  become: true            # vire root nas tarefas
+  become_method: su       # usando su, como no Debian sem sudo</pre>
+
+<pre class="term">$ ansible-playbook -i inventario.ini web.yml --ask-become-pass
+BECOME password:          « a senha do root dos servidores</pre>
+
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Situação do servidor</th><th>Configuração</th></tr>
+<tr><td>Debian com senha de root, sem sudo</td><td><code>become_method: su</code> + <code>--ask-become-pass</code> (senha do root)</td></tr>
+<tr><td>Usuário no grupo sudo</td><td><code>become: true</code> (método padrão) + <code>-K</code> (senha do usuário)</td></tr>
+<tr><td>Entrar direto como root por SSH com chave</td><td><code>ansible_user=root</code>, sem become</td></tr>
+</table>
+</div>
+
+<hr>
+
+<h2>Formas diferentes de automatizar</h2>
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Forma</th><th>Melhor quando…</th></tr>
+<tr><td>Script <code>bash</code> + <code>ssh</code></td><td>Uma tarefa simples em poucas máquinas</td></tr>
+<tr><td>Ansible ad-hoc</td><td>Uma pergunta ou ação rápida em várias máquinas (<code>ansible web -a "uptime"</code>)</td></tr>
+<tr><td>Ansible playbook</td><td>Configuração repetível, versionada no <a href="git.html">Git</a></td></tr>
+<tr><td><a href="preseed.html">Preseed</a></td><td>A instalação do sistema em si (o Ansible entra depois)</td></tr>
+</table>
+</div>
+
+<hr>
+
+<h2>Quando não funciona</h2>
+
+<div class="cenario">
+<strong>"Could not find the requested service" no <code>--check</code></strong>
+<pre class="term" data-user="root" data-cwd="/root/ansible-lab">#> ansible-playbook -i inventario.ini servidor.yml --check
+…
+TASK [Garante que o nginx está rodando e ativo no boot] ************************
+[ERROR]: Task failed: Module failed: Could not find the requested service nginx: host
+…
+fatal: [localhost]: FAILED! => {"changed": false, "msg": "Could not find the requested service nginx: host"}</pre>
+<p><strong>O que aconteceu:</strong> no modo de teste, a tarefa anterior só <em>fingiu</em> instalar o nginx. Na tarefa seguinte, o serviço ainda não existe.</p>
+<p><strong>Como resolver:</strong> é uma limitação do <code>--check</code>, não do playbook. Rode de verdade numa máquina de teste, ou acrescente <code>ignore_errors: "{{ ansible_check_mode }}"</code> nessa tarefa.</p>
+</div>
+
+<div class="cenario">
+<strong>Tarefa do apt falha por causa da trava</strong>
+<p><strong>O que aconteceu:</strong> outro <code>apt</code> estava rodando (atualização automática, outro admin) e o módulo desistiu depois de 60 segundos, o padrão.</p>
+<p><strong>Como resolver:</strong> acrescente <code>lock_timeout: 600</code> (ou mais) na tarefa <code>ansible.builtin.apt</code>, como no playbook desta página.</p>
+</div>
+
+<div class="cenario">
+<strong>"Missing sudo password" / "sudo: comando não encontrado"</strong>
+<p><strong>O que aconteceu:</strong> o playbook usa <code>become</code> com o método padrão (sudo) num Debian sem sudo.</p>
+<p><strong>Como resolver:</strong> <code>become_method: su</code> e <code>--ask-become-pass</code> com a senha do root.</p>
+</div>
+
+<div class="cenario">
+<strong>"UNREACHABLE! … Permission denied (publickey)"</strong>
+<p><strong>O que aconteceu:</strong> o Ansible não conseguiu entrar por SSH. <strong>Como confirmar:</strong> <code>ssh usuário@host</code> manualmente. <strong>Como resolver:</strong> copie sua chave com <code>ssh-copy-id</code> (veja <a href="ssh.html">SSH</a>).</p>
+</div>
+
+<hr>
+
+<h2>Referência</h2>
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Comando / módulo</th><th>O que faz</th></tr>
+<tr><td><code>ansible grupo -m ping</code></td><td>Testa acesso</td></tr>
+<tr><td><code>ansible grupo -a "comando"</code></td><td>Roda um comando avulso</td></tr>
+<tr><td><code>ansible-playbook -i inv arq.yml</code></td><td>Roda um playbook</td></tr>
+<tr><td><code>--check</code> / <code>--diff</code></td><td>Simula / mostra diferenças</td></tr>
+<tr><td><code>--limit web1</code></td><td>Só em alguns hosts</td></tr>
+<tr><td><code>--ask-become-pass</code> / <code>-K</code></td><td>Pede a senha para virar root</td></tr>
+<tr><td><code>ansible-doc ansible.builtin.apt</code></td><td>Manual de um módulo</td></tr>
+<tr><td><code>apt</code>, <code>user</code>, <code>file</code>, <code>copy</code>, <code>template</code>, <code>service</code>, <code>lineinfile</code></td><td>Os módulos mais usados</td></tr>
+</table>
+</div>
+
+<hr>
+
+<h2>Exercícios</h2>
+
+<div class="exercise">
+<h3>1. Testar antes</h3>
+<p>Complete para simular o playbook sem mudar nada:</p>
+<div class="ex-code">ansible-playbook -i inventario.ini maquina.yml <input data-answer="--check|-C" aria-label="opção"></div>
+</div>
+
+<div class="exercise">
+<h3>2. Sem sudo</h3>
+<p>Complete para o Ansible virar root usando o <code>su</code>:</p>
+<div class="ex-code">become_method: <input data-answer="su" aria-label="método"></div>
+</div>
+
+<div class="mc" data-answer="2">
+<p class="mc-q">3. Você rodou o mesmo playbook duas vezes. Na segunda, o resumo mostra <code>changed=0</code>. Isso significa…</p>
+<label><input type="radio" name="q3"> …que o playbook falhou.</label>
+<label><input type="radio" name="q3"> …que a máquina já estava no estado pedido (idempotência).</label>
+<label><input type="radio" name="q3"> …que o Ansible não conseguiu entrar.</label>
+<label><input type="radio" name="q3"> …que faltou o <code>--diff</code>.</label>
+</div>
+
+<div class="mc" data-answer="4">
+<p class="mc-q">4. O que os servidores gerenciados precisam ter instalado?</p>
+<label><input type="radio" name="q4"> O Ansible completo.</label>
+<label><input type="radio" name="q4"> Um agente do Ansible.</label>
+<label><input type="radio" name="q4"> O sudo.</label>
+<label><input type="radio" name="q4"> Só SSH e Python.</label>
+</div>
+
+<hr>
+
+<h2>Resumo</h2>
+<ul>
+  <li>Inventário = quem; playbook = o que; módulo = como.</li>
+  <li>Teste com <code>--check --diff</code> antes de aplicar.</li>
+  <li>Idempotência: rodar de novo só mexe no que mudou.</li>
+  <li>No Debian sem sudo: <code>become_method: su</code> + <code>--ask-become-pass</code>.</li>
+  <li><code>ansible-core</code> do Debian basta para começar.</li>
+</ul>
+
+<div class="pager"></div>
+
+</div>
+</main>
+</div>
+<script src="assets/site.js"></script>
+</body>
+</html>

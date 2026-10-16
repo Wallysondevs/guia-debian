@@ -1,0 +1,415 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Debian curl, wget e dig — internet e DNS pelo terminal | Guia Debian</title>
+<meta name="description" content="Baixe arquivos e teste sites e DNS no Debian 13 com wget, curl e dig: o que já vem instalado, códigos HTTP, -I, -L, -o, -f, códigos de erro do curl, dig +short e traceroute, com saídas reais.">
+<link rel="stylesheet" href="assets/style.css">
+<script>try{var t=localStorage.getItem("tema");if(t)document.documentElement.setAttribute("data-theme",t)}catch(e){}</script>
+</head>
+<body>
+<div class="layout">
+<nav class="sidebar" id="sidebar" aria-label="Tópicos"></nav>
+<main class="main">
+<div class="content">
+
+<div class="pager"></div>
+
+<h1>Debian <span class="hl">curl, wget, dig</span></h1>
+
+<p class="intro">Três ferramentas conversam com a internet pelo terminal. O <code>wget</code> baixa arquivos. O <code>curl</code> faz requisições de todo tipo e mostra o que o servidor respondeu, por isso é o favorito para testar sites e APIs. O <code>dig</code> pergunta ao DNS qual é o IP de um nome. No Debian, nem todas vêm instaladas.</p>
+
+<div class="note">
+<strong>Você vai aprender</strong>
+<ul>
+  <li>Quais dessas ferramentas o Debian já traz e como instalar as que faltam.</li>
+  <li>Baixar arquivos com <code>wget</code> e retomar um download interrompido.</li>
+  <li>Ver o cabeçalho e o código HTTP de um site com <code>curl -I</code>.</li>
+  <li>Usar o código de saída do <code>curl</code> em scripts.</li>
+  <li>Descobrir o IP de um nome com <code>dig</code> e o caminho até ele com <code>traceroute</code>.</li>
+</ul>
+</div>
+
+<hr>
+
+<h2>O que já vem instalado</h2>
+<p>Numa instalação do Debian 13 com o grupo "utilitários padrão do sistema" (o normal), a situação é esta:</p>
+
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Ferramenta</th><th>Pacote</th><th>Vem instalado?</th></tr>
+<tr><td><code>wget</code></td><td><code>wget</code></td><td>Sim</td></tr>
+<tr><td><code>curl</code></td><td><code>curl</code></td><td><strong>Não</strong></td></tr>
+<tr><td><code>dig</code>, <code>nslookup</code></td><td><code>bind9-dnsutils</code></td><td>Sim</td></tr>
+<tr><td><code>host</code></td><td><code>bind9-host</code></td><td>Sim</td></tr>
+<tr><td><code>traceroute</code></td><td><code>traceroute</code></td><td>Sim</td></tr>
+<tr><td><code>tracepath</code>, <code>mtr</code></td><td><code>iputils-tracepath</code>, <code>mtr-tiny</code></td><td>Não</td></tr>
+<tr><td><code>resolvectl</code></td><td><code>systemd-resolved</code></td><td>Não (o Debian não usa o systemd-resolved por padrão)</td></tr>
+</table>
+</div>
+
+<pre class="term">$ curl -I https://www.debian.org/
+bash: curl: comando não encontrado
+$ su -
+Senha:
+#> apt install curl</pre>
+
+<hr>
+
+<h2>wget: baixar arquivos</h2>
+
+<dl class="anatomy">
+  <dt>wget</dt><dd>De <em>web get</em>, "pegar da web".</dd>
+  <dt>-O debian.html</dt><dd>Opcional: o nome do arquivo salvo (O <strong>maiúsculo</strong>). Sem ele, o wget usa o nome do link.</dd>
+  <dt>https://www.debian.org/</dt><dd>O endereço.</dd>
+</dl>
+
+<pre class="term">$ wget -O debian.html https://www.debian.org/
+--2026-10-15 21:09:29--  https://www.debian.org/
+Resolvendo www.debian.org (www.debian.org)... 200.17.202.197, 2801:82:80ff:8009:e61f:13ff:fe63:8e88   « o nome virou IP
+Conectando-se a www.debian.org (www.debian.org)|200.17.202.197|:443... conectado.
+A requisição HTTP foi enviada, aguardando resposta... 200 OK                                           « o servidor respondeu "OK"
+Tamanho: 15864 (15K) [text/html]
+Salvando em: “debian.html”
+
+     0K .......... .....                                      100%  175K=0,09s
+
+2026-10-15 21:09:31 (175 KB/s) - “debian.html” salvo [15864/15864]                                     « terminou</pre>
+
+<p>A saída do wget conta a história do download em português: resolveu o nome, conectou, recebeu a resposta <code>200 OK</code>, mostrou o tamanho e salvou. Num terminal de verdade, a linha de pontos vira uma barra de progresso.</p>
+
+<h3>Opções do wget</h3>
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Opção</th><th>Faz</th><th>Exemplo</th></tr>
+<tr><td><code>-O arquivo</code></td><td>Salva com outro nome (<code>-O -</code> mostra na tela)</td><td><code>wget -O iso.iso URL</code></td></tr>
+<tr><td><code>-c</code></td><td>Continua um download interrompido</td><td><code>wget -c URL</code></td></tr>
+<tr><td><code>-q</code></td><td>Silencioso: não mostra nada</td><td><code>wget -qO- https://ifconfig.me/ip</code></td></tr>
+<tr><td><code>-P pasta</code></td><td>Salva dentro de outra pasta</td><td><code>wget -P ~/Downloads URL</code></td></tr>
+<tr><td><code>--spider</code></td><td>Só confere se o endereço existe, sem baixar</td><td><code>wget --spider URL</code></td></tr>
+<tr><td><code>-S</code></td><td>Mostra o cabeçalho da resposta do servidor</td><td><code>wget -S --spider URL</code></td></tr>
+</table>
+</div>
+
+<h3>Retomar um download grande</h3>
+<p>Caiu a conexão no meio de uma ISO de 4 GB? Rode o mesmo comando com <code>-c</code> (de <em>continue</em>) na mesma pasta: o wget pede ao servidor só o pedaço que falta. Se o arquivo já estiver completo, ele avisa:</p>
+
+<pre class="term">$ wget -c -O debian.html https://www.debian.org/
+…
+A requisição HTTP foi enviada, aguardando resposta... 416 Requested Range Not Satisfiable
+
+    O arquivo já foi completamente obtido; não há nada a ser feito.</pre>
+
+<h3>Erros do wget</h3>
+<pre class="term">$ wget https://deb.debian.org/naoexiste
+--2026-10-15 21:09:44--  https://deb.debian.org/naoexiste
+Resolvendo deb.debian.org (deb.debian.org)... 151.101.194.132, 151.101.2.132, 151.101.66.132, ...
+Conectando-se a deb.debian.org (deb.debian.org)|151.101.194.132|:443... conectado.
+A requisição HTTP foi enviada, aguardando resposta... 404 Not Found
+2026-10-15 21:09:45 ERRO 404: Not Found.                                « a página não existe
+$ echo $?
+8                                                                        « código 8: o servidor respondeu com erro</pre>
+
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Código do wget</th><th>Significado</th></tr>
+<tr><td><code>0</code></td><td>Tudo certo</td></tr>
+<tr><td><code>4</code></td><td>Falha de rede (nome não resolveu, conexão recusada…)</td></tr>
+<tr><td><code>5</code></td><td>Erro no certificado SSL</td></tr>
+<tr><td><code>8</code></td><td>O servidor respondeu com erro (404, 500…)</td></tr>
+</table>
+</div>
+
+<hr>
+
+<h2>Códigos HTTP em 30 segundos</h2>
+<p>Todo site responde com um número de três dígitos. O primeiro dígito já diz muito:</p>
+
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Faixa</th><th>Quer dizer</th><th>Exemplos</th></tr>
+<tr><td><code>2xx</code></td><td>Deu certo</td><td><code>200 OK</code></td></tr>
+<tr><td><code>3xx</code></td><td>Redirecionamento: "o conteúdo está em outro endereço"</td><td><code>301</code>, <code>302 Found</code></td></tr>
+<tr><td><code>4xx</code></td><td>Erro do pedido (seu lado)</td><td><code>403 Forbidden</code>, <code>404 Not Found</code></td></tr>
+<tr><td><code>5xx</code></td><td>Erro do servidor</td><td><code>500</code>, <code>502 Bad Gateway</code>, <code>503</code></td></tr>
+</table>
+</div>
+
+<hr>
+
+<h2>curl: conversar com servidores</h2>
+<p>O <code>curl</code> (de <em>client URL</em>) mostra o conteúdo na tela por padrão, em vez de salvar. A opção mais usada para diagnóstico é a <code>-I</code>, que busca só o <strong>cabeçalho</strong> da resposta:</p>
+
+<dl class="anatomy">
+  <dt>curl</dt><dd>O programa.</dd>
+  <dt>-I</dt><dd>Só o cabeçalho (<em>head</em>), sem o conteúdo da página.</dd>
+  <dt>https://www.debian.org/</dt><dd>O endereço.</dd>
+</dl>
+
+<pre class="term">$ curl -I https://www.debian.org/
+HTTP/2 200                                          « protocolo e código: deu certo
+content-location: index.en.html
+vary: negotiate,accept-language,Accept-Encoding,cookie
+x-content-type-options: nosniff
+strict-transport-security: max-age=15552000
+last-modified: Tue, 13 Oct 2026 03:28:16 GMT        « quando a página mudou pela última vez
+content-length: 15864                               « tamanho, em bytes
+cache-control: max-age=86400
+content-type: text/html                             « o tipo do conteúdo
+date: Fri, 16 Oct 2026 00:28:47 GMT
+server: Apache                                      « o programa servidor</pre>
+
+<p>O curl e as respostas HTTP ficam em inglês, independentemente do idioma do sistema.</p>
+
+<h3>Seguir redirecionamentos: -L</h3>
+<p>Sem <code>-L</code>, o curl para no primeiro redirecionamento e só mostra para onde ele aponta:</p>
+
+<pre class="term">$ curl -I http://debian.org
+HTTP/1.1 302 Found                     « "está em outro lugar"
+Content-Length: 0
+Server: Varnish
+location: https://www.debian.org/      « o endereço novo
+…</pre>
+
+<p>Com <code>-L</code> (de <em>location</em>), ele segue até o destino final: <code>curl -IL http://debian.org</code> mostra os dois cabeçalhos, o 302 e o 200.</p>
+
+<h3>Salvar em arquivo: -o e -O</h3>
+<pre class="term">$ curl -o pagina.html https://www.debian.org/                 « -o minúsculo: você escolhe o nome
+$ curl -O https://www.debian.org/Pics/openlogo-50.png          « -O maiúsculo: usa o nome do link
+  % Total    % Received % Xferd  Average Speed   Time    Time     Time  Current
+                                 Dload  Upload   Total   Spent    Left  Speed
+100  2006  100  2006    0     0   1490      0  0:00:01  0:00:01 --:--:--  1491</pre>
+
+<p>Quando salva em arquivo, o curl mostra uma tabela de progresso. Para escondê-la em scripts, use <code>-s</code> (de <em>silent</em>).</p>
+
+<h3>Só o código, em uma linha: -w</h3>
+<p>O <code>-w</code> (de <em>write-out</em>) escreve informações no fim. Junto com <code>-s -o /dev/null</code> (descartar o conteúdo), sobra só o que você pediu:</p>
+
+<pre class="term">$ curl -s -o /dev/null -w "%{http_code}\n" https://www.debian.org/
+200
+$ curl -s -o /dev/null -w "%{http_code} %{time_total}s\n" https://deb.debian.org/naoexiste
+404 1.160527s</pre>
+
+<h3>curl em scripts: -f e o código de saída</h3>
+<p>Por padrão, o curl considera "sucesso" qualquer resposta, até um 404: o código de saída é 0. Com <code>-f</code> (de <em>fail</em>), um código 400 ou mais vira erro <strong>22</strong>. Com <code>-sS</code>, ele fica silencioso mas ainda mostra a mensagem de erro:</p>
+
+<pre class="term">$ curl -fsS https://deb.debian.org/naoexiste
+curl: (22) The requested URL returned error: 404
+$ echo $?
+22</pre>
+
+<p>Assim dá para escrever: <code>curl -fsS https://meusite.com.br/ &gt; /dev/null || echo "site fora do ar"</code>.</p>
+
+<h3>Mais opções do curl</h3>
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Opção</th><th>Faz</th></tr>
+<tr><td><code>-I</code></td><td>Só o cabeçalho</td></tr>
+<tr><td><code>-L</code></td><td>Segue redirecionamentos</td></tr>
+<tr><td><code>-o arq</code> / <code>-O</code></td><td>Salva em arquivo (nome escolhido / nome do link)</td></tr>
+<tr><td><code>-s</code> / <code>-S</code></td><td>Silencioso / mas mostra erros</td></tr>
+<tr><td><code>-f</code></td><td>Erro (código 22) para respostas 4xx e 5xx</td></tr>
+<tr><td><code>-m 10</code></td><td>Desiste depois de 10 segundos (<em>max time</em>)</td></tr>
+<tr><td><code>-v</code></td><td>Mostra a conversa inteira com o servidor</td></tr>
+<tr><td><code>-X POST</code></td><td>Escolhe o método HTTP</td></tr>
+<tr><td><code>-H "Nome: valor"</code></td><td>Acrescenta um cabeçalho</td></tr>
+<tr><td><code>-d 'dados'</code></td><td>Envia dados (um POST de formulário)</td></tr>
+<tr><td><code>--json '{"a":1}'</code></td><td>Envia JSON com os cabeçalhos certos (curl 7.82 ou mais novo; o Debian 13 tem o 8.14)</td></tr>
+<tr><td><code>-u usuario:senha</code></td><td>Autenticação básica</td></tr>
+</table>
+</div>
+
+<div class="tip">
+<strong>Seu IP público</strong>
+<p>O IP que aparece no <code>ip a</code> é o da rede local. Para saber com qual IP você aparece na internet, pergunte a um site: <code>curl -s https://ifconfig.me/ip</code> ou <code>wget -qO- https://ifconfig.me/ip</code>. A resposta é um único endereço, como <code>203.0.113.45</code> (pode vir em IPv6).</p>
+</div>
+
+<hr>
+
+<h2>dig: perguntar ao DNS</h2>
+<p>O <code>dig</code> (de <em>domain information groper</em>) mostra a resposta do DNS em detalhes. Comece pela forma curta, com <code>+short</code>:</p>
+
+<pre class="term">$ dig +short deb.debian.org
+debian.map.fastlydns.net.          « deb.debian.org é um apelido (CNAME) deste nome
+151.101.66.132                     « que aponta para estes IPs
+151.101.130.132
+151.101.194.132
+151.101.2.132</pre>
+
+<p>Sem o <code>+short</code>, a saída é longa, mas tem partes úteis:</p>
+
+<pre class="term">$ dig deb.debian.org
+
+; &lt;&lt;&gt;&gt; DiG 9.20.29-1~deb13u1-Debian &lt;&lt;&gt;&gt; deb.debian.org
+;; global options: +cmd
+;; Got answer:
+;; -&gt;&gt;HEADER&lt;&lt;- opcode: QUERY, status: NOERROR, id: 54883       « NOERROR: o nome existe
+;; flags: qr rd ra; QUERY: 1, ANSWER: 2, AUTHORITY: 0, ADDITIONAL: 1
+
+;; QUESTION SECTION:
+;deb.debian.org.			IN	A                         « a pergunta: qual o IPv4 (A)?
+
+;; ANSWER SECTION:
+deb.debian.org.		3424	IN	CNAME	debian.map.fastlydns.net.
+debian.map.fastlydns.net. 58	IN	A	151.101.250.132     « a resposta; 58 = segundos em cache
+
+;; Query time: 359 msec
+;; SERVER: 192.168.0.1#53(192.168.0.1) (UDP)                 « quem respondeu: o DNS do /etc/resolv.conf
+;; WHEN: Thu Oct 15 21:09:18 -03 2026
+;; MSG SIZE  rcvd: 97</pre>
+
+<h3>Tipos de registro e outro servidor</h3>
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Comando</th><th>Pergunta</th></tr>
+<tr><td><code>dig +short debian.org</code></td><td>IPv4 (registro A)</td></tr>
+<tr><td><code>dig +short AAAA debian.org</code></td><td>IPv6</td></tr>
+<tr><td><code>dig +short MX debian.org</code></td><td>Servidores de e-mail</td></tr>
+<tr><td><code>dig +short NS debian.org</code></td><td>Servidores DNS do domínio</td></tr>
+<tr><td><code>dig +short -x 1.1.1.1</code></td><td>DNS reverso: nome de um IP (<code>one.one.one.one.</code>)</td></tr>
+<tr><td><code>dig +short @8.8.8.8 debian.org</code></td><td>Pergunta a um servidor específico (aqui, o do Google)</td></tr>
+</table>
+</div>
+
+<p>Perguntar a outro servidor com <code>@</code> é o teste clássico: se <code>dig @8.8.8.8</code> responde e o <code>dig</code> normal não, o problema está no DNS configurado na sua máquina.</p>
+
+<h3>Formas diferentes de resolver um nome</h3>
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Comando</th><th>Mostra</th><th>Observação</th></tr>
+<tr><td><code>getent hosts debian.org</code></td><td>O IP, do jeito que os programas veem</td><td>Usa também o <code>/etc/hosts</code>. Sempre instalado.</td></tr>
+<tr><td><code>host debian.org</code></td><td>IPv4, IPv6 e e-mail, em frases curtas</td><td>Pacote <code>bind9-host</code>.</td></tr>
+<tr><td><code>dig +short debian.org</code></td><td>Só os IPs</td><td>O mais usado em diagnóstico.</td></tr>
+<tr><td><code>nslookup debian.org</code></td><td>Formato antigo, também do Windows</td><td>Pacote <code>bind9-dnsutils</code>.</td></tr>
+</table>
+</div>
+
+<pre class="term">$ host debian.org
+debian.org has address 151.101.66.132
+debian.org has IPv6 address 2a04:4e42::644
+debian.org mail is handled by 0 mailly.debian.org.</pre>
+
+<hr>
+
+<h2>traceroute: o caminho até o destino</h2>
+<p>O <code>traceroute</code> mostra cada roteador (cada "salto") entre você e o destino. Útil para ver <strong>onde</strong> a conexão para.</p>
+
+<pre class="term">$ traceroute -n -m 5 deb.debian.org
+traceroute to deb.debian.org (151.101.250.132), 5 hops max, 60 byte packets
+ 1  192.168.0.1  0.337 ms  0.289 ms  0.432 ms          « o seu roteador
+ 2  10.15.255.250  12.518 ms  13.750 ms  12.003 ms     « o provedor de internet
+ 3  203.0.113.85  14.921 ms  15.985 ms  14.798 ms
+ 4  * * *                                              « este salto não respondeu</pre>
+
+<p>O <code>-n</code> mostra só números (mais rápido) e <code>-m 5</code> limita a 5 saltos. Estrelas (<code>* * *</code>) são comuns: muitos roteadores não respondem ao traceroute, e isso não é erro. Saídas ilustrativas: os saltos dependem da sua rede.</p>
+
+<hr>
+
+<h2>Quando não funciona</h2>
+
+<div class="cenario">
+<strong>curl: (6) Could not resolve host</strong>
+<pre class="term">$ curl https://nada.invalid/
+curl: (6) Could not resolve host: nada.invalid</pre>
+<p><strong>O que aconteceu:</strong> o DNS não achou o nome. Erro de digitação ou DNS sem resposta.</p>
+<p><strong>Como confirmar:</strong> <code>dig +short nada.invalid</code> volta vazio; teste o mesmo nome com <code>@8.8.8.8</code>. No wget, o mesmo erro aparece como <code>não foi possível resolver endereço de máquina “nada.invalid”</code> (código 4).</p>
+</div>
+
+<div class="cenario">
+<strong>curl: (7) Could not connect to server</strong>
+<pre class="term">$ curl http://127.0.0.1:8080/
+curl: (7) Failed to connect to 127.0.0.1 port 8080 after 1 ms: Could not connect to server</pre>
+<p><strong>O que aconteceu:</strong> a máquina existe, mas nada escuta naquela porta (no wget: <code>falha: Conexão recusada.</code>). O serviço está parado ou usa outra porta: confira com <code>ss -tln</code>.</p>
+</div>
+
+<div class="cenario">
+<strong>curl: (28) Connection timed out</strong>
+<pre class="term">$ curl -m 2 http://192.0.2.1/
+curl: (28) Connection timed out after 2011 milliseconds</pre>
+<p><strong>O que aconteceu:</strong> ninguém respondeu dentro do tempo. Máquina desligada, IP errado ou firewall descartando.</p>
+</div>
+
+<div class="cenario">
+<strong>O 404 "passou" no script</strong>
+<p><strong>O que aconteceu:</strong> sem <code>-f</code>, o curl devolve 0 mesmo quando o site responde 404 ou 500.</p>
+<p><strong>Como resolver:</strong> use <code>curl -fsS</code>; aí o código vira 22 e o <code>||</code> do script funciona.</p>
+</div>
+
+<div class="cenario">
+<strong>"curl: comando não encontrado"</strong>
+<p><strong>O que aconteceu:</strong> o Debian não instala o curl por padrão. Como root: <code>apt install curl</code>. Enquanto isso, o <code>wget</code> resolve a maioria dos casos: <code>wget -qO- URL</code> faz o mesmo que <code>curl -s URL</code>.</p>
+</div>
+
+<hr>
+
+<h2>Resumo dos códigos de erro do curl</h2>
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Código</th><th>Significado</th></tr>
+<tr><td><code>0</code></td><td>Sucesso (inclusive 404, se não usar <code>-f</code>)</td></tr>
+<tr><td><code>6</code></td><td>Não resolveu o nome (DNS)</td></tr>
+<tr><td><code>7</code></td><td>Não conectou (porta fechada, serviço parado)</td></tr>
+<tr><td><code>22</code></td><td>Resposta HTTP 400 ou mais, com <code>-f</code></td></tr>
+<tr><td><code>28</code></td><td>Tempo esgotado</td></tr>
+<tr><td><code>60</code></td><td>Certificado SSL não confiável</td></tr>
+</table>
+</div>
+
+<hr>
+
+<h2>Exercícios</h2>
+
+<div class="exercise">
+<h3>1. Só o cabeçalho</h3>
+<p>Complete para ver o código HTTP e o cabeçalho de <code>https://www.debian.org/</code>:</p>
+<div class="ex-code">curl <input data-answer="-I|--head" aria-label="opção"> https://www.debian.org/</div>
+</div>
+
+<div class="exercise">
+<h3>2. Continuar o download</h3>
+<p>Complete para retomar o download interrompido de uma ISO:</p>
+<div class="ex-code">wget <input data-answer="-c|--continue" aria-label="opção"> https://cdimage.debian.org/debian-cd/current/amd64/iso-cd/debian-13.7.0-amd64-netinst.iso</div>
+</div>
+
+<div class="exercise">
+<h3>3. Só os IPs</h3>
+<p>Complete para ver apenas os endereços de <code>debian.org</code>:</p>
+<div class="ex-code">dig <input data-answer="+short" aria-label="opção"> debian.org</div>
+</div>
+
+<div class="mc" data-answer="2">
+<p class="mc-q">4. Num Debian recém-instalado, qual destes comandos funciona sem instalar nada?</p>
+<label><input type="radio" name="q4"> <code>curl https://debian.org</code></label>
+<label><input type="radio" name="q4"> <code>wget https://debian.org</code></label>
+<label><input type="radio" name="q4"> <code>resolvectl query debian.org</code></label>
+<label><input type="radio" name="q4"> <code>mtr debian.org</code></label>
+</div>
+
+<div class="mc" data-answer="4">
+<p class="mc-q">5. <code>curl -fsS https://site/pagina-que-nao-existe; echo $?</code> mostra qual código?</p>
+<label><input type="radio" name="q5"> 0</label>
+<label><input type="radio" name="q5"> 6</label>
+<label><input type="radio" name="q5"> 404</label>
+<label><input type="radio" name="q5"> 22</label>
+</div>
+
+<hr>
+
+<h2>Resumo</h2>
+<ul>
+  <li>O Debian traz <code>wget</code>, <code>dig</code>, <code>host</code> e <code>traceroute</code>; o <code>curl</code> se instala com <code>apt install curl</code>.</li>
+  <li><code>wget -O nome URL</code> baixa; <code>-c</code> retoma; as mensagens saem em português.</li>
+  <li><code>curl -I</code> mostra o cabeçalho; <code>-L</code> segue redirecionamentos; <code>-o</code>/<code>-O</code> salvam.</li>
+  <li>Em scripts: <code>curl -fsS</code> e o código de saída (6 DNS, 7 conexão, 22 erro HTTP, 28 tempo).</li>
+  <li><code>dig +short nome</code> resolve; <code>@8.8.8.8</code> testa outro servidor de DNS.</li>
+</ul>
+
+<div class="pager"></div>
+
+</div>
+</main>
+</div>
+<script src="assets/site.js"></script>
+</body>
+</html>

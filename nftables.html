@@ -1,0 +1,419 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Debian nftables — o firewall nativo do Debian | Guia Debian</title>
+<meta name="description" content="Aprenda o nftables, o firewall padrão do Debian 13: o /etc/nftables.conf que já vem instalado, tabelas, cadeias e regras explicadas parte por parte, validação com nft -c e como não perder o acesso remoto.">
+<link rel="stylesheet" href="assets/style.css">
+<script>try{var t=localStorage.getItem("tema");if(t)document.documentElement.setAttribute("data-theme",t)}catch(e){}</script>
+</head>
+<body>
+<div class="layout">
+<nav class="sidebar" id="sidebar" aria-label="Tópicos"></nav>
+<main class="main">
+<div class="content">
+
+<div class="pager"></div>
+
+<h1>Debian <span class="hl">nftables</span></h1>
+
+<p class="intro">O <strong>nftables</strong> é o firewall do Debian. Desde o Debian 10 ele é a ferramenta oficial para filtrar o tráfego de rede, e no Debian 13 o pacote já vem instalado. Mas, recém-instalado, ele <strong>não bloqueia nada</strong>: o serviço vem desligado e a configuração de exemplo deixa tudo passar. Nesta aula você vai entender o que vem pronto e escrever o seu primeiro firewall.</p>
+
+<div class="note">
+<strong>Você vai aprender</strong>
+<ul>
+  <li>Como o Debian 13 vem de fábrica: pacote instalado, serviço desativado, regras vazias.</li>
+  <li>O que são tabelas, cadeias (<em>chains</em>) e regras, lendo o <code>/etc/nftables.conf</code> real.</li>
+  <li>Como escrever um firewall que libera SSH, HTTP e HTTPS e bloqueia o resto.</li>
+  <li>Como validar o arquivo com <code>nft -c</code> antes de aplicar, e como não ficar trancado do lado de fora.</li>
+</ul>
+</div>
+
+<p>Os exemplos acontecem na máquina fictícia <strong>servidor</strong>. Todos os comandos do <code>nft</code> precisam de root: no Debian, entre como root com <code>su -</code> (veja <a href="root-su-sudo.html">root, su e sudo</a>). As linhas que começam com <code>root@servidor:~#</code> foram digitadas como root.</p>
+
+<hr>
+
+<h2>Antes do comando: quem é quem</h2>
+<p>No Linux existe <strong>um só</strong> motor de firewall, dentro do kernel, chamado <em>netfilter</em>. As ferramentas são formas diferentes de dar ordens a ele:</p>
+
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Ferramenta</th><th>O que é</th><th>No Debian 13 recém-instalado</th></tr>
+<tr><td><code>nft</code> (nftables)</td><td>A ferramenta moderna e oficial. Fala direto com o netfilter.</td><td>Instalada (pacote <code>nftables</code> 1.1.3), serviço <strong>desativado</strong></td></tr>
+<tr><td><code>iptables</code></td><td>A ferramenta antiga. No Debian atual ela é só uma "tradutora" (<code>iptables-nft</code>) que grava regras nftables.</td><td><strong>Não instalada</strong></td></tr>
+<tr><td><code>ufw</code></td><td>Uma camada simples por cima, criada pelo Ubuntu.</td><td><strong>Não instalada</strong> (veja <a href="ufw.html">ufw (opcional)</a>)</td></tr>
+</table>
+</div>
+
+<p>Note a diferença para o Ubuntu: lá o <code>ufw</code> já vem pronto. No Debian, o caminho padrão é escrever as regras do nftables num arquivo.</p>
+
+<h3>Conferindo o estado de fábrica</h3>
+<p>Três comandos mostram como o firewall está. Primeiro, o pacote e a versão:</p>
+
+<pre class="term" data-host="servidor" data-user="root">#> nft --version
+nftables v1.1.3 (Commodore Bullmoose #4)</pre>
+
+<p>Depois, o serviço que carrega as regras no boot:</p>
+
+<pre class="term" data-host="servidor" data-user="root">#> systemctl status nftables
+○ nftables.service - nftables
+     Loaded: loaded (/usr/lib/systemd/system/nftables.service; disabled; preset: enabled)    « disabled: não liga no boot
+     Active: inactive (dead)                                                                  « não está rodando agora
+       Docs: man:nft(8)
+             http://wiki.nftables.org</pre>
+
+<p>E, por fim, as regras que estão valendo agora:</p>
+
+<pre class="term" data-host="servidor" data-user="root">#> nft list ruleset
+#> echo $?
+0                                    « nenhuma regra e nenhum erro: o firewall está vazio</pre>
+
+<p>O <code>nft list ruleset</code> não mostrou nada. Isso significa que <strong>nenhum pacote é filtrado</strong>: todas as portas abertas por programas estão acessíveis pela rede.</p>
+
+<div class="cenario">
+<strong>"nft: comando não encontrado"</strong>
+<pre class="term" data-host="servidor">$ nft list ruleset
+bash: nft: comando não encontrado</pre>
+<p><strong>O que aconteceu:</strong> o <code>nft</code> fica em <code>/usr/sbin</code>, que não está no PATH do usuário comum no Debian. Mesmo chamando pelo caminho completo, sem root ele não consegue ler o firewall:</p>
+<pre class="term" data-host="servidor">$ /usr/sbin/nft list ruleset
+Operation not permitted (you must be root)
+netlink: Error: cache initialization failed: Operation not permitted</pre>
+<p><strong>Como resolver:</strong> entre como root com <code>su -</code> e rode de novo.</p>
+</div>
+
+<hr>
+
+<h2>Tabelas, cadeias e regras</h2>
+<p>O nftables organiza tudo em três níveis, como pastas dentro de pastas:</p>
+
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Nível</th><th>O que é</th><th>Exemplo</th></tr>
+<tr><td><strong>Tabela</strong> (<em>table</em>)</td><td>Uma caixa que agrupa cadeias. Tem uma família: <code>ip</code> (IPv4), <code>ip6</code> (IPv6) ou <code>inet</code> (os dois).</td><td><code>table inet filter</code></td></tr>
+<tr><td><strong>Cadeia</strong> (<em>chain</em>)</td><td>Uma lista de regras ligada a um ponto do caminho dos pacotes (<em>hook</em>).</td><td><code>chain input</code> (o que chega à máquina)</td></tr>
+<tr><td><strong>Regra</strong> (<em>rule</em>)</td><td>Uma condição e uma decisão.</td><td><code>tcp dport 22 accept</code></td></tr>
+</table>
+</div>
+
+<p>Os três <em>hooks</em> que você mais vai usar:</p>
+<ul>
+  <li><code>input</code>: pacotes que chegam <strong>para</strong> esta máquina (alguém acessando o seu SSH).</li>
+  <li><code>output</code>: pacotes que saem <strong>desta</strong> máquina (o seu <code>apt update</code>).</li>
+  <li><code>forward</code>: pacotes que só <strong>passam</strong> por ela (quando ela é um roteador ou hospeda containers).</li>
+</ul>
+
+<h3>O arquivo que já vem no Debian</h3>
+<p>O Debian instala um <code>/etc/nftables.conf</code> de exemplo. Este é o conteúdo real do Debian 13:</p>
+
+<pre class="file" data-file="/etc/nftables.conf (padrão do Debian 13)">#!/usr/sbin/nft -f
+
+flush ruleset
+
+table inet filter {
+	chain input {
+		type filter hook input priority filter;
+	}
+	chain forward {
+		type filter hook forward priority filter;
+	}
+	chain output {
+		type filter hook output priority filter;
+	}
+}</pre>
+
+<p>Linha por linha:</p>
+<ul>
+  <li><code>#!/usr/sbin/nft -f</code>: o arquivo é um "script" do <code>nft</code>.</li>
+  <li><code>flush ruleset</code>: apaga todas as regras atuais antes de carregar estas. Assim o arquivo sempre descreve o firewall <strong>inteiro</strong>.</li>
+  <li><code>table inet filter</code>: uma tabela chamada <code>filter</code> que vale para IPv4 e IPv6.</li>
+  <li><code>type filter hook input priority filter;</code>: esta cadeia filtra os pacotes de entrada.</li>
+</ul>
+<p>As cadeias estão vazias e não dizem uma <em>política</em> (o que fazer quando nenhuma regra combina). Sem política, o padrão é <strong>aceitar</strong>. Por isso, mesmo se você ligar o serviço com este arquivo, nada é bloqueado.</p>
+
+<hr>
+
+<h2>Uma regra, parte por parte</h2>
+<p>Esta é a regra que libera o acesso SSH:</p>
+
+<dl class="anatomy">
+  <dt>tcp</dt><dd>Só pacotes do protocolo TCP (o SSH usa TCP).</dd>
+  <dt>dport 22</dt><dd><em>destination port</em>: a porta de destino é a 22, a do SSH.</dd>
+  <dt>accept</dt><dd>A decisão: deixar passar. As outras decisões comuns são <code>drop</code> (descartar em silêncio) e <code>reject</code> (recusar avisando).</dd>
+</dl>
+
+<p>Várias portas de uma vez usam chaves, chamadas de <em>conjunto</em> (<em>set</em>):</p>
+
+<dl class="anatomy">
+  <dt>tcp dport</dt><dd>Porta de destino TCP…</dd>
+  <dt>{ 80, 443 }</dt><dd>…que seja 80 (HTTP) <strong>ou</strong> 443 (HTTPS).</dd>
+  <dt>accept</dt><dd>Deixar passar.</dd>
+</dl>
+
+<p>E a regra mais importante de todas, que deixa voltar as respostas das conexões que a própria máquina abriu:</p>
+
+<dl class="anatomy">
+  <dt>ct state</dt><dd><em>connection tracking</em>: o estado da conexão a que o pacote pertence.</dd>
+  <dt>established,related</dt><dd>Conexão já estabelecida, ou relacionada a uma (como um erro ICMP de uma conexão sua).</dd>
+  <dt>accept</dt><dd>Deixar passar.</dd>
+</dl>
+
+<p>Sem essa regra, com a entrada bloqueada, o <code>apt update</code> enviaria o pedido mas nunca receberia a resposta.</p>
+
+<hr>
+
+<h2>Um firewall completo</h2>
+<p>Este é um firewall típico de servidor: bloqueia toda entrada, exceto respostas, ping, SSH e web. Escreva primeiro numa cópia, para testar com calma:</p>
+
+<pre class="file" data-file="/root/firewall.nft">#!/usr/sbin/nft -f
+
+flush ruleset
+
+table inet filter {
+	chain input {
+		type filter hook input priority filter; policy drop;   # o que não for liberado é descartado
+		ct state established,related accept                   # respostas de conexões que eu abri
+		ct state invalid drop                                  # pacotes sem pé nem cabeça
+		iif "lo" accept                                        # a própria máquina falando com ela mesma
+		ip protocol icmp accept                                # ping (IPv4)
+		ip6 nexthdr ipv6-icmp accept                           # ICMPv6: o IPv6 não funciona sem ele
+		tcp dport 22 accept                                    # SSH
+		tcp dport { 80, 443 } accept                           # HTTP e HTTPS
+	}
+	chain forward {
+		type filter hook forward priority filter; policy drop; # não é roteador: não repassa nada
+	}
+	chain output {
+		type filter hook output priority filter; policy accept; # tudo pode sair
+	}
+}</pre>
+
+<p>O que muda em relação ao arquivo de fábrica é o <code>policy drop;</code> na cadeia <code>input</code>. Agora o padrão é descartar, e cada regra abre uma exceção.</p>
+
+<h3>Validar antes de aplicar: nft -c</h3>
+<p>A opção <code>-c</code> (de <em>check</em>, conferir) lê o arquivo, procura erros e <strong>não aplica nada</strong>. Use sempre antes de carregar regras num servidor remoto.</p>
+
+<dl class="anatomy">
+  <dt>nft</dt><dd>O programa.</dd>
+  <dt>-c</dt><dd>Só conferir; não mexe no firewall.</dd>
+  <dt>-f /root/firewall.nft</dt><dd>Lê as regras deste arquivo (<em>file</em>).</dd>
+</dl>
+
+<pre class="term" data-host="servidor" data-user="root">#> nft -c -f /root/firewall.nft
+#> echo $?
+0                                    « silêncio e código 0: o arquivo está correto</pre>
+
+<p>Com um erro de digitação (<code>acept</code> em vez de <code>accept</code>), o <code>nft</code> mostra a linha, a coluna e marca onde se perdeu:</p>
+
+<pre class="term" data-host="servidor" data-user="root">#> nft -c -f /root/firewall.nft
+/root/firewall.nft:12:21-21: Error: syntax error, unexpected newline
+		tcp dport 22 acept
+		                  ^
+#> echo $?
+1</pre>
+
+<p>A mensagem fica em inglês: o nftables não tem tradução para o português.</p>
+
+<h3>Aplicar e deixar permanente</h3>
+<p>Quando o arquivo estiver validado, copie para o lugar oficial e ligue o serviço. O <code>--now</code> liga agora e no boot:</p>
+
+<pre class="term" data-host="servidor" data-user="root">#> cp /root/firewall.nft /etc/nftables.conf
+#> systemctl enable --now nftables
+Created symlink '/etc/systemd/system/sysinit.target.wants/nftables.service' → '/usr/lib/systemd/system/nftables.service'.
+#> nft list chain inet filter input
+table inet filter {
+	chain input {
+		type filter hook input priority filter; policy drop;
+		ct state established,related accept
+		ct state invalid drop
+		iif "lo" accept
+		ip protocol icmp accept
+		ip6 nexthdr ipv6-icmp accept
+		tcp dport 22 accept
+		tcp dport { 80, 443 } accept
+	}
+}</pre>
+
+<p>Depois de editar o arquivo de novo, recarregue com <code>systemctl reload nftables</code>, que roda <code>nft -f /etc/nftables.conf</code>.</p>
+
+<div class="warning">
+<strong>Atenção: servidor remoto</strong>
+<p>Se você está conectado por SSH e esquecer a regra <code>tcp dport 22 accept</code> (ou a do <code>ct state established</code>), a conexão cai no instante em que as regras forem carregadas, e só o acesso físico (ou o console do provedor) resolve. Use a rede de segurança da próxima seção.</p>
+</div>
+
+<hr>
+
+<h2>Testar sem medo: a "rede de segurança"</h2>
+<p>Antes de aplicar regras num servidor que você não alcança fisicamente, agende um "desfazer" automático para daqui a 5 minutos. Se você ficar trancado, basta esperar.</p>
+
+<dl class="anatomy">
+  <dt>systemd-run</dt><dd>Roda um comando como uma tarefa temporária do systemd.</dd>
+  <dt>--on-active=5m</dt><dd>Daqui a 5 minutos.</dd>
+  <dt>/usr/sbin/nft flush ruleset</dt><dd>O comando: apagar todas as regras (tudo volta a passar).</dd>
+</dl>
+
+<pre class="term" data-host="servidor" data-user="root">#> systemd-run --on-active=5m /usr/sbin/nft flush ruleset
+Running timer as unit: run-p10126-i10426.timer                 « guarde este nome
+Will run service as unit: run-p10126-i10426.service
+#> nft -f /root/firewall.nft
+# abra OUTRA janela e teste: ssh root@servidor
+#> systemctl stop run-p10126-i10426.timer                      « deu certo: cancele o desfazer</pre>
+
+<ol class="passo">
+  <li>Agende o <code>flush</code> para daqui a 5 minutos.</li>
+  <li>Carregue as regras novas com <code>nft -f</code>.</li>
+  <li>Abra uma <strong>segunda</strong> sessão SSH. Não feche a primeira.</li>
+  <li>Se a segunda sessão entrar, cancele o timer com <code>systemctl stop</code>. Se não entrar, espere 5 minutos: as regras somem e você entra de novo.</li>
+</ol>
+
+<hr>
+
+<h2>Mudar regras sem editar o arquivo</h2>
+<p>Você também pode criar tabelas e regras direto pelo terminal. Isso vale até o próximo reboot (ou o próximo <code>flush</code>). É útil para testes rápidos:</p>
+
+<pre class="term" data-host="servidor" data-user="root">#> nft add table inet teste
+#> nft add chain inet teste entrada '{ type filter hook input priority 10; policy accept; }'
+#> nft add rule inet teste entrada tcp dport 8080 counter accept
+#> nft -a list table inet teste
+table inet teste { # handle 4
+	chain entrada { # handle 1
+		type filter hook input priority filter + 10; policy accept;
+		tcp dport 8080 counter packets 0 bytes 0 accept # handle 2     « handle 2: o "número" da regra
+	}
+}
+#> nft delete table inet teste</pre>
+
+<ul>
+  <li><code>counter</code> conta quantos pacotes e bytes passaram pela regra. Ótimo para saber se ela está sendo usada.</li>
+  <li><code>-a</code> mostra os <em>handles</em>, os números internos de cada regra. Para apagar uma regra só: <code>nft delete rule inet teste entrada handle 2</code>.</li>
+  <li>Nas aspas simples ficam as chaves e o ponto e vírgula, para o bash não interpretá-los.</li>
+</ul>
+
+<hr>
+
+<h2>Formas diferentes de fazer</h2>
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Forma</th><th>Como</th><th>Quando usar</th></tr>
+<tr><td>Arquivo + serviço</td><td><code>/etc/nftables.conf</code> + <code>systemctl enable --now nftables</code></td><td>O jeito padrão do Debian. Tudo num lugar, sobrevive ao reboot.</td></tr>
+<tr><td>Comandos <code>nft add</code></td><td><code>nft add rule …</code></td><td>Testes rápidos; some no reboot.</td></tr>
+<tr><td>ufw</td><td><code>apt install ufw</code></td><td>Quem vem do Ubuntu e prefere comandos simples. Veja <a href="ufw.html">ufw (opcional)</a>.</td></tr>
+<tr><td>iptables</td><td><code>apt install iptables</code></td><td>Scripts antigos. No Debian, ele grava regras nftables por baixo.</td></tr>
+<tr><td>firewalld</td><td><code>apt install firewalld</code></td><td>Zonas e regras por interface, comum no Fedora e no RHEL.</td></tr>
+</table>
+</div>
+
+<div class="tip">
+<strong>Use um gerenciador só</strong>
+<p>ufw, firewalld e o seu <code>nftables.conf</code> podem apagar as regras uns dos outros (lembre do <code>flush ruleset</code>). Escolha um e desative os demais.</p>
+</div>
+
+<hr>
+
+<h2>Quando não funciona</h2>
+
+<div class="cenario">
+<strong>Liguei o serviço e nada é bloqueado</strong>
+<p><strong>O que aconteceu:</strong> você ligou o serviço com o arquivo de fábrica, que não tem <code>policy drop</code>.</p>
+<p><strong>Como confirmar:</strong> <code>nft list chain inet filter input</code> e procure a palavra <code>policy</code>. Se não aparecer, o padrão é aceitar.</p>
+<p><strong>Como resolver:</strong> escreva as regras como em "Um firewall completo" e rode <code>systemctl reload nftables</code>.</p>
+</div>
+
+<div class="cenario">
+<strong>Depois do reboot, minhas regras sumiram</strong>
+<p><strong>O que aconteceu:</strong> regras criadas com <code>nft add</code> vivem só na memória. Ou o serviço continua <code>disabled</code>.</p>
+<p><strong>Como resolver:</strong> coloque as regras no <code>/etc/nftables.conf</code> e rode <code>systemctl enable nftables</code>. Para salvar o que está valendo agora: <code>nft list ruleset &gt; /root/regras-atuais.nft</code> e revise antes de copiar (lembre de pôr <code>flush ruleset</code> no topo).</p>
+</div>
+
+<div class="cenario">
+<strong>Instalei o Docker e meu firewall parou de funcionar</strong>
+<p><strong>O que aconteceu:</strong> o Docker cria regras próprias para os containers. Um <code>flush ruleset</code> apaga as regras dele, e um <code>systemctl restart docker</code> recria as dele por cima das suas.</p>
+<p><strong>Como resolver:</strong> não use <code>flush ruleset</code> num servidor com Docker; apague só a sua tabela (<code>delete table inet filter</code> no lugar de <code>flush ruleset</code>). Veja <a href="docker.html">Docker</a>.</p>
+</div>
+
+<div class="cenario">
+<strong>O ping funciona, mas o site não abre de fora</strong>
+<p><strong>Como confirmar:</strong> adicione <code>counter</code> na regra da porta e veja se o número sobe quando alguém tenta acessar:</p>
+<pre class="term" data-host="servidor" data-user="root">#> nft list chain inet filter input | grep 443
+		tcp dport { 80, 443 } counter packets 0 bytes 0 accept</pre>
+<p>Se o contador fica em zero, o pacote nem chega: o bloqueio está antes (roteador, provedor de nuvem). Se sobe, o firewall está liberando, e o problema é o servidor web (veja <a href="ip.html">ip, ping, ss</a> para conferir se ele está escutando).</p>
+</div>
+
+<hr>
+
+<h2>Referência</h2>
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Comando</th><th>O que faz</th></tr>
+<tr><td><code>nft list ruleset</code></td><td>Mostra todas as regras ativas</td></tr>
+<tr><td><code>nft list tables</code></td><td>Só os nomes das tabelas</td></tr>
+<tr><td><code>nft -a list table inet filter</code></td><td>Uma tabela, com os <em>handles</em></td></tr>
+<tr><td><code>nft -c -f arquivo</code></td><td>Confere o arquivo sem aplicar</td></tr>
+<tr><td><code>nft -f arquivo</code></td><td>Aplica as regras do arquivo</td></tr>
+<tr><td><code>nft add rule inet filter input tcp dport 8080 accept</code></td><td>Acrescenta uma regra no fim da cadeia</td></tr>
+<tr><td><code>nft insert rule …</code></td><td>Acrescenta no começo da cadeia</td></tr>
+<tr><td><code>nft delete rule inet filter input handle 7</code></td><td>Apaga a regra de número 7</td></tr>
+<tr><td><code>nft delete table inet teste</code></td><td>Apaga uma tabela inteira</td></tr>
+<tr><td><code>nft flush ruleset</code></td><td>Apaga tudo (tudo passa a ser aceito)</td></tr>
+<tr><td><code>systemctl enable --now nftables</code></td><td>Carrega <code>/etc/nftables.conf</code> agora e no boot</td></tr>
+<tr><td><code>systemctl reload nftables</code></td><td>Recarrega o arquivo depois de editar</td></tr>
+</table>
+</div>
+
+<hr>
+
+<h2>Exercícios</h2>
+
+<div class="exercise">
+<h3>1. Só conferir</h3>
+<p>Complete para verificar o arquivo <code>/etc/nftables.conf</code> sem aplicar nada:</p>
+<div class="ex-code">nft <input data-answer="-c -f|-cf|--check -f|-c --file" aria-label="opções"> /etc/nftables.conf</div>
+</div>
+
+<div class="exercise">
+<h3>2. Liberar uma porta</h3>
+<p>Complete a regra que libera conexões TCP na porta 3306:</p>
+<div class="ex-code">tcp <input data-answer="dport 3306" aria-label="condição"> accept</div>
+</div>
+
+<div class="exercise">
+<h3>3. Ligar no boot</h3>
+<p>Complete para ligar o firewall agora e em todo boot:</p>
+<div class="ex-code">systemctl <input data-answer="enable --now|--now enable" aria-label="ação"> nftables</div>
+</div>
+
+<div class="mc" data-answer="3">
+<p class="mc-q">4. Num Debian 13 recém-instalado, o que o <code>nft list ruleset</code> mostra?</p>
+<label><input type="radio" name="q4"> Regras que bloqueiam tudo, exceto o SSH.</label>
+<label><input type="radio" name="q4"> As regras do ufw.</label>
+<label><input type="radio" name="q4"> Nada: o serviço vem desativado e nenhuma regra está carregada.</label>
+<label><input type="radio" name="q4"> Um erro dizendo que o nftables não está instalado.</label>
+</div>
+
+<div class="mc" data-answer="2">
+<p class="mc-q">5. Você colocou <code>policy drop</code> na cadeia <code>input</code> e esqueceu a regra <code>ct state established,related accept</code>. O que acontece?</p>
+<label><input type="radio" name="q5"> Nada muda.</label>
+<label><input type="radio" name="q5"> As respostas das conexões que a máquina abre são bloqueadas: o <code>apt update</code> para de funcionar.</label>
+<label><input type="radio" name="q5"> Só o ping para de funcionar.</label>
+<label><input type="radio" name="q5"> O nft recusa o arquivo com um erro.</label>
+</div>
+
+<hr>
+
+<h2>Resumo</h2>
+<ul>
+  <li>O nftables é o firewall oficial do Debian; vem instalado, mas desativado e sem bloquear nada.</li>
+  <li>As regras ficam em <code>/etc/nftables.conf</code>, organizadas em tabelas, cadeias e regras.</li>
+  <li><code>policy drop</code> + exceções (<code>ct state established</code>, <code>lo</code>, SSH, web) é o modelo de servidor.</li>
+  <li>Sempre <code>nft -c -f</code> antes de aplicar e uma rede de segurança com <code>systemd-run</code> em servidores remotos.</li>
+  <li><code>systemctl enable --now nftables</code> torna o firewall permanente.</li>
+</ul>
+
+<div class="pager"></div>
+
+</div>
+</main>
+</div>
+<script src="assets/site.js"></script>
+</body>
+</html>

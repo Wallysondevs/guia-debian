@@ -1,0 +1,259 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Debian Caminhos — absoluto, relativo, ~, . e .. | Guia Debian</title>
+<meta name="description" content="Entenda caminhos no Debian: absoluto e relativo, ~, ., .., -, nomes com espaço e o Tab para completar, com exemplos e terminal simulado.">
+<link rel="stylesheet" href="assets/style.css">
+<script>try{var t=localStorage.getItem("tema");if(t)document.documentElement.setAttribute("data-theme",t)}catch(e){}</script>
+</head>
+<body>
+<div class="layout">
+<nav class="sidebar" id="sidebar" aria-label="Tópicos"></nav>
+<main class="main">
+<div class="content">
+
+<div class="pager"></div>
+
+<h1>Debian <span class="hl">Caminhos</span></h1>
+
+<p class="intro">Um <strong>caminho</strong> é o endereço de um arquivo ou de uma pasta. Todo comando que mexe em arquivos recebe caminhos. Saber escrevê-los é a diferença entre "funcionou" e "Arquivo ou diretório inexistente".</p>
+
+<div class="note">
+<strong>Você vai aprender</strong>
+<ul>
+  <li>A diferença entre caminho <strong>absoluto</strong> e <strong>relativo</strong>.</li>
+  <li>Os atalhos <code>~</code>, <code>.</code>, <code>..</code> e <code>-</code>.</li>
+  <li>Como escrever nomes com espaço, como "Área de trabalho".</li>
+  <li>Como o <kbd>Tab</kbd> escreve caminhos por você.</li>
+</ul>
+</div>
+
+<hr>
+
+<h2>A ideia: endereço completo ou "a partir daqui"</h2>
+<p>Pense num endereço de entrega. Você pode dizer o endereço completo ("Rua das Flores, 10, Recife") ou dar uma direção a partir de onde a pessoa está ("a segunda casa à direita"). No terminal é igual:</p>
+
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Tipo</th><th>Começa com</th><th>Exemplo</th><th>Funciona de qualquer pasta?</th></tr>
+<tr><td>Absoluto</td><td><code>/</code></td><td><code>/home/ana/Documentos/notas.txt</code></td><td>Sim</td></tr>
+<tr><td>Relativo</td><td>Qualquer outra coisa</td><td><code>Documentos/notas.txt</code></td><td>Não: depende de onde você está</td></tr>
+</table>
+</div>
+
+<p>O "onde você está" se chama <strong>pasta atual</strong> (ou diretório de trabalho). O <code>pwd</code> mostra qual é, e o prompt também mostra, depois dos dois-pontos:</p>
+
+<pre class="term">$ pwd
+/home/ana</pre>
+
+<hr>
+
+<h2>Caminho absoluto</h2>
+<p>Um caminho absoluto começa na raiz <code>/</code> e desce pasta por pasta até o alvo. Cada <code>/</code> separa uma pasta da próxima.</p>
+
+<dl class="anatomy">
+  <dt>/</dt><dd>A raiz: o começo de tudo.</dd>
+  <dt>home/</dt><dd>Dentro da raiz, a pasta <code>home</code>.</dd>
+  <dt>ana/</dt><dd>Dentro de <code>home</code>, a pasta da Ana.</dd>
+  <dt>Documentos/notas.txt</dt><dd>Dentro dela, a pasta Documentos e o arquivo.</dd>
+</dl>
+
+<p>Como ele não depende da pasta atual, funciona de qualquer lugar. Aqui a Ana está em <code>/etc/apt</code> e mesmo assim acha o arquivo:</p>
+
+<pre class="term" data-cwd="/etc/apt">$ wc -l /home/ana/Documentos/notas.txt
+4 /home/ana/Documentos/notas.txt</pre>
+
+<hr>
+
+<h2>Caminho relativo</h2>
+<p>Um caminho relativo <strong>não</strong> começa com <code>/</code>. O sistema junta a pasta atual com o que você escreveu. Estando em <code>/home/ana</code>, o caminho <code>Documentos/notas.txt</code> vira <code>/home/ana/Documentos/notas.txt</code>.</p>
+
+<pre class="term">$ wc -l Documentos/notas.txt
+4 Documentos/notas.txt</pre>
+
+<p>O mesmo caminho relativo, digitado em outra pasta, aponta para outro lugar e falha:</p>
+
+<pre class="term" data-cwd="/etc/apt">$ wc -l Documentos/notas.txt
+wc: Documentos/notas.txt: Arquivo ou diretório inexistente      « procurou /etc/apt/Documentos/notas.txt</pre>
+
+<div class="tip">
+<strong>Quando usar cada um</strong>
+<p>Relativo é mais curto e prático quando você está perto do arquivo. Absoluto é mais seguro em scripts e em tarefas agendadas, porque não depende de onde o comando foi chamado.</p>
+</div>
+
+<hr>
+
+<h2>Os atalhos: ~ . .. e -</h2>
+
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Atalho</th><th>Significa</th><th>Exemplo</th></tr>
+<tr><td><code>~</code></td><td>Sua pasta pessoal (<code>/home/ana</code>)</td><td><code>ls ~/Documentos</code></td></tr>
+<tr><td><code>~joao</code></td><td>A pasta pessoal de outro usuário</td><td><code>ls ~joao</code></td></tr>
+<tr><td><code>.</code></td><td>A pasta atual</td><td><code>./script.sh</code></td></tr>
+<tr><td><code>..</code></td><td>A pasta de cima (a "mãe")</td><td><code>cd ..</code></td></tr>
+<tr><td><code>-</code></td><td>Só no <code>cd</code>: a pasta anterior</td><td><code>cd -</code></td></tr>
+</table>
+</div>
+
+<h3>Subindo com ..</h3>
+<p>Cada <code>..</code> sobe um nível. Dá para encadear:</p>
+
+<dl class="anatomy">
+  <dt>cd</dt><dd>Muda de pasta.</dd>
+  <dt>../..</dt><dd>Sobe dois níveis: da pasta atual para a mãe, e da mãe para a avó.</dd>
+</dl>
+
+<pre class="term">$ cd Documentos/projetos
+$ pwd
+/home/ana/Documentos/projetos
+$ cd ../..
+$ pwd
+/home/ana</pre>
+
+<h3>Voltando com -</h3>
+<p>O <code>cd -</code> volta para a pasta em que você estava antes, e mostra para onde foi. É ótimo para alternar entre duas pastas:</p>
+
+<pre class="term">$ cd /etc/apt
+$ cd -
+/home/ana
+$ cd -
+/etc/apt</pre>
+
+<h3>Combinando</h3>
+<p>Os atalhos podem aparecer no meio do caminho. Estando em <code>~/Documentos/projetos/site</code>, estes dois comandos apontam para o mesmo arquivo:</p>
+
+<pre class="term" data-cwd="~/Documentos/projetos/site">$ ls ~/frutas.txt ../../../frutas.txt
+../../../frutas.txt  /home/ana/frutas.txt</pre>
+
+<p>Repare que o <code>~</code> virou <code>/home/ana</code> antes de chegar ao <code>ls</code>. Quem faz essa troca é o shell.</p>
+
+<div class="try" data-setup="cd Documentos/projetos/site" data-goal="cwd:~/Documentos">
+<p class="try-task"><strong>Missão:</strong> você está em <code>~/Documentos/projetos/site</code>. Suba até <code>~/Documentos</code> usando um caminho <strong>relativo</strong>, com <code>..</code>. Confira com <code>pwd</code>.</p>
+</div>
+
+<hr>
+
+<h2>Nomes com espaço</h2>
+<p>O espaço separa as partes de um comando. Por isso um nome como "Área de trabalho" vira <strong>três</strong> argumentos se for digitado sem cuidado:</p>
+
+<pre class="term">$ cd Área de trabalho
+bash: cd: número excessivo de argumentos</pre>
+
+<p>Há duas formas de dizer ao shell que é um nome só:</p>
+
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Forma</th><th>Exemplo</th><th>Observação</th></tr>
+<tr><td>Aspas</td><td><code>cd 'Área de trabalho'</code></td><td>A mais legível; simples ou duplas</td></tr>
+<tr><td>Barra invertida</td><td><code>cd Área\ de\ trabalho</code></td><td>É o que o <kbd>Tab</kbd> escreve para você</td></tr>
+</table>
+</div>
+
+<pre class="term">$ cd 'Área de trabalho'
+$ pwd
+/home/ana/Área de trabalho</pre>
+
+<div class="try" data-goal="cwd:~/Área de trabalho">
+<p class="try-task"><strong>Missão:</strong> entre na pasta <code>Área de trabalho</code>. Tente primeiro sem aspas para ver o erro, depois do jeito certo.</p>
+</div>
+
+<hr>
+
+<h2>Maiúsculas importam</h2>
+<p>Para o Debian, <code>Documentos</code> e <code>documentos</code> são nomes diferentes:</p>
+
+<pre class="term">$ ls documentos
+ls: não foi possível acessar 'documentos': Arquivo ou diretório inexistente</pre>
+
+<hr>
+
+<h2>Deixe o Tab escrever</h2>
+<p>Digite o começo de um nome e aperte <kbd>Tab</kbd>. Se só houver uma possibilidade, o shell completa sozinho. Se houver várias, aperte <kbd>Tab</kbd> duas vezes para ver a lista. O <kbd>Tab</kbd> evita erros de digitação e já põe as barras invertidas nos nomes com espaço.</p>
+
+<pre class="term">$ cd Do        « aqui você aperta Tab duas vezes
+Documentos/  Downloads/
+$ cd Doc       « mais uma letra e Tab: vira "cd Documentos/"</pre>
+
+<div class="tip">
+<strong>O Debian completa até opções</strong>
+<p>O pacote <code>bash-completion</code> vem instalado no Debian. Com ele, o <kbd>Tab</kbd> também completa opções e nomes de pacotes, como em <code>apt install fire</code><kbd>Tab</kbd>.</p>
+</div>
+
+<hr>
+
+<h2>Quando não funciona</h2>
+
+<div class="cenario">
+<strong>"Arquivo ou diretório inexistente" com um caminho que existe</strong>
+<p><strong>O que aconteceu:</strong> quase sempre é um caminho relativo digitado na pasta errada, ou uma maiúscula trocada.</p>
+<p><strong>Como resolver:</strong> rode <code>pwd</code> para ver onde você está, e <code>ls</code> para ver os nomes exatos. Na dúvida, use o caminho absoluto ou o <kbd>Tab</kbd>.</p>
+</div>
+
+<div class="cenario">
+<strong>"número excessivo de argumentos" no cd</strong>
+<p><strong>O que aconteceu:</strong> o nome tem espaço e o shell o dividiu.</p>
+<p><strong>Como resolver:</strong> use aspas: <code>cd "Área de trabalho"</code>.</p>
+</div>
+
+<div class="cenario">
+<strong>O ~ não funcionou dentro de aspas</strong>
+<pre class="term">$ ls "~/Documentos"
+ls: não foi possível acessar '~/Documentos': Arquivo ou diretório inexistente</pre>
+<p><strong>O que aconteceu:</strong> dentro de aspas o <code>~</code> perde o significado especial e vira um til comum.</p>
+<p><strong>Como resolver:</strong> deixe o til fora das aspas: <code>ls ~/"Documentos"</code>, ou use <code>"$HOME/Documentos"</code>.</p>
+</div>
+
+<hr>
+
+<h2>Exercícios</h2>
+
+<div class="exercise">
+<h3>1. Absoluto</h3>
+<p>Escreva o caminho absoluto da pasta Downloads da Ana:</p>
+<div class="ex-code">cd <input data-answer="/home/ana/Downloads|/home/ana/Downloads/" aria-label="caminho"></div>
+</div>
+
+<div class="exercise">
+<h3>2. Subir dois níveis</h3>
+<p>Complete para subir dois níveis de uma vez:</p>
+<div class="ex-code">cd <input data-answer="../..|../../" aria-label="caminho"></div>
+</div>
+
+<div class="mc" data-answer="1">
+<p class="mc-q">3. A Ana está em <code>/etc</code> e digita <code>ls apt</code>. Que pasta é listada?</p>
+<label><input type="radio" name="q3"> <code>/etc/apt</code></label>
+<label><input type="radio" name="q3"> <code>/apt</code></label>
+<label><input type="radio" name="q3"> <code>/home/ana/apt</code></label>
+<label><input type="radio" name="q3"> <code>/usr/bin/apt</code></label>
+</div>
+
+<div class="mc" data-answer="4">
+<p class="mc-q">4. Qual destes caminhos é absoluto?</p>
+<label><input type="radio" name="q4"> <code>Documentos/notas.txt</code></label>
+<label><input type="radio" name="q4"> <code>./notas.txt</code></label>
+<label><input type="radio" name="q4"> <code>../notas.txt</code></label>
+<label><input type="radio" name="q4"> <code>/home/ana/notas.txt</code></label>
+</div>
+
+<hr>
+
+<h2>Resumo</h2>
+<ul>
+  <li>Absoluto começa com <code>/</code> e funciona de qualquer lugar.</li>
+  <li>Relativo parte da pasta atual (veja com <code>pwd</code>).</li>
+  <li><code>~</code> é sua pasta pessoal, <code>.</code> é a atual, <code>..</code> é a de cima e <code>cd -</code> volta para a anterior.</li>
+  <li>Nomes com espaço vão entre aspas, e maiúsculas importam.</li>
+  <li>Use o <kbd>Tab</kbd> para completar e evitar erros.</li>
+</ul>
+
+<div class="pager"></div>
+
+</div>
+</main>
+</div>
+<script src="assets/site.js"></script>
+</body>
+</html>

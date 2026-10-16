@@ -1,0 +1,347 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Debian Segurança do Servidor — atualizações, SSH, fail2ban e AppArmor | Guia Debian</title>
+<meta name="description" content="Proteja um servidor Debian 13: a equipe de segurança do Debian e os DSAs, debsecan, unattended-upgrades (que precisa ser ativado), SSH endurecido, fail2ban com backend systemd, AppArmor e um checklist do servidor novo.">
+<link rel="stylesheet" href="assets/style.css">
+<script>try{var t=localStorage.getItem("tema");if(t)document.documentElement.setAttribute("data-theme",t)}catch(e){}</script>
+</head>
+<body>
+<div class="layout">
+<nav class="sidebar" id="sidebar" aria-label="Tópicos"></nav>
+<main class="main">
+<div class="content">
+
+<div class="pager"></div>
+
+<h1>Debian <span class="hl">Segurança do Servidor</span></h1>
+
+<p class="intro">Um servidor ligado à internet recebe tentativas de invasão minutos depois de ir ao ar. A boa notícia: no Debian, as defesas mais importantes são poucas e simples. Atualizações em dia, SSH só com chave, um firewall e alguém de olho nas tentativas de login. Esta aula mostra cada uma, com o que o Debian 13 já traz e o que você precisa ligar.</p>
+
+<div class="note">
+<strong>Você vai aprender</strong>
+<ul>
+  <li>Como o Debian publica correções de segurança (Security Team, DSA, repositório <code>trixie-security</code>).</li>
+  <li>Verificar vulnerabilidades com <code>debsecan</code>.</li>
+  <li>Instalar e <strong>ativar</strong> o <code>unattended-upgrades</code>, que no Debian não vem ligado.</li>
+  <li>Endurecer o SSH e banir quem insiste com o <code>fail2ban</code>.</li>
+  <li>Conferir o AppArmor, que já vem ativo.</li>
+</ul>
+</div>
+
+<p>Os comandos são como root na máquina <strong>servidor</strong> (<code>su -</code>). As saídas vêm de um Debian 13 real.</p>
+
+<hr>
+
+<h2>Os princípios</h2>
+<ol class="passo">
+  <li><strong>Atualizar.</strong> A maioria das invasões explora falhas que já têm correção publicada.</li>
+  <li><strong>Menos portas abertas.</strong> Só o necessário fica acessível de fora (<a href="nftables.html">Firewall (nftables)</a>).</li>
+  <li><strong>Menos privilégio.</strong> Trabalhe como usuário comum e vire root só quando precisar (<a href="root-su-sudo.html">root, su e sudo</a>).</li>
+  <li><strong>Autenticação forte.</strong> SSH com chave, sem senha.</li>
+  <li><strong>Olhar os logs.</strong> Saber quem tentou entrar.</li>
+</ol>
+
+<hr>
+
+<h2>Como o Debian entrega correções de segurança</h2>
+<p>O Debian tem uma <strong>equipe de segurança</strong> (<em>Debian Security Team</em>). Quando uma falha é corrigida, ela publica:</p>
+<ul>
+  <li>O pacote corrigido no repositório <code>trixie-security</code>, que já está no seu <code>/etc/apt/sources.list</code>:</li>
+</ul>
+
+<pre class="term" data-host="servidor">$ grep security /etc/apt/sources.list
+deb http://security.debian.org/debian-security trixie-security main non-free-firmware
+deb-src http://security.debian.org/debian-security trixie-security main non-free-firmware</pre>
+
+<ul>
+  <li>Um aviso chamado <strong>DSA</strong> (<em>Debian Security Advisory</em>), com o pacote, a falha (o número CVE) e a versão corrigida. Os DSAs saem na lista de e-mail <code>debian-security-announce</code> e no site <code>www.debian.org/security</code>.</li>
+</ul>
+
+<p>Ou seja: para ficar protegido, basta instalar as atualizações. O Debian estável não muda versões de programas no meio do caminho; ele aplica só a correção. Por isso atualizar o Debian estável é seguro e raramente quebra algo.</p>
+
+<h3>debsecan: quais falhas me afetam?</h3>
+<p>O <code>debsecan</code> (de <em>Debian Security Analyzer</em>) compara os pacotes instalados com o banco de dados de falhas do Debian. Instale com <code>apt install debsecan</code>.</p>
+
+<dl class="anatomy">
+  <dt>debsecan</dt><dd>O programa.</dd>
+  <dt>--suite trixie</dt><dd>Qual versão do Debian você usa.</dd>
+  <dt>--only-fixed</dt><dd>Mostra só as falhas que <strong>já têm correção</strong> disponível. São essas que você precisa resolver.</dd>
+</dl>
+
+<pre class="term" data-host="servidor" data-user="root">#> debsecan --suite trixie --only-fixed
+#> echo $?
+0                                           « nada: tudo o que tem correção já foi instalado
+#> debsecan --suite trixie | head -4
+CVE-2026-103658 aspell                      « falhas conhecidas, ainda sem correção publicada
+CVE-2026-75818 aspell
+CVE-2026-75819 aspell
+CVE-2026-3184 bsdextrautils</pre>
+
+<p>A lista completa (sem <code>--only-fixed</code>) é longa e assusta, mas ela inclui falhas pequenas, falhas que não afetam a configuração padrão e falhas que ainda não têm correção. O que importa no dia a dia é a saída do <code>--only-fixed</code> estar vazia.</p>
+
+<hr>
+
+<h2>unattended-upgrades: atualizações sozinhas</h2>
+<p>No Debian instalado sem interface gráfica, o <code>unattended-upgrades</code> (atualizações "sem supervisão") <strong>não vem instalado</strong>. E, mesmo depois de instalar, ele <strong>não roda</strong> até você ativar. São três passos:</p>
+
+<ol class="passo">
+  <li>Instalar: <code>apt install unattended-upgrades</code>.</li>
+  <li>Ativar: <code>dpkg-reconfigure -plow unattended-upgrades</code> e responder <strong>Sim</strong> à pergunta sobre baixar e instalar atualizações estáveis automaticamente.</li>
+  <li>Conferir os arquivos e testar com <code>--dry-run</code>.</li>
+</ol>
+
+<p>Logo depois de instalar, o serviço aparece como habilitado, mas falta o arquivo que liga a rotina diária:</p>
+
+<pre class="term" data-host="servidor" data-user="root">#> systemctl is-enabled unattended-upgrades
+enabled
+#> cat /etc/apt/apt.conf.d/20auto-upgrades
+cat: /etc/apt/apt.conf.d/20auto-upgrades: Arquivo ou diretório inexistente       « ainda não está ativado</pre>
+
+<p>O <code>dpkg-reconfigure</code> cria esse arquivo com duas linhas:</p>
+
+<pre class="file" data-file="/etc/apt/apt.conf.d/20auto-upgrades">APT::Periodic::Update-Package-Lists "1";   // atualizar a lista de pacotes todo dia
+APT::Periodic::Unattended-Upgrade "1";     // instalar as atualizações todo dia</pre>
+
+<p>O que ele instala sozinho está em <code>/etc/apt/apt.conf.d/50unattended-upgrades</code>. Estas são as linhas ativas no Debian 13:</p>
+
+<pre class="file" data-file="/etc/apt/apt.conf.d/50unattended-upgrades (linhas ativas)">Unattended-Upgrade::Origins-Pattern {
+        "origin=Debian,codename=${distro_codename},label=Debian";                    // as revisões estáveis (13.x)
+        "origin=Debian,codename=${distro_codename},label=Debian-Security";
+        "origin=Debian,codename=${distro_codename}-security,label=Debian-Security";  // as de segurança
+};
+Unattended-Upgrade::Package-Blacklist {
+};</pre>
+
+<p>Para testar sem instalar nada, use <code>--dry-run</code> (ensaio). Se outro <code>apt</code> estiver rodando, ele desiste, como nesta saída real:</p>
+
+<pre class="term" data-host="servidor" data-user="root">#> unattended-upgrade --dry-run -v
+Iniciando o script da atualização desacompanhada
+O lock não pôde ser obtido (outro gerenciador de pacotes em funcionamento?)
+O lock do cache não pode ser obtido, encerrando</pre>
+
+<p>Com o <code>apt</code> livre, ele lista as origens (<code>São origens permitidas: …</code>) e o que instalaria. O registro das execuções fica em <code>/var/log/unattended-upgrades/</code>.</p>
+
+<div class="tip">
+<strong>Reinício depois das atualizações</strong>
+<p>Atualizações do kernel ou de bibliotecas só valem depois de reiniciar o programa (ou a máquina). O <code>needrestart</code> verifica isso; veja <a href="manutencao.html">Manutenção</a>.</p>
+</div>
+
+<hr>
+
+<h2>Endurecer o SSH</h2>
+<p>Estas são as configurações efetivas do SSH num Debian 13 recém-instalado. O <code>sshd -T</code> mostra todas, já com os padrões aplicados:</p>
+
+<pre class="term" data-host="servidor" data-user="root">#> sshd -T | grep -Ei "^(permitrootlogin|passwordauthentication|pubkeyauthentication|x11forwarding) "
+permitrootlogin without-password          « root entra só com chave, nunca com senha
+pubkeyauthentication yes
+passwordauthentication yes                « usuários comuns podem entrar com senha
+x11forwarding yes</pre>
+
+<p>O Debian já impede o root de entrar com senha (<code>without-password</code> é o mesmo que <code>prohibit-password</code>). O passo seguinte é tirar a senha de todo mundo, depois que a sua chave estiver funcionando (veja <a href="ssh.html">SSH</a>).</p>
+
+<p>Não edite o arquivo principal: crie um arquivo seu em <code>/etc/ssh/sshd_config.d/</code>, que vem vazio no Debian e é lido primeiro:</p>
+
+<pre class="file" data-file="/etc/ssh/sshd_config.d/10-seguranca.conf">PasswordAuthentication no      # só chave
+PermitRootLogin no             # root nem com chave: entre como ana e use su -
+X11Forwarding no               # servidor não precisa de janelas gráficas
+MaxAuthTries 3                 # menos tentativas por conexão</pre>
+
+<pre class="term" data-host="servidor" data-user="root">#> sshd -t                       « confere a sintaxe: silêncio = tudo certo
+#> systemctl reload ssh</pre>
+
+<div class="warning">
+<strong>Teste antes de fechar a sessão</strong>
+<p>Depois do <code>reload</code>, abra uma <strong>nova</strong> conexão SSH numa segunda janela. Só feche a primeira se a segunda entrar. Com <code>PermitRootLogin no</code>, lembre que no Debian o seu usuário pode não ter <code>sudo</code>: confirme que você sabe a senha do root para usar <code>su -</code>.</p>
+</div>
+
+<h3>Quem tentou entrar?</h3>
+<p>O Debian 13 não tem <code>/var/log/auth.log</code> (não há rsyslog). Os logins ficam no journal:</p>
+
+<pre class="term" data-host="servidor" data-user="root">#> journalctl -u ssh -n 3 --no-pager
+out 15 21:11:59 servidor sshd-session[9771]: Accepted publickey for root from 192.168.0.15 port 43002 ssh2: ED25519 SHA256:ixgT4QXITUrqe0aI2mG5JqJnP118rAlE94kt7cqMC
+out 15 21:11:59 servidor sshd-session[9771]: pam_unix(sshd:session): session opened for user root(uid=0) by root(uid=0)
+out 15 21:12:01 servidor sshd-session[9809]: pam_unix(sshd:session): session opened for user root(uid=0) by root(uid=0)</pre>
+
+<p>As tentativas que falharam aparecem como <code>Failed password for …</code> ou <code>Invalid user …</code>. Para contar: <code>journalctl -u ssh --since today | grep -c "Failed password"</code>.</p>
+
+<hr>
+
+<h2>fail2ban: banir quem insiste</h2>
+<p>O <code>fail2ban</code> lê os logs e, quando um endereço erra a senha várias vezes, cria uma regra de firewall bloqueando esse endereço por um tempo. No Debian 13 o pacote já vem pronto para o jeito Debian: lê o <strong>journal</strong> (não o <code>auth.log</code>) e bane com <strong>nftables</strong>. Este é o arquivo que o pacote instala:</p>
+
+<pre class="file" data-file="/etc/fail2ban/jail.d/defaults-debian.conf (do pacote)">[DEFAULT]
+banaction = nftables                          # bane criando regras no nftables
+banaction_allports = nftables[type=allports]
+
+[sshd]
+backend = systemd                             # lê o journal do systemd
+journalmatch = _SYSTEMD_UNIT=ssh.service + _COMM=sshd
+enabled = true                                # a proteção do SSH já vem ligada</pre>
+
+<pre class="term" data-host="servidor" data-user="root">#> apt install fail2ban
+#> fail2ban-client status sshd
+Status for the jail: sshd
+|- Filter
+|  |- Currently failed:	0
+|  |- Total failed:	0
+|  `- Journal matches:	_SYSTEMD_UNIT=ssh.service + _COMM=sshd
+`- Actions
+   |- Currently banned:	0
+   |- Total banned:	0
+   `- Banned IP list:</pre>
+
+<p>Os valores padrão são 5 tentativas (<code>maxretry</code>) em 10 minutos para banir por 10 minutos (<code>bantime</code>). Para mudar, crie <code>/etc/fail2ban/jail.local</code>:</p>
+
+<pre class="file" data-file="/etc/fail2ban/jail.local">[sshd]
+maxretry = 3
+bantime = 1h
+ignoreip = 127.0.0.1/8 192.168.0.0/24    # nunca banir a rede de casa</pre>
+
+<p>Para desbanir um endereço: <code>fail2ban-client set sshd unbanip 203.0.113.50</code>. A saída do <code>status</code> acima é a típica do fail2ban 1.1.</p>
+
+<div class="cenario">
+<strong>O fail2ban não bane ninguém</strong>
+<p><strong>O que aconteceu:</strong> em configurações antigas (copiadas da internet), o <code>[sshd]</code> aponta para <code>/var/log/auth.log</code>, que não existe no Debian 13. A linha <code>Journal matches</code> do <code>status</code> mostra se ele está lendo o journal.</p>
+<p><strong>Como resolver:</strong> no seu <code>jail.local</code>, use <code>backend = systemd</code> e apague qualquer <code>logpath = /var/log/auth.log</code>.</p>
+</div>
+
+<hr>
+
+<h2>AppArmor: limitar o que cada programa pode fazer</h2>
+<p>O AppArmor prende programas a uma lista do que eles podem acessar (um <em>perfil</em>). Mesmo que alguém invada o programa, ele não sai dessa lista. No Debian ele vem <strong>ativo</strong> desde o Debian 10:</p>
+
+<pre class="term" data-host="servidor" data-user="root">#> aa-status
+apparmor module is loaded.
+105 profiles are loaded.
+6 profiles are in enforce mode.          « enforce: as regras são aplicadas
+   /usr/bin/man
+   lsb_release
+   man_filter
+   man_groff
+   nvidia_modprobe
+   nvidia_modprobe//kmod
+23 profiles are in complain mode.        « complain: só registra, não bloqueia
+…
+0 processes have profiles defined.</pre>
+
+<p>Pacotes como <code>nginx</code>, <code>cups</code> e o <code>libvirt</code> trazem perfis próprios. Para ferramentas extras de AppArmor (como <code>aa-enforce</code> e <code>aa-complain</code>), instale o pacote <code>apparmor-utils</code>.</p>
+
+<hr>
+
+<h2>Checklist do servidor Debian novo</h2>
+<ol class="passo">
+  <li><strong>Atualize:</strong> <code>apt update &amp;&amp; apt full-upgrade</code>.</li>
+  <li><strong>Crie seu usuário</strong> (se o provedor só deu root) com <code>adduser ana</code>, e decida: <code>sudo</code> (<code>apt install sudo</code> + <code>usermod -aG sudo ana</code>) ou <code>su -</code> com a senha do root.</li>
+  <li><strong>Chave SSH:</strong> do seu computador, <code>ssh-copy-id ana@servidor</code>; teste o login.</li>
+  <li><strong>Endureça o SSH</strong> com o arquivo em <code>sshd_config.d</code>; teste numa segunda sessão.</li>
+  <li><strong>Firewall:</strong> <code>/etc/nftables.conf</code> com SSH liberado; <code>nft -c -f</code>; <code>systemctl enable --now nftables</code>.</li>
+  <li><strong>Atualizações automáticas:</strong> <code>apt install unattended-upgrades</code> + <code>dpkg-reconfigure -plow unattended-upgrades</code>.</li>
+  <li><strong>fail2ban:</strong> <code>apt install fail2ban</code> e confira <code>fail2ban-client status sshd</code>.</li>
+  <li><strong>Revise as portas abertas:</strong> <code>ss -tulpn</code> (veja <a href="ip.html">ip, ping, ss</a>).</li>
+</ol>
+
+<hr>
+
+<h2>Formas diferentes de fazer</h2>
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Objetivo</th><th>Jeito Debian</th><th>Alternativa</th></tr>
+<tr><td>Saber de falhas</td><td><code>debsecan --only-fixed</code></td><td>Assinar <code>debian-security-announce</code></td></tr>
+<tr><td>Atualizar sozinho</td><td><code>unattended-upgrades</code></td><td>Um <a href="cron.html">cron</a> com <code>apt-get upgrade -y</code> (menos seguro)</td></tr>
+<tr><td>Firewall</td><td>nftables</td><td><a href="ufw.html">ufw</a></td></tr>
+<tr><td>Barrar força bruta</td><td><code>fail2ban</code></td><td>Regra <code>limit</code> no nftables; SSH só por <a href="wireguard.html">VPN</a></td></tr>
+<tr><td>Isolar programas</td><td>AppArmor (já ativo)</td><td>Containers (<a href="podman.html">Podman</a>)</td></tr>
+</table>
+</div>
+
+<hr>
+
+<h2>Quando não funciona</h2>
+
+<div class="cenario">
+<strong>"O lock não pôde ser obtido"</strong>
+<p><strong>O que aconteceu:</strong> outro <code>apt</code> (seu, ou a rotina automática <code>apt-daily</code>) estava rodando. O <code>unattended-upgrade</code> desiste e tenta na próxima vez.</p>
+<p><strong>Como confirmar:</strong> <code>ps aux | grep -E "apt|dpkg"</code>.</p>
+</div>
+
+<div class="cenario">
+<strong>Instalei o unattended-upgrades e nada é atualizado</strong>
+<p><strong>O que aconteceu:</strong> falta o <code>/etc/apt/apt.conf.d/20auto-upgrades</code>. Rode <code>dpkg-reconfigure -plow unattended-upgrades</code>.</p>
+</div>
+
+<div class="cenario">
+<strong>Depois de mexer no SSH, "Permission denied (publickey)"</strong>
+<p><strong>O que aconteceu:</strong> você desligou a senha antes de a chave funcionar. Pelo console do provedor (ou fisicamente), apague o seu arquivo em <code>sshd_config.d</code> e rode <code>systemctl reload ssh</code>.</p>
+</div>
+
+<hr>
+
+<h2>Referência</h2>
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Comando</th><th>O que faz</th></tr>
+<tr><td><code>debsecan --suite trixie --only-fixed</code></td><td>Falhas com correção disponível</td></tr>
+<tr><td><code>dpkg-reconfigure -plow unattended-upgrades</code></td><td>Liga as atualizações automáticas</td></tr>
+<tr><td><code>unattended-upgrade --dry-run -v</code></td><td>Ensaio do que seria atualizado</td></tr>
+<tr><td><code>sshd -T</code> / <code>sshd -t</code></td><td>Configuração efetiva / conferir sintaxe</td></tr>
+<tr><td><code>journalctl -u ssh</code></td><td>Logins por SSH</td></tr>
+<tr><td><code>fail2ban-client status sshd</code></td><td>Tentativas e banidos</td></tr>
+<tr><td><code>fail2ban-client set sshd unbanip IP</code></td><td>Desbane um endereço</td></tr>
+<tr><td><code>aa-status</code></td><td>Perfis do AppArmor</td></tr>
+</table>
+</div>
+
+<hr>
+
+<h2>Exercícios</h2>
+
+<div class="exercise">
+<h3>1. Só o que tem correção</h3>
+<p>Complete para listar só as falhas que já têm correção:</p>
+<div class="ex-code">debsecan --suite trixie <input data-answer="--only-fixed" aria-label="opção"></div>
+</div>
+
+<div class="exercise">
+<h3>2. Ligar as atualizações automáticas</h3>
+<p>Complete o comando que ativa o <code>unattended-upgrades</code>:</p>
+<div class="ex-code"><input data-answer="dpkg-reconfigure" aria-label="comando"> -plow unattended-upgrades</div>
+</div>
+
+<div class="mc" data-answer="2">
+<p class="mc-q">3. No Debian 13, onde o fail2ban procura as tentativas de login SSH?</p>
+<label><input type="radio" name="q3"> Em <code>/var/log/auth.log</code>.</label>
+<label><input type="radio" name="q3"> No journal do systemd (<code>backend = systemd</code>).</label>
+<label><input type="radio" name="q3"> Em <code>/var/log/syslog</code>.</label>
+<label><input type="radio" name="q3"> No arquivo <code>~/.bash_history</code>.</label>
+</div>
+
+<div class="mc" data-answer="4">
+<p class="mc-q">4. Qual o valor padrão do <code>PermitRootLogin</code> no Debian 13?</p>
+<label><input type="radio" name="q4"> <code>yes</code>: root entra com senha.</label>
+<label><input type="radio" name="q4"> <code>no</code>: root nunca entra.</label>
+<label><input type="radio" name="q4"> Não existe essa opção.</label>
+<label><input type="radio" name="q4"> <code>without-password</code>: root só entra com chave.</label>
+</div>
+
+<hr>
+
+<h2>Resumo</h2>
+<ul>
+  <li>O Debian corrige falhas pelo <code>trixie-security</code> e avisa com DSAs; <code>debsecan --only-fixed</code> mostra o que falta.</li>
+  <li><code>unattended-upgrades</code> precisa ser instalado <strong>e</strong> ativado com <code>dpkg-reconfigure</code>.</li>
+  <li>SSH: arquivo próprio em <code>sshd_config.d</code>, <code>sshd -t</code>, teste numa segunda sessão.</li>
+  <li><code>fail2ban</code> no Debian 13 já lê o journal e bane com nftables.</li>
+  <li>AppArmor vem ativo; confira com <code>aa-status</code>.</li>
+</ul>
+
+<div class="pager"></div>
+
+</div>
+</main>
+</div>
+<script src="assets/site.js"></script>
+</body>
+</html>

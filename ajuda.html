@@ -1,0 +1,394 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Debian Obtendo Ajuda — man, --help, tldr e /usr/share/doc | Guia Debian</title>
+<meta name="description" content="Como pedir ajuda no Debian: o manual (man) em português, --help, help, apropos, whatis, tldr, info e a documentação que cada pacote traz em /usr/share/doc, com README.Debian e changelog.Debian.">
+<link rel="stylesheet" href="assets/style.css">
+<script>try{var t=localStorage.getItem("tema");if(t)document.documentElement.setAttribute("data-theme",t)}catch(e){}</script>
+</head>
+<body>
+<div class="layout">
+<nav class="sidebar" id="sidebar" aria-label="Tópicos"></nav>
+<main class="main">
+<div class="content">
+
+<div class="pager"></div>
+
+<h1>Debian <span class="hl">Obtendo Ajuda</span></h1>
+
+<p class="intro">Ninguém decora as opções de todos os comandos. Quem usa Linux há anos consulta a ajuda o tempo todo, e o Debian traz muita ajuda instalada, boa parte em português. Nesta aula você aprende onde procurar: o manual (<code>man</code>), o <code>--help</code>, a busca por assunto, os resumos do <code>tldr</code> e a documentação que todo pacote do Debian carrega.</p>
+
+<div class="note">
+<strong>Você vai aprender</strong>
+<ul>
+  <li>Ler e navegar no manual com <code>man</code>, inclusive as seções.</li>
+  <li>Usar <code>--help</code> para um resumo rápido e <code>help</code> para os comandos internos do shell.</li>
+  <li>Achar um comando pelo assunto com <code>apropos</code> e <code>whatis</code>.</li>
+  <li>Ver exemplos prontos com o <code>tldr</code>.</li>
+  <li>Encontrar o <code>README.Debian</code> e o histórico de mudanças de qualquer pacote.</li>
+</ul>
+</div>
+
+<hr>
+
+<h2>Qual ajuda usar?</h2>
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Ferramenta</th><th>Mostra</th><th>Vem instalada?</th><th>Use quando…</th></tr>
+<tr><td><code>comando --help</code></td><td>Resumo das opções</td><td>Sim (em quase todo comando)</td><td>Você lembra do comando, mas não da opção.</td></tr>
+<tr><td><code>man comando</code></td><td>O manual completo</td><td>Sim, e em português</td><td>Quer entender tudo o que o comando faz.</td></tr>
+<tr><td><code>help comando</code></td><td>Ajuda de comandos internos do bash</td><td>Sim</td><td>O comando é do shell (<code>cd</code>, <code>pwd</code>, <code>history</code>).</td></tr>
+<tr><td><code>apropos palavra</code></td><td>Comandos relacionados a um assunto</td><td>Sim</td><td>Não sabe o nome do comando.</td></tr>
+<tr><td><code>tldr comando</code></td><td>Exemplos prontos e curtos</td><td>Não (pacote <code>tealdeer</code>)</td><td>Quer o exemplo mais comum, rápido.</td></tr>
+<tr><td><code>/usr/share/doc/pacote</code></td><td>Documentação e notas do Debian</td><td>Sim</td><td>Quer saber o que o Debian mudou num programa.</td></tr>
+</table>
+</div>
+
+<hr>
+
+<h2>--help: o resumo rápido</h2>
+<p>Quase todo comando aceita a opção <code>--help</code>, que mostra a forma de usar e as opções. No Debian em português, o texto vem traduzido:</p>
+
+<dl class="anatomy">
+  <dt>ls</dt><dd>O comando sobre o qual você quer ajuda.</dd>
+  <dt>--help</dt><dd>A opção que pede o resumo de uso.</dd>
+</dl>
+
+<pre class="term">$ ls --help | head -5
+Uso: ls [OPÇÃO]... [ARQUIVO]...
+Lista informações sobre os ARQUIVOs (no diretório atual por padrão).
+Lista as entradas em ordem alfabética se não for usada nenhuma opção -cftuvSUX
+nem --sort.
+</pre>
+
+<p>O <code>| head -5</code> corta a saída nas 5 primeiras linhas, porque o texto completo é longo. Para ler tudo com rolagem, use <code>ls --help | less</code> (saia com <kbd>q</kbd>).</p>
+
+<h3>Como ler a linha "Uso"</h3>
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Na ajuda</th><th>Significa</th></tr>
+<tr><td><code>[OPÇÃO]</code></td><td>Entre colchetes: opcional.</td></tr>
+<tr><td><code>...</code></td><td>Pode repetir: várias opções, vários arquivos.</td></tr>
+<tr><td><code>ARQUIVO</code> em maiúsculas</td><td>Troque pelo seu valor.</td></tr>
+<tr><td><code>a|b</code></td><td>Escolha um ou outro.</td></tr>
+<tr><td><code>-a, --all</code></td><td>Duas formas da mesma opção: curta e longa.</td></tr>
+</table>
+</div>
+
+<hr>
+
+<h2>man: o manual</h2>
+<p>O <code>man</code> (de <em>manual</em>) abre a página de manual de um comando. No Debian instalado em português, o pacote <code>manpages-pt-br</code> já vem junto, e por isso muitas páginas aparecem traduzidas:</p>
+
+<pre class="term">$ man ls
+LS(1)                         Comandos de usuário                         LS(1)
+
+NOME
+       ls - lista conteúdo de diretórios
+
+SINOPSE
+       ls [OPÇÃO]... [ARQUIVO]...
+
+DESCRIÇÃO
+       Lista  informações  sobre  os  ARQUIVOs  (o diretório atual por padrão).
+       Classifica as entradas em ordem alfabética  se  não  for  usada  nenhuma
+       opção -cftuvSUX nem --sort.
+
+       Argumentos  obrigatórios  para  opções  longas  também o são para opções
+       curtas.
+
+       -a, --all
+              não ignora entradas começando com .
+…</pre>
+
+<h3>Navegando dentro do man</h3>
+<p>O manual abre no leitor <code>less</code>. As teclas principais:</p>
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Tecla</th><th>O que faz</th></tr>
+<tr><td><kbd>Espaço</kbd> / <kbd>b</kbd></td><td>Desce / sobe uma página</td></tr>
+<tr><td><kbd>↓</kbd> / <kbd>↑</kbd></td><td>Desce / sobe uma linha</td></tr>
+<tr><td><kbd>/</kbd>texto <kbd>Enter</kbd></td><td>Procura "texto" para baixo</td></tr>
+<tr><td><kbd>n</kbd> / <kbd>N</kbd></td><td>Próxima / anterior ocorrência da busca</td></tr>
+<tr><td><kbd>g</kbd> / <kbd>G</kbd></td><td>Vai para o começo / fim</td></tr>
+<tr><td><kbd>h</kbd></td><td>Ajuda do leitor</td></tr>
+<tr><td><kbd>q</kbd></td><td>Sai do manual</td></tr>
+</table>
+</div>
+
+<div class="tip">
+<strong>Dica: buscar uma opção</strong>
+<p>Para achar a explicação do <code>-h</code> do <code>ls</code>, abra <code>man ls</code>, digite <code>/-h</code> e aperte <kbd>Enter</kbd>. Repita com <kbd>n</kbd> até chegar na linha certa.</p>
+</div>
+
+<h3>As seções do manual</h3>
+<p>O manual é dividido em seções numeradas. A lista abaixo vem do próprio <code>man man</code>, em português:</p>
+<pre class="term">$ man man
+…
+       1   Comandos shell ou programas executáveis
+       2   Chamadas de sistema (funções fornecidas pelo kernel)
+       3   Chamadas de biblioteca (funções dentro de bibliotecas de programa)
+       4   Arquivos especiais (geralmente localizados em /dev)
+       5   Formatos de arquivo e convenções, ex.: /etc/passwd
+       6   Jogos
+       7   Miscelânea (incluindo convenções e pacotes macro),  (ex.:    man(7),
+           groff(7), man-pages(7))
+       8   Comandos de administração do sistema (geralmente apenas para root)
+       9   Rotinas do kernel [não padrão]
+…</pre>
+
+<p>O mesmo nome pode existir em várias seções. <code>passwd</code>, por exemplo, é um comando (seção 1) e também um arquivo (seção 5). O <code>man -f</code> lista todas:</p>
+
+<dl class="anatomy">
+  <dt>man</dt><dd>O manual.</dd>
+  <dt>-f</dt><dd>Só mostra em quais seções o nome existe, com uma frase de descrição (igual ao <code>whatis</code>).</dd>
+  <dt>passwd</dt><dd>O nome procurado.</dd>
+</dl>
+
+<pre class="term">$ man -f passwd
+passwd (5)           - arquivo de senhas              « o arquivo /etc/passwd, descrição em português
+passwd (1)           - change user password           « o comando, descrição só em inglês
+passwd (1ssl)        - OpenSSL application commands
+$ man 5 passwd
+PASSWD(5)                     Formatos de Arquivo                     PASSWD(5)
+
+NOME
+       passwd - arquivo de senhas
+…</pre>
+
+<p>Repare que algumas descrições estão em português e outras em inglês: a tradução do <code>manpages-pt-br</code> cobre muitas páginas, mas não todas. Quando não há tradução, o <code>man</code> mostra a original em inglês.</p>
+
+<h3>Ler em inglês de propósito</h3>
+<p>As traduções podem estar desatualizadas em relação ao programa. Para ver a página original em inglês, use <code>-L C</code>:</p>
+<pre class="term">$ man -L C ls
+LS(1)                            User Commands                            LS(1)
+
+NAME
+       ls - list directory contents
+…</pre>
+
+<hr>
+
+<h2>help: comandos internos do shell</h2>
+<p>Alguns comandos não são programas separados: fazem parte do próprio bash. São os <strong>comandos internos</strong> (<em>builtins</em>), como <code>cd</code>, <code>pwd</code> e <code>history</code>. Para eles, a ajuda é o <code>help</code>. Você descobre se um comando é interno com <code>type</code>:</p>
+
+<pre class="term">$ type cd
+cd é um comando interno do shell
+$ type man
+man é /usr/bin/man
+$ help pwd
+pwd: pwd [-LP]
+    Mostra o nome do diretório de trabalho atual.
+
+    Opções:
+…</pre>
+
+<p>A tradução da ajuda interna do bash é parcial: <code>help pwd</code> vem em português, mas <code>help cd</code> aparece em inglês.</p>
+
+<div class="try" data-goal="ran:^\s*type\s">
+<p class="try-task"><strong>Missão:</strong> descubra se <code>cd</code>, <code>ls</code> e <code>echo</code> são comandos internos do shell ou programas, usando <code>type</code>. Dica: <code>type</code> aceita vários nomes de uma vez.</p>
+</div>
+
+<hr>
+
+<h2>apropos e whatis: procurar por assunto</h2>
+<p>Quando você não sabe o nome do comando, o <code>apropos</code> procura nas descrições de todas as páginas do manual:</p>
+
+<pre class="term">$ apropos "list directory"
+dir (1)              - list directory contents
+ls (1)               - list directory contents
+vdir (1)             - list directory contents
+$ apropos copiar
+copiar: nada apropriado.                « procure em inglês: muitas descrições não foram traduzidas</pre>
+
+<p>O <code>apropos</code> busca nas descrições que estão instaladas. Como muitas estão em inglês, procurar em inglês costuma dar mais resultado. O <code>whatis</code> faz o contrário: dado um nome, mostra a descrição de uma linha.</p>
+
+<pre class="term">$ whatis ls
+ls (1)               - lista conteúdo de diretórios</pre>
+
+<hr>
+
+<h2>tldr: exemplos prontos</h2>
+<p>O <code>tldr</code> (de <em>too long; didn't read</em>, "longo demais, não li") mostra só os exemplos mais usados de cada comando. Não vem instalado; no Debian o programa vem no pacote <code>tealdeer</code>:</p>
+
+<pre class="term">$ su -c 'apt install tealdeer'
+Senha:
+…
+$ tldr --update
+Successfully created cache directory path `/home/ana/.cache/tealdeer`.
+Successfully updated cache.
+$ tldr tar
+
+  Ferramenta de compressão de arquivos.
+  Utilizado com metodos de compressão como o de gzip ou bzip2.
+  Mais informações: &lt;https://www.gnu.org/software/tar/manual/tar.html&gt;.
+
+  [C]ria um arquivo compactado e o escreve para um arquivo:
+
+      tar cf caminho/para/alvo.tar caminho/para/arquivo1 caminho/para/arquivo2 ...
+
+  [C]ria um arquivo g[z]ip e o escreve para um arquivo:
+
+      tar czf alvo.tar.gz caminho/para/arquivo1 caminho/para/arquivo2 ...
+…</pre>
+
+<p>Na primeira vez, o <code>tldr --update</code> baixa as páginas da internet. Como o sistema está em português, os exemplos aparecem em português quando há tradução.</p>
+
+<hr>
+
+<h2>/usr/share/doc: a documentação de cada pacote</h2>
+<p>Este é um recurso típico do Debian: <strong>todo pacote</strong> instala uma pasta em <code>/usr/share/doc/nome-do-pacote</code>. Nela ficam, no mínimo, a licença (<code>copyright</code>) e o histórico de mudanças. Na máquina do guia, recém-instalada, já são 307 pastas.</p>
+
+<pre class="term">$ ls /usr/share/doc/openssh-server/
+changelog.Debian.gz  copyright  NEWS.Debian.gz  README            README.dns
+changelog.gz         examples   OVERVIEW.gz     README.Debian.gz  README.tun.gz</pre>
+
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Arquivo</th><th>O que contém</th></tr>
+<tr><td><code>README.Debian</code></td><td>O que o Debian faz diferente do programa original. <strong>Leia este primeiro.</strong></td></tr>
+<tr><td><code>NEWS.Debian</code></td><td>Mudanças importantes entre versões, que podem exigir atenção.</td></tr>
+<tr><td><code>changelog.Debian</code></td><td>O histórico de cada versão do pacote no Debian.</td></tr>
+<tr><td><code>changelog</code></td><td>O histórico do programa original.</td></tr>
+<tr><td><code>copyright</code></td><td>Os autores e a licença.</td></tr>
+<tr><td><code>examples/</code></td><td>Arquivos de configuração de exemplo.</td></tr>
+</table>
+</div>
+
+<p>Os arquivos terminados em <code>.gz</code> estão compactados. Leia com <code>zless</code> (com rolagem) ou <code>zcat</code> (direto na tela):</p>
+
+<dl class="anatomy">
+  <dt>zcat</dt><dd>Mostra um arquivo <code>.gz</code> sem descompactá-lo no disco.</dd>
+  <dt>/usr/share/doc/openssh-server/README.Debian.gz</dt><dd>As notas do Debian sobre o servidor SSH.</dd>
+  <dt>| head -15</dt><dd>Só as 15 primeiras linhas.</dd>
+</dl>
+
+<pre class="term">$ zcat /usr/share/doc/openssh-server/README.Debian.gz | head -15
+OpenSSH for Debian
+------------------
+
+UPGRADE ISSUES
+==============
+
+PermitRootLogin
+---------------
+
+As of 1:6.6p1-1, new installations will be set to "PermitRootLogin
+without-password" (or the synonymous "PermitRootLogin prohibit-password" as
+of 1:7.1p1-1).  This disables password authentication for root, foiling
+password dictionary attacks on the root user.  Some sites may wish to use
+the stronger "PermitRootLogin forced-commands-only" or "PermitRootLogin no",
+but note that "PermitRootLogin no" will break setups that SSH to root with a</pre>
+
+<p>Esse trecho explica, por exemplo, por que o root não consegue entrar por SSH com senha num Debian novo. Esse tipo de informação dificilmente está no site do programa, porque é uma decisão do Debian.</p>
+
+<h3>O histórico do pacote</h3>
+<pre class="term">$ zcat /usr/share/doc/bash/changelog.Debian.gz | head -6
+bash (5.2.37-2) unstable; urgency=medium
+
+  * Remove VCS attributes. Closes: #747400, #859264, #1099719.
+  * Bump standards version.
+
+ -- Matthias Klose &lt;doko@debian.org&gt;  Wed, 09 Apr 2025 10:34:37 +0200</pre>
+
+<p>Os números como <code>#747400</code> são bugs no sistema público do Debian. Você pode ler cada um em <code>https://bugs.debian.org/747400</code>.</p>
+
+<hr>
+
+<h2>Outras fontes</h2>
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Fonte</th><th>Endereço</th><th>Para quê</th></tr>
+<tr><td>Wiki do Debian</td><td><a href="https://wiki.debian.org/pt_BR">wiki.debian.org/pt_BR</a></td><td>Tutoriais da comunidade.</td></tr>
+<tr><td>Manual de Referência</td><td><a href="https://www.debian.org/doc/manuals/debian-reference/">debian.org/doc/manuals/debian-reference</a></td><td>O guia oficial de administração.</td></tr>
+<tr><td>Notas de lançamento</td><td><a href="https://www.debian.org/releases/trixie/releasenotes">debian.org/releases/trixie/releasenotes</a></td><td>O que mudou no Debian 13.</td></tr>
+<tr><td>Bugs</td><td><a href="https://bugs.debian.org/">bugs.debian.org</a></td><td>Ver se um problema já é conhecido.</td></tr>
+<tr><td>Pacotes</td><td><a href="https://packages.debian.org/">packages.debian.org</a></td><td>Procurar pacotes e qual contém um arquivo.</td></tr>
+</table>
+</div>
+
+<hr>
+
+<h2>Quando não funciona</h2>
+
+<div class="cenario">
+<strong>"Nenhuma entrada de manual para…"</strong>
+<pre class="term">$ man nadaexiste
+Nenhuma entrada de manual para nadaexiste
+$ man 9 ls
+Nenhuma entrada de manual para ls na seção 9</pre>
+<p><strong>O que aconteceu:</strong> não há página com esse nome (ou não naquela seção). Pode ser erro de digitação, um comando interno do shell (use <code>help</code>) ou um programa sem manual.</p>
+<p><strong>Como resolver:</strong> tente <code>comando --help</code>, <code>help comando</code> ou <code>apropos</code>.</p>
+</div>
+
+<div class="cenario">
+<strong>"bash: tldr: comando não encontrado"</strong>
+<p><strong>O que aconteceu:</strong> o <code>tldr</code> não vem instalado.</p>
+<p><strong>Como resolver:</strong> instale o pacote <code>tealdeer</code> (como root) e rode <code>tldr --update</code>.</p>
+</div>
+
+<div class="cenario">
+<strong>"bash: info: comando não encontrado"</strong>
+<p><strong>O que aconteceu:</strong> o leitor de documentação <code>info</code>, usado pelos manuais completos dos programas GNU, também não vem instalado por padrão.</p>
+<p><strong>Como resolver:</strong> instale o pacote <code>info</code>. Para a maioria das pessoas, o <code>man</code> basta.</p>
+</div>
+
+<div class="cenario">
+<strong>Fiquei preso dentro do man</strong>
+<p><strong>O que aconteceu:</strong> o manual abre num leitor que ocupa a tela toda.</p>
+<p><strong>Como resolver:</strong> aperte <kbd>q</kbd>.</p>
+</div>
+
+<hr>
+
+<h2>Exercícios</h2>
+
+<div class="exercise">
+<h3>1. Resumo rápido</h3>
+<p>Complete para ver o resumo de opções do <code>cp</code>:</p>
+<div class="ex-code">cp <input data-answer="--help" aria-label="opção"></div>
+</div>
+
+<div class="exercise">
+<h3>2. O arquivo, não o comando</h3>
+<p>Complete para abrir o manual do <strong>arquivo</strong> <code>/etc/passwd</code> (seção 5):</p>
+<div class="ex-code">man <input data-answer="5" aria-label="seção"> passwd</div>
+</div>
+
+<div class="mc" data-answer="3">
+<p class="mc-q">3. Onde fica o que o Debian mudou no pacote <code>openssh-server</code>?</p>
+<label><input type="radio" name="q3"> Em <code>/etc/openssh</code></label>
+<label><input type="radio" name="q3"> Só no site do OpenSSH</label>
+<label><input type="radio" name="q3"> Em <code>/usr/share/doc/openssh-server/README.Debian.gz</code></label>
+<label><input type="radio" name="q3"> Em <code>/var/log</code></label>
+</div>
+
+<div class="mc" data-answer="1">
+<p class="mc-q">4. Qual tecla sai do manual?</p>
+<label><input type="radio" name="q4"> <kbd>q</kbd></label>
+<label><input type="radio" name="q4"> <kbd>Esc</kbd></label>
+<label><input type="radio" name="q4"> <kbd>Ctrl</kbd>+<kbd>Z</kbd></label>
+<label><input type="radio" name="q4"> <kbd>x</kbd></label>
+</div>
+
+<hr>
+
+<h2>Resumo</h2>
+<ul>
+  <li><code>comando --help</code>: resumo rápido; <code>man comando</code>: manual completo, muitas vezes em português.</li>
+  <li>No man, <kbd>/</kbd> procura, <kbd>n</kbd> repete e <kbd>q</kbd> sai; <code>man 5 passwd</code> escolhe a seção.</li>
+  <li><code>help</code> para comandos internos (<code>cd</code>, <code>pwd</code>); <code>type</code> diz se o comando é interno.</li>
+  <li><code>apropos</code> acha comandos pelo assunto; <code>tldr</code> (pacote <code>tealdeer</code>) mostra exemplos.</li>
+  <li><code>/usr/share/doc/pacote/README.Debian</code> explica o que o Debian mudou no programa.</li>
+</ul>
+
+<div class="pager"></div>
+
+</div>
+</main>
+</div>
+<script src="assets/site.js"></script>
+</body>
+</html>

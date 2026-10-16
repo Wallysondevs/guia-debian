@@ -1,0 +1,341 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Debian ZFS — pools, datasets e snapshots com OpenZFS | Guia Debian</title>
+<meta name="description" content="Aprenda ZFS no Debian 13: ativar o repositório contrib, instalar o OpenZFS 2.3 via DKMS, criar um pool espelhado num laboratório com arquivos, datasets, compressão, snapshots, scrub e troca de disco.">
+<link rel="stylesheet" href="assets/style.css">
+<script>try{var t=localStorage.getItem("tema");if(t)document.documentElement.setAttribute("data-theme",t)}catch(e){}</script>
+</head>
+<body>
+<div class="layout">
+<nav class="sidebar" id="sidebar" aria-label="Tópicos"></nav>
+<main class="main">
+<div class="content">
+
+<div class="pager"></div>
+
+<h1>Debian <span class="hl">ZFS</span></h1>
+
+<p class="intro">O <strong>ZFS</strong> junta num só sistema o que no Linux costuma ser separado: RAID, gerenciador de volumes (como o <a href="lvm.html">LVM</a>) e sistema de arquivos. Ele confere cada bloco com um "dígito verificador", tira snapshots instantâneos e comprime os dados. No Debian, ele dá um pouco mais de trabalho para instalar do que no Ubuntu, por causa de uma questão de licença.</p>
+
+<div class="note">
+<strong>Você vai aprender</strong>
+<ul>
+  <li>As peças do ZFS: pool, vdev e dataset.</li>
+  <li>Por que o ZFS fica no repositório <strong>contrib</strong> do Debian e como ativá-lo.</li>
+  <li>Instalar o OpenZFS com DKMS e entender o aviso de licença.</li>
+  <li>Criar um pool espelhado, datasets com compressão e snapshots.</li>
+  <li>Conferir os dados com <code>scrub</code> e trocar um disco com defeito.</li>
+</ul>
+</div>
+
+<p>Comandos como <strong>root</strong> (<code>su -</code>), na máquina fictícia <strong>servidor</strong>. Os nomes e versões de pacotes foram conferidos no Debian 13 (OpenZFS 2.3.9). As saídas dos comandos <code>zpool</code> e <code>zfs</code> são <strong>típicas</strong>: os números variam de máquina para máquina. O ZFS responde em inglês.</p>
+
+<hr>
+
+<h2>Conceito: pool, vdev e dataset</h2>
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Peça</th><th>O que é</th><th>Comparando com o LVM</th></tr>
+<tr><td><strong>vdev</strong></td><td>Um grupo de discos com uma regra de redundância: <code>mirror</code> (espelho), <code>raidz1</code>, <code>raidz2</code>…</td><td>Um RAID do mdadm</td></tr>
+<tr><td><strong>pool</strong> (zpool)</td><td>O reservatório formado por um ou mais vdevs</td><td>O VG</td></tr>
+<tr><td><strong>dataset</strong></td><td>Um "sistema de arquivos" dentro do pool, que já nasce montado e cresce sozinho</td><td>Um LV já formatado</td></tr>
+<tr><td><strong>snapshot</strong></td><td>Foto de um dataset num instante</td><td>Snapshot do LVM, mas instantâneo e sem tamanho fixo</td></tr>
+</table>
+</div>
+
+<p>Dois comandos fazem tudo: <code>zpool</code> cuida dos discos e do pool; <code>zfs</code> cuida dos datasets e snapshots.</p>
+
+<hr>
+
+<h2>Por que o ZFS não vem pronto no Debian</h2>
+<p>O OpenZFS usa a licença <strong>CDDL</strong>; o kernel Linux usa a <strong>GPL-2</strong>. As duas licenças são livres, mas não combinam num mesmo programa distribuído. Por isso o Debian:</p>
+<ul>
+  <li>coloca o ZFS na seção <strong>contrib</strong> (software livre que depende de algo fora do "main" ou tem restrições), que não vem ativada;</li>
+  <li>não entrega o módulo pronto: o pacote <code>zfs-dkms</code> traz o código-fonte, e o <strong>DKMS</strong> (<em>Dynamic Kernel Module Support</em>) compila o módulo na sua máquina, para o seu kernel.</li>
+</ul>
+
+<p>Sem o contrib, o pacote "não existe":</p>
+<pre class="term" data-host="servidor" data-user="root">#> apt policy zfsutils-linux
+zfsutils-linux:
+  Instalado: (nenhum)
+  Candidato: (nenhum)                                « não aparece no repositório main
+  Tabela de versão:</pre>
+
+<hr>
+
+<h2>Instalar e montar o laboratório</h2>
+
+<ol class="passo">
+  <li><strong>Ative o contrib.</strong> No Debian 13 instalado pelo netinst, as fontes ficam em <code>/etc/apt/sources.list</code> (veja <a href="repositorios.html">Repositórios</a>). Acrescente <code>contrib</code> depois de <code>main</code> nas linhas do Debian:
+<pre class="file" data-file="/etc/apt/sources.list">deb http://deb.debian.org/debian trixie main contrib non-free-firmware
+deb http://security.debian.org/debian-security trixie-security main contrib non-free-firmware
+deb http://deb.debian.org/debian trixie-updates main contrib non-free-firmware</pre>
+<pre class="term" data-host="servidor" data-user="root">#> nano /etc/apt/sources.list
+#> apt update
+#> apt policy zfsutils-linux | head -3
+zfsutils-linux:
+  Instalado: (nenhum)
+  Candidato: 2.3.9-0+deb13u1                         « agora aparece</pre></li>
+  <li><strong>Instale os cabeçalhos do kernel e o ZFS.</strong> O DKMS precisa dos cabeçalhos (<code>linux-headers-amd64</code>) e de um compilador, que o <code>apt</code> puxa junto:
+<pre class="term" data-host="servidor" data-user="root">#> apt install linux-headers-amd64 zfs-dkms zfsutils-linux</pre>
+  No meio da instalação aparece uma tela azul com o aviso <em>"Licenses of OpenZFS and Linux are incompatible"</em> (num sistema em português, o texto vem traduzido). É só um aviso: aperte <kbd>Enter</kbd> em <strong>Ok</strong>. Em seguida o DKMS compila o módulo, o que leva alguns minutos; a tela parece parada, mas está trabalhando.</li>
+  <li><strong>Carregue o módulo</strong> e confira:
+<pre class="term" data-host="servidor" data-user="root">#> modprobe zfs
+#> zfs version
+zfs-2.3.9-0+deb13u1
+zfs-kmod-2.3.9-0+deb13u1</pre></li>
+  <li><strong>Crie os "discos" de treino.</strong> O ZFS aceita arquivos direto, sem <code>losetup</code>; use o caminho completo:
+<pre class="term" data-host="servidor" data-user="root" data-cwd="~/lab">#> truncate -s 1G /root/lab/z1.img /root/lab/z2.img /root/lab/z3.img</pre></li>
+</ol>
+
+<div class="warning">
+<strong>Ao atualizar o kernel</strong>
+<p>A cada kernel novo, o DKMS recompila o módulo durante o <code>apt upgrade</code>. Se os cabeçalhos do kernel novo faltarem, o módulo não é gerado e o pool não monta depois de reiniciar. Por isso instale o metapacote <code>linux-headers-amd64</code>, que acompanha o kernel automaticamente.</p>
+</div>
+
+<hr>
+
+<h2>Criar um pool espelhado</h2>
+
+<dl class="anatomy">
+  <dt>zpool create</dt><dd>Cria um pool.</dd>
+  <dt>tanque</dt><dd>O nome do pool. Ele vira também a pasta <code>/tanque</code>, já montada.</dd>
+  <dt>mirror</dt><dd>O tipo do vdev: espelho, como um RAID 1.</dd>
+  <dt>/root/lab/z1.img /root/lab/z2.img</dt><dd>Os "discos". Num servidor real, use nomes estáveis: <code>/dev/disk/by-id/…</code>.</dd>
+</dl>
+
+<pre class="term" data-host="servidor" data-user="root">#> zpool create tanque mirror /root/lab/z1.img /root/lab/z2.img
+#> zpool list
+NAME     SIZE  ALLOC   FREE  CKPOINT  EXPANDSZ   FRAG    CAP  DEDUP    HEALTH  ALTROOT
+tanque   960M   114K   960M        -         -     0%     0%  1.00x    ONLINE  -
+#> df -h /tanque
+Sist. Arq.      Tam. Usado Disp. Uso% Montado em
+tanque          832M  128K  832M   1% /tanque          « já montado, sem mkfs nem fstab</pre>
+
+<p>Repare no que <strong>não</strong> foi preciso: formatar, criar ponto de montagem ou editar o <code>/etc/fstab</code>. O ZFS faz tudo isso sozinho.</p>
+
+<hr>
+
+<h2>Ler o <code>zpool status</code></h2>
+<pre class="term" data-host="servidor" data-user="root">#> zpool status tanque
+  pool: tanque
+ state: ONLINE                                          « tudo bem
+config:
+
+	NAME                  STATE     READ WRITE CKSUM
+	tanque                ONLINE       0     0     0
+	  mirror-0            ONLINE       0     0     0       « o vdev espelhado
+	    /root/lab/z1.img  ONLINE       0     0     0
+	    /root/lab/z2.img  ONLINE       0     0     0
+
+errors: No known data errors</pre>
+
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Coluna/estado</th><th>Significado</th></tr>
+<tr><td><code>READ</code> / <code>WRITE</code></td><td>Erros de leitura e gravação no disco</td></tr>
+<tr><td><code>CKSUM</code></td><td>Blocos cujo "dígito verificador" não bateu: dado corrompido detectado (e corrigido pela cópia do espelho)</td></tr>
+<tr><td><code>ONLINE</code></td><td>Funcionando</td></tr>
+<tr><td><code>DEGRADED</code></td><td>Funcionando sem redundância: um disco faltando</td></tr>
+<tr><td><code>FAULTED</code> / <code>UNAVAIL</code></td><td>Disco com defeito / não encontrado</td></tr>
+</table>
+</div>
+
+<hr>
+
+<h2>Datasets: organizar o pool</h2>
+
+<dl class="anatomy">
+  <dt>zfs create</dt><dd>Cria um dataset.</dd>
+  <dt>-o compression=zstd</dt><dd><code>-o</code> define uma propriedade: aqui, comprimir tudo com o algoritmo zstd.</dd>
+  <dt>tanque/fotos</dt><dd>Pool/nome. Vira a pasta <code>/tanque/fotos</code>.</dd>
+</dl>
+
+<pre class="term" data-host="servidor" data-user="root">#> zfs create tanque/documentos
+#> zfs create -o compression=zstd tanque/fotos
+#> zfs list
+NAME                USED  AVAIL  REFER  MOUNTPOINT
+tanque              201K   832M    24K  /tanque
+tanque/documentos    24K   832M    24K  /tanque/documentos
+tanque/fotos         24K   832M    24K  /tanque/fotos
+#> zfs get compression,compressratio tanque/fotos
+NAME          PROPERTY       VALUE           SOURCE
+tanque/fotos  compression    zstd            local
+tanque/fotos  compressratio  1.00x           -</pre>
+
+<p>Os datasets dividem o espaço livre do pool: nenhum tem tamanho fixo. Para limitar um, use uma cota: <code>zfs set quota=200M tanque/fotos</code>.</p>
+
+<hr>
+
+<h2>Snapshots e rollback</h2>
+
+<dl class="anatomy">
+  <dt>zfs snapshot</dt><dd>Tira a foto.</dd>
+  <dt>tanque/documentos@antes-da-limpeza</dt><dd>Dataset + <code>@</code> + nome da foto.</dd>
+</dl>
+
+<pre class="term" data-host="servidor" data-user="root">#> echo "contrato importante" &gt; /tanque/documentos/contrato.txt
+#> zfs snapshot tanque/documentos@antes-da-limpeza
+#> rm /tanque/documentos/contrato.txt                          « ops, apagado
+#> zfs list -t snapshot
+NAME                                 USED  AVAIL  REFER  MOUNTPOINT
+tanque/documentos@antes-da-limpeza    13K      -  25.5K  -</pre>
+
+<p>Duas formas de recuperar:</p>
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Forma</th><th>Comando</th><th>Quando usar</th></tr>
+<tr><td>Pegar só o arquivo</td><td><code>cp /tanque/documentos/.zfs/snapshot/antes-da-limpeza/contrato.txt /tanque/documentos/</code></td><td>Recuperar um ou poucos arquivos. A pasta <code>.zfs</code> é escondida, mas existe.</td></tr>
+<tr><td>Voltar tudo</td><td><code>zfs rollback tanque/documentos@antes-da-limpeza</code></td><td>Desfazer todas as mudanças feitas depois da foto.</td></tr>
+</table>
+</div>
+
+<pre class="term" data-host="servidor" data-user="root">#> zfs rollback tanque/documentos@antes-da-limpeza
+#> cat /tanque/documentos/contrato.txt
+contrato importante</pre>
+
+<hr>
+
+<h2>Scrub: conferir todos os dados</h2>
+<p>O <code>scrub</code> lê o pool inteiro e confere cada bloco. Se achar um bloco corrompido, conserta a partir da cópia boa do espelho.</p>
+<pre class="term" data-host="servidor" data-user="root">#> zpool scrub tanque
+#> zpool status tanque | grep scan
+  scan: scrub repaired 0B in 00:00:01 with 0 errors on Thu Oct 15 23:10:12 2026</pre>
+<p>O pacote <code>zfsutils-linux</code> do Debian já agenda um scrub mensal dos pools.</p>
+
+<hr>
+
+<h2>Trocar um disco com defeito</h2>
+<ol class="passo">
+  <li><strong>Simule a falha</strong> tirando um disco do ar:
+<pre class="term" data-host="servidor" data-user="root">#> zpool offline tanque /root/lab/z2.img
+#> zpool status tanque
+  pool: tanque
+ state: DEGRADED                                        « funcionando, mas sem redundância
+status: One or more devices has been taken offline by the administrator.
+…
+	NAME                  STATE     READ WRITE CKSUM
+	tanque                DEGRADED     0     0     0
+	  mirror-0            DEGRADED     0     0     0
+	    /root/lab/z1.img  ONLINE       0     0     0
+	    /root/lab/z2.img  OFFLINE      0     0     0</pre></li>
+  <li><strong>Troque pelo disco novo</strong>:
+<pre class="term" data-host="servidor" data-user="root">#> zpool replace tanque /root/lab/z2.img /root/lab/z3.img
+#> zpool status tanque | grep -E "state|scan"
+ state: ONLINE
+  scan: resilvered 300K in 00:00:00 with 0 errors on Thu Oct 15 23:12:40 2026</pre>
+  O ZFS chama a reconstrução de <strong>resilver</strong>. Ele copia só os blocos usados, por isso costuma ser bem mais rápido que um RAID tradicional.</li>
+</ol>
+
+<hr>
+
+<h2>Desmontar o laboratório</h2>
+<pre class="term" data-host="servidor" data-user="root">#> zpool destroy tanque                                « apaga o pool e todos os datasets
+#> rm /root/lab/z1.img /root/lab/z2.img /root/lab/z3.img</pre>
+
+<hr>
+
+<h2>Quando não funciona</h2>
+
+<div class="cenario">
+<strong>"O pacote 'zfsutils-linux' não tem candidato para instalação"</strong>
+<pre class="term" data-host="servidor" data-user="root">#> apt install zfsutils-linux
+Erro: O pacote 'zfsutils-linux' não tem candidato para instalação</pre>
+<p><strong>O que aconteceu:</strong> o contrib não está ativado, ou você esqueceu o <code>apt update</code> depois de editar o <code>sources.list</code>.</p>
+<p><strong>Como resolver:</strong> confira com <code>grep contrib /etc/apt/sources.list</code> e rode <code>apt update</code>.</p>
+</div>
+
+<div class="cenario">
+<strong>"The ZFS modules are not loaded."</strong>
+<pre class="term" data-host="servidor" data-user="root">#> zpool list
+The ZFS modules are not loaded.
+Try running '/sbin/modprobe zfs' as root to load them.</pre>
+<p><strong>O que aconteceu:</strong> o módulo não foi carregado ou não foi compilado (faltavam os cabeçalhos do kernel em uso).</p>
+<p><strong>Como resolver:</strong> rode <code>modprobe zfs</code>. Se der "Module zfs not found", confira <code>dkms status</code>, instale <code>linux-headers-$(uname -r)</code> e rode <code>dpkg-reconfigure zfs-dkms</code> para recompilar.</p>
+</div>
+
+<div class="cenario">
+<strong>"cannot create 'tanque': pool already exists"</strong>
+<p><strong>O que aconteceu:</strong> já existe um pool com esse nome.</p>
+<p><strong>Como resolver:</strong> veja os pools com <code>zpool list</code>; escolha outro nome ou, no laboratório, destrua o antigo com <code>zpool destroy tanque</code>.</p>
+</div>
+
+<div class="cenario">
+<strong>"invalid vdev specification … use '-f' to override"</strong>
+<p><strong>O que aconteceu:</strong> os discos já têm marcas de outro formato (partições, ext4, RAID antigo). O ZFS se recusa a apagar sem confirmação.</p>
+<p><strong>Como resolver:</strong> confira se é mesmo o disco certo e use <code>zpool create -f</code>, ou limpe antes com <code>wipefs -a</code> (veja <a href="particionar.html">Particionar e Formatar</a>).</p>
+</div>
+
+<hr>
+
+<h2>Referência rápida</h2>
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Comando</th><th>O que faz</th></tr>
+<tr><td><code>apt install linux-headers-amd64 zfs-dkms zfsutils-linux</code></td><td>Instala o OpenZFS (com contrib ativado)</td></tr>
+<tr><td><code>zpool create NOME mirror DISCO1 DISCO2</code></td><td>Cria um pool espelhado</td></tr>
+<tr><td><code>zpool list</code> / <code>zpool status</code></td><td>Resumo / estado detalhado</td></tr>
+<tr><td><code>zpool scrub NOME</code></td><td>Confere todos os dados</td></tr>
+<tr><td><code>zpool replace NOME VELHO NOVO</code></td><td>Troca um disco</td></tr>
+<tr><td><code>zfs create -o compression=zstd POOL/NOME</code></td><td>Cria um dataset com compressão</td></tr>
+<tr><td><code>zfs list</code> / <code>zfs get PROPRIEDADE</code></td><td>Lista datasets / mostra propriedades</td></tr>
+<tr><td><code>zfs snapshot POOL/NOME@FOTO</code></td><td>Tira um snapshot</td></tr>
+<tr><td><code>zfs rollback POOL/NOME@FOTO</code></td><td>Volta ao snapshot</td></tr>
+<tr><td><code>zpool destroy NOME</code></td><td>Apaga o pool inteiro</td></tr>
+</table>
+</div>
+
+<hr>
+
+<h2>Exercícios</h2>
+
+<div class="exercise">
+<h3>1. A seção certa</h3>
+<p>Em qual seção do repositório do Debian fica o ZFS?</p>
+<div class="ex-code"><input data-answer="contrib" aria-label="seção"></div>
+</div>
+
+<div class="exercise">
+<h3>2. Foto</h3>
+<p>Complete para tirar um snapshot chamado <code>segunda</code> do dataset <code>tanque/site</code>:</p>
+<div class="ex-code">zfs snapshot <input data-answer="tanque/site@segunda" aria-label="nome"></div>
+</div>
+
+<div class="mc" data-answer="2">
+<p class="mc-q">3. Por que o Debian compila o módulo do ZFS na sua máquina (DKMS) em vez de entregá-lo pronto?</p>
+<label><input type="radio" name="q3"> Porque o ZFS é pago.</label>
+<label><input type="radio" name="q3"> Porque as licenças CDDL (ZFS) e GPL-2 (Linux) não combinam num binário distribuído.</label>
+<label><input type="radio" name="q3"> Porque o ZFS só funciona em 32 bits.</label>
+<label><input type="radio" name="q3"> Porque o módulo pronto ficaria grande demais.</label>
+</div>
+
+<div class="mc" data-answer="4">
+<p class="mc-q">4. O <code>zpool status</code> mostra <code>state: DEGRADED</code>. O que fazer?</p>
+<label><input type="radio" name="q4"> Nada: é o estado normal.</label>
+<label><input type="radio" name="q4"> Formatar o pool.</label>
+<label><input type="radio" name="q4"> Rodar <code>zpool destroy</code>.</label>
+<label><input type="radio" name="q4"> Identificar o disco com problema e trocá-lo com <code>zpool replace</code>.</label>
+</div>
+
+<hr>
+
+<h2>Resumo</h2>
+<ul>
+  <li>ZFS = RAID + volumes + sistema de arquivos, com verificação de cada bloco.</li>
+  <li>No Debian: ative o <strong>contrib</strong>, instale <code>linux-headers-amd64 zfs-dkms zfsutils-linux</code> e aceite o aviso de licença.</li>
+  <li><code>zpool</code> cuida de discos e pools; <code>zfs</code> cuida de datasets e snapshots.</li>
+  <li>Pools e datasets já nascem montados; não precisa de <code>mkfs</code> nem <code>fstab</code>.</li>
+  <li><code>scrub</code> confere os dados; <code>replace</code> troca disco; snapshots salvam você de erros.</li>
+</ul>
+
+<div class="pager"></div>
+
+</div>
+</main>
+</div>
+<script src="assets/site.js"></script>
+</body>
+</html>

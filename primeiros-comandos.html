@@ -1,0 +1,311 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Debian Primeiros Comandos — whoami, date, uname e outros | Guia Debian</title>
+<meta name="description" content="Os primeiros comandos para conhecer seu Debian: whoami, hostname, date, cal, uptime, uname, lsb_release, /etc/debian_version, echo, clear, history e exit, com saídas reais do Debian 13.">
+<link rel="stylesheet" href="assets/style.css">
+<script>try{var t=localStorage.getItem("tema");if(t)document.documentElement.setAttribute("data-theme",t)}catch(e){}</script>
+</head>
+<body>
+<div class="layout">
+<nav class="sidebar" id="sidebar" aria-label="Tópicos"></nav>
+<main class="main">
+<div class="content">
+
+<div class="pager"></div>
+
+<h1>Debian <span class="hl">Primeiros Comandos</span></h1>
+
+<p class="intro">Antes de mexer em arquivos, vale conhecer a máquina: quem você é, como ela se chama, que horas ela acha que são, há quanto tempo está ligada e qual Debian roda nela. São comandos curtos, que não alteram nada e servem para ganhar confiança no terminal. Todas as saídas abaixo vêm de um Debian 13 de verdade.</p>
+
+<div class="note">
+<strong>Você vai aprender</strong>
+<ul>
+  <li>Descobrir o usuário (<code>whoami</code>, <code>id</code>) e o nome da máquina (<code>hostname</code>).</li>
+  <li>Ver a data com <code>date</code>, inclusive em formatos próprios, e o calendário com <code>cal</code>.</li>
+  <li>Saber há quanto tempo o sistema está ligado com <code>uptime</code>.</li>
+  <li>Identificar o kernel e a versão do Debian.</li>
+  <li>Usar <code>echo</code>, <code>clear</code>, <code>history</code> e <code>exit</code>.</li>
+</ul>
+</div>
+
+<hr>
+
+<h2>Quem sou eu? whoami e id</h2>
+<p>O <code>whoami</code> (de <em>who am I</em>, "quem sou eu") mostra o usuário que está usando o terminal. Parece óbvio, mas depois de um <code>su -</code> a resposta muda, e é fácil esquecer em qual usuário você está.</p>
+
+<pre class="term">$ whoami
+ana</pre>
+
+<p>O <code>id</code> mostra mais: o número do usuário (UID), o grupo principal e todos os grupos dos quais você faz parte.</p>
+
+<dl class="anatomy">
+  <dt>uid=1000(ana)</dt><dd>O número do usuário. O primeiro usuário criado no Debian recebe o 1000.</dd>
+  <dt>gid=1000(ana)</dt><dd>O grupo principal, com o mesmo nome do usuário.</dd>
+  <dt>grupos=…</dt><dd>Todos os grupos. Eles definem o que você pode fazer: <code>audio</code> usa o som, <code>plugdev</code> monta pendrives.</dd>
+</dl>
+
+<pre class="term">$ id
+uid=1000(ana) gid=1000(ana) grupos=1000(ana),24(cdrom),25(floppy),29(audio),30(dip),44(video),46(plugdev),100(users),101(netdev)</pre>
+
+<p>Repare: o grupo <code>sudo</code> não aparece. É o que acontece quando o Debian é instalado com senha de root (veja <a href="root-su-sudo.html">root, su e sudo</a>).</p>
+
+<hr>
+
+<h2>Como a máquina se chama? hostname</h2>
+<p>O <code>hostname</code> mostra o nome da máquina na rede, escolhido durante a instalação. É o mesmo que aparece no prompt, depois do <code>@</code>.</p>
+
+<pre class="term">$ hostname
+notebook
+$ hostname -I
+192.168.0.15                « -I mostra os endereços IP da máquina (veja Redes)</pre>
+
+<hr>
+
+<h2>Que dia é hoje? date</h2>
+<p>O <code>date</code> mostra a data e a hora, no formato do idioma do sistema:</p>
+
+<pre class="term">$ date
+qui 15 out 2026 21:06:14 -03          « dia da semana, dia, mês, ano, hora e fuso (-03 = Brasília)</pre>
+
+<p>Com um <code>+</code> seguido de códigos, você monta o formato que quiser. Isso é muito usado para dar nome a arquivos de backup:</p>
+
+<dl class="anatomy">
+  <dt>date</dt><dd>O comando.</dd>
+  <dt>+%F</dt><dd>O formato: <code>+</code> avisa que vem um formato; <code>%F</code> é a data no padrão ano-mês-dia.</dd>
+</dl>
+
+<pre class="term">$ date +%F
+2026-10-15
+$ date "+%d/%m/%Y %H:%M"
+15/10/2026 21:06
+$ date "+%A, %d de %B de %Y"
+quinta, 15 de outubro de 2026</pre>
+
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Código</th><th>Significa</th><th>Exemplo</th></tr>
+<tr><td><code>%d</code> / <code>%m</code> / <code>%Y</code></td><td>Dia / mês / ano</td><td>15 / 10 / 2026</td></tr>
+<tr><td><code>%H</code> / <code>%M</code> / <code>%S</code></td><td>Hora / minuto / segundo</td><td>21 / 06 / 14</td></tr>
+<tr><td><code>%F</code></td><td>Data completa ISO (ano-mês-dia)</td><td>2026-10-15</td></tr>
+<tr><td><code>%A</code> / <code>%a</code></td><td>Dia da semana por extenso / abreviado</td><td>quinta / qui</td></tr>
+<tr><td><code>%B</code> / <code>%b</code></td><td>Mês por extenso / abreviado</td><td>outubro / out</td></tr>
+</table>
+</div>
+
+<p>O <code>date</code> também calcula datas com <code>-d</code>:</p>
+<pre class="term">$ date -d tomorrow
+sex 16 out 2026 21:29:06 -03
+$ date -d "+30 days" +%F
+2026-11-14</pre>
+
+<div class="tip">
+<strong>Por que o formato ano-mês-dia?</strong>
+<p>Arquivos chamados <code>backup-2026-10-15.tar.gz</code> ficam em ordem cronológica quando o <code>ls</code> os ordena por nome. Com <code>15-10-2026</code>, não.</p>
+</div>
+
+<div class="try" data-goal="contains:~/hoje.txt=2026-10-15">
+<p class="try-task"><strong>Missão:</strong> crie o arquivo <code>hoje.txt</code> com a data de hoje no formato ano-mês-dia. Use <code>date</code> com o formato certo e um <code>&gt;</code>. Confira com <code>cat hoje.txt</code>.</p>
+</div>
+
+<hr>
+
+<h2>Calendário: cal</h2>
+<p>O <code>cal</code> mostra o calendário do mês, com o dia de hoje destacado. Ele <strong>não vem instalado</strong> no Debian: fica no pacote <code>ncal</code>.</p>
+
+<pre class="term">$ cal
+bash: cal: comando não encontrado
+$ su -c 'apt install ncal'
+Senha:
+…
+$ cal
+    Outubro 2026
+do se te qu qu se sá
+             1  2  3
+ 4  5  6  7  8  9 10
+11 12 13 14 15 16 17
+18 19 20 21 22 23 24
+25 26 27 28 29 30 31</pre>
+
+<p>Variações úteis: <code>cal -3</code> mostra o mês anterior, o atual e o próximo; <code>cal 12 2026</code> mostra dezembro de 2026; <code>ncal</code> mostra o mês "deitado", com os dias da semana nas linhas.</p>
+
+<hr>
+
+<h2>Há quanto tempo está ligado? uptime</h2>
+<p>O <code>uptime</code> mostra a hora, há quanto tempo o sistema está ligado, quantos usuários estão conectados e a <strong>carga</strong> (<em>load average</em>):</p>
+
+<pre class="term">$ uptime
+ 21:06:14 up 10 min,  1 user,  load average: 0,00, 0,21, 0,25
+$ uptime -p
+up 10 minutes                          « só o tempo ligado, por extenso
+$ uptime -s
+2026-10-15 20:55:21                    « quando foi ligado</pre>
+
+<p>A saída do <code>uptime</code> não é traduzida. Os três números da carga são a média de processos esperando o processador no último minuto, nos últimos 5 e nos últimos 15 minutos. Com números menores que a quantidade de processadores, a máquina está folgada. A aula <a href="desempenho.html">Desempenho e Monitoramento</a> explica em detalhes.</p>
+
+<hr>
+
+<h2>Que sistema é este? uname, lsb_release e debian_version</h2>
+<p>O <code>uname</code> (de <em>Unix name</em>) fala do <strong>kernel</strong>; os outros, da <strong>distribuição</strong>.</p>
+
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Comando</th><th>Resposta no Debian 13</th></tr>
+<tr><td><code>uname</code></td><td><code>Linux</code></td></tr>
+<tr><td><code>uname -r</code></td><td><code>6.12.111+deb13-amd64</code> (versão do kernel)</td></tr>
+<tr><td><code>uname -m</code></td><td><code>x86_64</code> (arquitetura do processador)</td></tr>
+<tr><td><code>uname -a</code></td><td>Tudo junto (veja abaixo)</td></tr>
+<tr><td><code>cat /etc/debian_version</code></td><td><code>13.7</code></td></tr>
+<tr><td><code>lsb_release -a</code></td><td>Distribuição, descrição, número e codinome</td></tr>
+</table>
+</div>
+
+<pre class="term">$ uname -a
+Linux notebook 6.12.111+deb13-amd64 #1 SMP PREEMPT_DYNAMIC Debian 6.12.111-1 (2026-09-28) x86_64 GNU/Linux
+$ lsb_release -a
+Distributor ID:	Debian
+Description:	Debian GNU/Linux 13 (trixie)
+Release:	13
+Codename:	trixie
+$ cat /etc/debian_version
+13.7</pre>
+
+<dl class="anatomy">
+  <dt>Linux</dt><dd>O sistema (kernel).</dd>
+  <dt>notebook</dt><dd>O nome da máquina.</dd>
+  <dt>6.12.111+deb13-amd64</dt><dd>A versão do kernel, preparada pelo Debian 13 para PCs de 64 bits.</dd>
+  <dt>#1 SMP PREEMPT_DYNAMIC Debian 6.12.111-1 (2026-09-28)</dt><dd>Detalhes da compilação: a versão do pacote e a data em que foi gerado.</dd>
+  <dt>x86_64</dt><dd>A arquitetura.</dd>
+  <dt>GNU/Linux</dt><dd>O sistema operacional.</dd>
+</dl>
+
+<div class="try" data-goal="ran:whoami,ran:hostname,ran:uname">
+<p class="try-task"><strong>Missão:</strong> faça um "raio-X" da máquina simulada: descubra o usuário, o nome da máquina e a versão do kernel.</p>
+</div>
+
+<hr>
+
+<h2>echo: escrever na tela</h2>
+<p>O <code>echo</code> repete o que recebe. Parece inútil, mas serve para mostrar variáveis, testar comandos e, com <code>&gt;</code>, escrever em arquivos.</p>
+
+<pre class="term">$ echo Olá, mundo
+Olá, mundo
+$ echo "Olá, $USER"
+Olá, ana
+$ echo $HOME
+/home/ana
+$ echo $SHELL
+/bin/bash</pre>
+
+<p><code>$USER</code>, <code>$HOME</code> e <code>$SHELL</code> são <strong>variáveis de ambiente</strong>: valores que o sistema guarda para você. Veja mais em <a href="bashrc.html">.bashrc, alias, PATH</a>.</p>
+
+<hr>
+
+<h2>clear, history e exit</h2>
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Comando</th><th>O que faz</th><th>Atalho equivalente</th></tr>
+<tr><td><code>clear</code></td><td>Limpa a tela</td><td><kbd>Ctrl</kbd>+<kbd>L</kbd></td></tr>
+<tr><td><code>history</code></td><td>Lista os comandos já digitados, numerados</td><td><kbd>↑</kbd> para navegar</td></tr>
+<tr><td><code>exit</code></td><td>Fecha o terminal, ou sai do root depois de um <code>su -</code></td><td><kbd>Ctrl</kbd>+<kbd>D</kbd> numa linha vazia</td></tr>
+</table>
+</div>
+
+<pre class="term">$ su -
+Senha:</pre>
+<pre class="term" data-user="root" data-cwd="~">#> whoami
+root
+#> exit
+sair                                 « o bash avisa que saiu da sessão do root</pre>
+<pre class="term">$ whoami
+ana</pre>
+
+<hr>
+
+<h2>Formas diferentes de descobrir a mesma coisa</h2>
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Quero saber…</th><th>Comandos</th><th>Qual usar</th></tr>
+<tr><td>Meu usuário</td><td><code>whoami</code>, <code>id -un</code>, <code>echo $USER</code></td><td><code>whoami</code> é o mais claro.</td></tr>
+<tr><td>A versão do Debian</td><td><code>cat /etc/debian_version</code>, <code>lsb_release -a</code>, <code>cat /etc/os-release</code></td><td><code>debian_version</code> para o número exato.</td></tr>
+<tr><td>O kernel</td><td><code>uname -r</code>, <code>hostnamectl</code></td><td><code>uname -r</code> é o mais curto.</td></tr>
+<tr><td>A data</td><td><code>date</code>, <code>cal</code></td><td><code>date</code> para scripts; <code>cal</code> para olhar.</td></tr>
+</table>
+</div>
+
+<hr>
+
+<h2>Quando não funciona</h2>
+
+<div class="cenario">
+<strong>"bash: cal: comando não encontrado"</strong>
+<p><strong>O que aconteceu:</strong> o <code>cal</code> não vem instalado no Debian.</p>
+<p><strong>Como resolver:</strong> <code>su -c 'apt install ncal'</code>.</p>
+</div>
+
+<div class="cenario">
+<strong>"date: data inválida"</strong>
+<pre class="term">$ date -d amanha
+date: data inválida ‘amanha’</pre>
+<p><strong>O que aconteceu:</strong> o <code>-d</code> entende datas em inglês: <code>tomorrow</code>, <code>yesterday</code>, <code>next monday</code>, <code>+3 days</code>.</p>
+</div>
+
+<div class="cenario">
+<strong>A hora está errada</strong>
+<p><strong>O que aconteceu:</strong> o fuso horário configurado não é o seu, ou o relógio não sincronizou.</p>
+<p><strong>Como resolver:</strong> veja com <code>timedatectl</code>. Como root, <code>timedatectl set-timezone America/Sao_Paulo</code> ajusta o fuso. O Debian sincroniza a hora pela internet com o serviço <code>systemd-timesyncd</code>, que vem ativo.</p>
+</div>
+
+<hr>
+
+<h2>Exercícios</h2>
+
+<div class="exercise">
+<h3>1. Data para nome de arquivo</h3>
+<p>Complete para mostrar a data como <code>2026-10-15</code>:</p>
+<div class="ex-code">date <input data-answer="+%F|+%Y-%m-%d|&quot;+%F&quot;|'+%F'" aria-label="formato"></div>
+</div>
+
+<div class="exercise">
+<h3>2. Versão do kernel</h3>
+<p>Complete para mostrar só a versão do kernel:</p>
+<div class="ex-code">uname <input data-answer="-r|--kernel-release" aria-label="opção"></div>
+</div>
+
+<div class="mc" data-answer="2">
+<p class="mc-q">3. Em <code>load average: 0,00, 0,21, 0,25</code>, o que é o <code>0,25</code>?</p>
+<label><input type="radio" name="q3"> O uso de memória.</label>
+<label><input type="radio" name="q3"> A carga média dos últimos 15 minutos.</label>
+<label><input type="radio" name="q3"> A temperatura do processador.</label>
+<label><input type="radio" name="q3"> O tempo ligado, em horas.</label>
+</div>
+
+<div class="mc" data-answer="4">
+<p class="mc-q">4. O <code>id</code> da ana não mostra o grupo <code>sudo</code>. O que isso indica?</p>
+<label><input type="radio" name="q4"> Que o sistema está quebrado.</label>
+<label><input type="radio" name="q4"> Que ela é root.</label>
+<label><input type="radio" name="q4"> Que o terminal está em inglês.</label>
+<label><input type="radio" name="q4"> Que ela não pode usar sudo; para administrar, usa <code>su -</code>.</label>
+</div>
+
+<hr>
+
+<h2>Resumo</h2>
+<ul>
+  <li><code>whoami</code> e <code>id</code>: quem você é e seus grupos; <code>hostname</code>: o nome da máquina.</li>
+  <li><code>date</code> mostra e formata datas (<code>+%F</code>); <code>cal</code> vem no pacote <code>ncal</code>.</li>
+  <li><code>uptime</code>: tempo ligado e carga; <code>uname -r</code>: o kernel.</li>
+  <li><code>cat /etc/debian_version</code> e <code>lsb_release -a</code>: a versão do Debian.</li>
+  <li><code>echo</code>, <code>clear</code>, <code>history</code> e <code>exit</code> completam o kit básico.</li>
+</ul>
+
+<div class="pager"></div>
+
+</div>
+</main>
+</div>
+<script src="assets/site.js"></script>
+</body>
+</html>

@@ -1,0 +1,297 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Debian cp e mv — copiar, mover e renomear | Guia Debian</title>
+<meta name="description" content="Copie, mova e renomeie arquivos e pastas no Debian com cp e mv: opções -r, -i, -n, -v, -b, várias formas de fazer, mensagens reais e terminal simulado.">
+<link rel="stylesheet" href="assets/style.css">
+<script>try{var t=localStorage.getItem("tema");if(t)document.documentElement.setAttribute("data-theme",t)}catch(e){}</script>
+</head>
+<body>
+<div class="layout">
+<nav class="sidebar" id="sidebar" aria-label="Tópicos"></nav>
+<main class="main">
+<div class="content">
+
+<div class="pager"></div>
+
+<h1>Debian <span class="hl">cp e mv</span></h1>
+
+<p class="intro">O <code>cp</code> copia e o <code>mv</code> move. Mover e renomear são a mesma coisa para o Linux: os dois só mudam o endereço do arquivo. Com esses dois comandos você organiza qualquer pasta.</p>
+
+<div class="note">
+<strong>Você vai aprender</strong>
+<ul>
+  <li>Copiar um arquivo, vários arquivos e pastas inteiras.</li>
+  <li>Renomear e mover com o <code>mv</code>.</li>
+  <li>Não sobrescrever nada sem querer: <code>-i</code>, <code>-n</code> e <code>-b</code>.</li>
+  <li>Ler as mensagens de erro do Debian.</li>
+</ul>
+</div>
+
+<div class="warning">
+<strong>Atenção antes de começar</strong>
+<p>O <code>cp</code> e o <code>mv</code> <strong>sobrescrevem sem perguntar</strong> se o destino já existir. Não há lixeira nem "desfazer". As opções desta aula existem justamente para evitar isso.</p>
+</div>
+
+<hr>
+
+<h2>cp: copiar um arquivo</h2>
+<p><code>cp</code> vem de <em>copy</em>, "copiar". Ele recebe primeiro a <strong>origem</strong> e depois o <strong>destino</strong>.</p>
+
+<dl class="anatomy">
+  <dt>cp</dt><dd>O programa que copia.</dd>
+  <dt>frutas.txt</dt><dd>A origem: o arquivo que já existe.</dd>
+  <dt>frutas-backup.txt</dt><dd>O destino: o nome da cópia.</dd>
+</dl>
+
+<pre class="term">$ cp frutas.txt frutas-backup.txt
+$ ls
+'Área de trabalho'   Downloads           frutas.txt   Modelos   Público
+ Documentos          frutas-backup.txt   Imagens      Música    Vídeos</pre>
+
+<p>Silêncio é sucesso. As duas versões ficaram lado a lado.</p>
+
+<h3>Copiar para dentro de uma pasta</h3>
+<p>Se o destino é uma pasta que existe, a cópia vai para dentro dela, com o mesmo nome. Com <code>-v</code> (<em>verbose</em>, "detalhado") o <code>cp</code> mostra o que fez:</p>
+
+<pre class="term">$ cp -v frutas.txt Documentos/
+'frutas.txt' -> 'Documentos/frutas.txt'          « origem -> destino</pre>
+
+<div class="tip">
+<strong>A barra no fim ajuda</strong>
+<p>Escreva <code>Documentos/</code>, com barra. Se a pasta não existir, o <code>cp</code> dá erro em vez de criar um <em>arquivo</em> chamado "Documentos".</p>
+</div>
+
+<h3>Vários arquivos de uma vez</h3>
+<p>Com mais de uma origem, o último argumento <strong>tem que ser uma pasta</strong>:</p>
+
+<pre class="term">$ cp -v Documentos/notas.txt Documentos/acesso.log Imagens/
+'Documentos/notas.txt' -> 'Imagens/notas.txt'
+'Documentos/acesso.log' -> 'Imagens/acesso.log'</pre>
+
+<p>Com curingas fica ainda mais curto: <code>cp Documentos/*.txt Downloads/</code> copia todos os <code>.txt</code> (veja <a href="curingas.html">Curingas</a>).</p>
+
+<div class="try" data-goal="file:~/Documentos/frutas.txt,file:~/Imagens/frutas.txt">
+<p class="try-task"><strong>Missão:</strong> copie <code>frutas.txt</code> para a pasta <code>Documentos</code> e também para <code>Imagens</code>. Use <code>-v</code> para ver cada cópia.</p>
+</div>
+
+<hr>
+
+<h2>Copiar pastas: <code>-r</code></h2>
+<p>Sem opção, o <code>cp</code> recusa pastas:</p>
+
+<pre class="term">$ cp Documentos/projetos copia
+cp: -r não especificado; omitindo o diretório 'Documentos/projetos'</pre>
+
+<p>A opção <code>-r</code> (de <em>recursive</em>, "recursivo") copia a pasta e tudo o que há dentro:</p>
+
+<dl class="anatomy">
+  <dt>cp</dt><dd>O programa.</dd>
+  <dt>-rv</dt><dd><code>-r</code> entra nas subpastas; <code>-v</code> mostra cada item.</dd>
+  <dt>Documentos/projetos</dt><dd>A pasta de origem.</dd>
+  <dt>copia</dt><dd>O nome da cópia (não existia).</dd>
+</dl>
+
+<pre class="term">$ cp -rv Documentos/projetos copia
+'Documentos/projetos' -> 'copia'
+'Documentos/projetos/backup.sh' -> 'copia/backup.sh'
+'Documentos/projetos/site' -> 'copia/site'
+'Documentos/projetos/site/index.html' -> 'copia/site/index.html'
+'Documentos/projetos/site/style.css' -> 'copia/site/style.css'</pre>
+
+<h3>-a: copiar preservando tudo</h3>
+<p>O <code>-r</code> faz a cópia com a data de agora e com você como dono. O <code>-a</code> (de <em>archive</em>, "arquivar") é o <code>-r</code> que <strong>preserva</strong> datas, permissões e links. É o mais indicado para backups.</p>
+
+<div class="try" data-goal="file:~/backup/projetos/site/index.html">
+<p class="try-task"><strong>Missão:</strong> crie a pasta <code>backup</code> e copie para dentro dela a pasta <code>Documentos/projetos</code> inteira.</p>
+</div>
+
+<hr>
+
+<h2>mv: mover e renomear</h2>
+<p><code>mv</code> vem de <em>move</em>, "mover". A sintaxe é igual à do <code>cp</code>, mas a origem deixa de existir.</p>
+
+<h3>Renomear</h3>
+<p>Mover para um nome novo, na mesma pasta, é renomear:</p>
+
+<pre class="term">$ mv -v frutas-backup.txt frutas-velho.txt
+renomeado 'frutas-backup.txt' -> 'frutas-velho.txt'</pre>
+
+<h3>Mover para outra pasta</h3>
+<pre class="term">$ mv -v frutas-velho.txt Documentos/
+renomeado 'frutas-velho.txt' -> 'Documentos/frutas-velho.txt'</pre>
+
+<p>O Debian diz "renomeado" mesmo quando você moveu, porque internamente é a mesma operação: o arquivo ganha um endereço novo.</p>
+
+<div class="note">
+<strong>Pastas não precisam de -r no mv</strong>
+<p>Ao contrário do <code>cp</code>, o <code>mv</code> move pastas inteiras sem opção nenhuma: <code>mv projetos arquivo-morto/</code>. Mover na mesma partição é instantâneo, porque nada é copiado.</p>
+</div>
+
+<div class="try" data-goal="file:~/Documentos/lista-frutas.txt,absent:~/frutas.txt">
+<p class="try-task"><strong>Missão:</strong> mova <code>frutas.txt</code> para a pasta <code>Documentos</code>, já com o nome novo <code>lista-frutas.txt</code>, num único comando.</p>
+</div>
+
+<hr>
+
+<h2>Não sobrescrever sem querer</h2>
+<p>Se o destino já existe, <code>cp</code> e <code>mv</code> trocam o conteúdo sem avisar. Três opções protegem você:</p>
+
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Opção</th><th>O que faz</th><th>Quando usar</th></tr>
+<tr><td><code>-i</code></td><td>Pergunta antes de sobrescrever (<em>interactive</em>)</td><td>Quando você está digitando à mão</td></tr>
+<tr><td><code>-n</code></td><td>Nunca sobrescreve, sem perguntar (<em>no-clobber</em>)</td><td>Em scripts</td></tr>
+<tr><td><code>-b</code></td><td>Sobrescreve, mas guarda o antigo com <code>~</code> no fim (<em>backup</em>)</td><td>Quando você quer as duas versões</td></tr>
+<tr><td><code>-u</code></td><td>Só copia se a origem for mais nova (<em>update</em>)</td><td>Para atualizar uma cópia</td></tr>
+</table>
+</div>
+
+<h3>-i: perguntar</h3>
+<pre class="term">$ cp -i frutas.txt notas.txt
+cp: sobrescrever 'notas.txt'? n                   « n mantém o original; s sobrescreve</pre>
+
+<h3>-b: guardar uma cópia de segurança</h3>
+<pre class="term">$ cp -b -v frutas.txt notas.txt
+'frutas.txt' -> 'notas.txt' (cópia de segurança: 'notas.txt~')
+$ ls notas*
+notas.txt  notas.txt~</pre>
+
+<div class="tip">
+<strong>Sempre perguntar</strong>
+<p>Para que o <code>cp</code> e o <code>mv</code> sempre perguntem, crie apelidos no <code>~/.bashrc</code>: <code>alias cp='cp -i'</code> e <code>alias mv='mv -i'</code> (veja <a href="bashrc.html">.bashrc, alias, PATH</a>).</p>
+</div>
+
+<hr>
+
+<h2>Formas diferentes de copiar e mover</h2>
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Tarefa</th><th>Forma</th><th>Quando usar</th></tr>
+<tr><td>Copiar vários para uma pasta</td><td><code>cp a b c pasta/</code></td><td>Poucos arquivos com nomes diferentes</td></tr>
+<tr><td>Copiar por padrão</td><td><code>cp *.txt pasta/</code></td><td>Muitos arquivos parecidos</td></tr>
+<tr><td>Copiar com o destino primeiro</td><td><code>cp -t pasta/ a b c</code></td><td>Em combinação com <code>xargs</code> e <code>find</code></td></tr>
+<tr><td>Copiar pasta preservando tudo</td><td><code>cp -a origem/ destino/</code></td><td>Backups simples</td></tr>
+<tr><td>Sincronizar pastas</td><td><code>rsync -a origem/ destino/</code></td><td>Copiar só o que mudou (veja <a href="scp-rsync.html">scp e rsync</a>)</td></tr>
+<tr><td>Interface gráfica</td><td><kbd>Ctrl</kbd>+<kbd>C</kbd> e <kbd>Ctrl</kbd>+<kbd>V</kbd> no Arquivos</td><td>No desktop</td></tr>
+</table>
+</div>
+
+<hr>
+
+<h2>Quando não funciona</h2>
+
+<div class="cenario">
+<strong>"-r não especificado; omitindo o diretório"</strong>
+<p><strong>O que aconteceu:</strong> você tentou copiar uma pasta sem <code>-r</code>.</p>
+<p><strong>Como resolver:</strong> <code>cp -r pasta destino</code>, ou <code>cp -a</code> para preservar datas e permissões.</p>
+</div>
+
+<div class="cenario">
+<strong>"não foi possível obter estado de"</strong>
+<pre class="term">$ cp nada x
+cp: não foi possível obter estado de 'nada': Arquivo ou diretório inexistente</pre>
+<p><strong>O que aconteceu:</strong> a origem não existe. "Obter estado" é a tentativa de ler as informações do arquivo.</p>
+<p><strong>Como resolver:</strong> confira o nome com <code>ls</code> e use <kbd>Tab</kbd>.</p>
+</div>
+
+<div class="cenario">
+<strong>"alvo … Arquivo ou diretório inexistente"</strong>
+<pre class="term">$ cp frutas.txt notas.txt naoexiste
+cp: alvo 'naoexiste': Arquivo ou diretório inexistente</pre>
+<p><strong>O que aconteceu:</strong> com mais de uma origem, o último argumento precisa ser uma pasta que existe.</p>
+<p><strong>Como resolver:</strong> crie a pasta antes com <code>mkdir</code>. Se o alvo for um arquivo, a mensagem vira <code>Não é um diretório</code>.</p>
+</div>
+
+<div class="cenario">
+<strong>"Permissão negada"</strong>
+<pre class="term">$ cp frutas.txt /etc/
+cp: não foi possível criar arquivo comum '/etc/frutas.txt': Permissão negada</pre>
+<p><strong>O que aconteceu:</strong> a pasta de destino pertence ao root.</p>
+<p><strong>Como resolver:</strong> pense se o destino está certo. Se estiver, faça como root, com <code>su -</code> (veja <a href="root-su-sudo.html">root, su e sudo</a>).</p>
+</div>
+
+<div class="cenario">
+<strong>Mover uma pasta para dentro dela mesma</strong>
+<pre class="term">$ mv projetos projetos/antigo
+mv: não é possível mover 'projetos' para um subdiretório de si mesmo, 'projetos/antigo'</pre>
+<p><strong>O que aconteceu:</strong> o destino fica dentro da própria origem, o que é impossível.</p>
+<p><strong>Como resolver:</strong> escolha um destino fora da pasta.</p>
+</div>
+
+<div class="cenario">
+<strong>Sobrescrevi um arquivo sem querer</strong>
+<p><strong>O que aconteceu:</strong> o destino já existia e o <code>cp</code>/<code>mv</code> trocou o conteúdo.</p>
+<p><strong>Como resolver:</strong> não há como desfazer pelo terminal. Recupere de um backup (veja <a href="backup.html">Backup</a>). Para a próxima vez, use <code>-i</code>, <code>-n</code> ou <code>-b</code>.</p>
+</div>
+
+<hr>
+
+<h2>Referência de opções</h2>
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Opção</th><th>cp</th><th>mv</th><th>Descrição</th></tr>
+<tr><td><code>-r</code></td><td>sim</td><td>—</td><td>Copia pastas e o conteúdo delas</td></tr>
+<tr><td><code>-a</code></td><td>sim</td><td>—</td><td>Como <code>-r</code>, preservando datas, permissões e links</td></tr>
+<tr><td><code>-v</code></td><td>sim</td><td>sim</td><td>Mostra o que foi feito</td></tr>
+<tr><td><code>-i</code></td><td>sim</td><td>sim</td><td>Pergunta antes de sobrescrever</td></tr>
+<tr><td><code>-n</code></td><td>sim</td><td>sim</td><td>Nunca sobrescreve</td></tr>
+<tr><td><code>-b</code></td><td>sim</td><td>sim</td><td>Guarda o destino antigo com <code>~</code></td></tr>
+<tr><td><code>-u</code></td><td>sim</td><td>sim</td><td>Só se a origem for mais nova</td></tr>
+<tr><td><code>-t PASTA</code></td><td>sim</td><td>sim</td><td>Informa o destino antes das origens</td></tr>
+<tr><td><code>-p</code></td><td>sim</td><td>—</td><td>Preserva dono, permissões e datas</td></tr>
+</table>
+</div>
+
+<hr>
+
+<h2>Exercícios</h2>
+
+<div class="exercise">
+<h3>1. Copiar uma pasta</h3>
+<p>Complete para copiar a pasta <code>fotos</code> para <code>fotos-backup</code>:</p>
+<div class="ex-code">cp <input data-answer="-r|-a|-R|-rv|-av" aria-label="opção"> fotos fotos-backup</div>
+</div>
+
+<div class="exercise">
+<h3>2. Renomear</h3>
+<p>Complete para renomear <code>rascunho.txt</code> para <code>final.txt</code>:</p>
+<div class="ex-code"><input data-answer="mv" aria-label="comando"> rascunho.txt final.txt</div>
+</div>
+
+<div class="mc" data-answer="3">
+<p class="mc-q">3. <code>notas.txt</code> já existe. O que acontece com <code>cp frutas.txt notas.txt</code>?</p>
+<label><input type="radio" name="q3"> O cp pergunta se pode sobrescrever.</label>
+<label><input type="radio" name="q3"> Aparece um erro, porque o destino existe.</label>
+<label><input type="radio" name="q3"> O conteúdo de notas.txt é trocado pelo de frutas.txt, sem aviso.</label>
+<label><input type="radio" name="q3"> É criado notas.txt.1.</label>
+</div>
+
+<div class="mc" data-answer="1">
+<p class="mc-q">4. Qual opção guarda o arquivo antigo como <code>notas.txt~</code> antes de sobrescrever?</p>
+<label><input type="radio" name="q4"> <code>-b</code></label>
+<label><input type="radio" name="q4"> <code>-n</code></label>
+<label><input type="radio" name="q4"> <code>-u</code></label>
+<label><input type="radio" name="q4"> <code>-r</code></label>
+</div>
+
+<hr>
+
+<h2>Resumo</h2>
+<ul>
+  <li><code>cp origem destino</code> copia; <code>mv origem destino</code> move ou renomeia.</li>
+  <li>Pastas: <code>cp -r</code> (ou <code>-a</code> para preservar tudo); o <code>mv</code> não precisa de opção.</li>
+  <li>Com várias origens, o destino é uma pasta.</li>
+  <li>Os dois sobrescrevem sem aviso: use <code>-i</code>, <code>-n</code> ou <code>-b</code>.</li>
+</ul>
+
+<div class="pager"></div>
+
+</div>
+</main>
+</div>
+<script src="assets/site.js"></script>
+</body>
+</html>

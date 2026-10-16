@@ -1,0 +1,492 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Debian Usuários e Grupos — adduser, usermod, passwd | Guia Debian</title>
+<meta name="description" content="Usuários e grupos no Debian 13: ler id e groups, /etc/passwd, criar contas com adduser (perguntas reais em português), useradd, usermod -aG, deluser, passwd e /etc/adduser.conf.">
+<link rel="stylesheet" href="assets/style.css">
+<script>try{var t=localStorage.getItem("tema");if(t)document.documentElement.setAttribute("data-theme",t)}catch(e){}</script>
+</head>
+<body>
+<div class="layout">
+<nav class="sidebar" id="sidebar" aria-label="Tópicos"></nav>
+<main class="main">
+<div class="content">
+
+<div class="pager"></div>
+
+<h1>Debian <span class="hl">Usuários e Grupos</span></h1>
+
+<p class="intro">O Linux foi feito para várias pessoas usarem a mesma máquina. Cada pessoa tem um <strong>usuário</strong>, com sua pasta e seus arquivos. Os <strong>grupos</strong> juntam usuários que precisam das mesmas permissões, como "quem pode usar o sudo" ou "quem pode usar o áudio".</p>
+
+<div class="note">
+<strong>Você vai aprender</strong>
+<ul>
+  <li>A ler a saída do <code>id</code> e descobrir de quais grupos você faz parte.</li>
+  <li>Onde o sistema guarda contas e grupos (<code>/etc/passwd</code>, <code>/etc/group</code>, <code>/etc/shadow</code>).</li>
+  <li>A criar usuários com o <code>adduser</code> do Debian, respondendo às perguntas dele, e com o <code>useradd</code>.</li>
+  <li>A pôr e tirar pessoas de grupos sem cair na armadilha do <code>usermod -G</code> sem <code>-a</code>.</li>
+  <li>A trocar senhas, remover contas e ajustar o <code>/etc/adduser.conf</code>.</li>
+</ul>
+</div>
+
+<hr>
+
+<h2>Usuário, UID e grupo</h2>
+<p>Para você, um usuário é um nome, como <code>ana</code>. Para o sistema, é um <strong>número</strong>, o UID (<em>user ID</em>). O nome existe só para facilitar a vida das pessoas.</p>
+
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Tipo</th><th>UID</th><th>Exemplos</th><th>Para quê</th></tr>
+<tr><td>Superusuário</td><td><code>0</code></td><td><code>root</code></td><td>Administrador com poder total. Se você definiu uma senha de root na instalação, é com ela que administra o Debian (<code>su -</code>).</td></tr>
+<tr><td>Usuários de sistema</td><td><code>1</code> a <code>999</code></td><td><code>www-data</code>, <code>_apt</code></td><td>Rodam serviços. Não são pessoas e não fazem login.</td></tr>
+<tr><td>Usuários comuns</td><td><code>1000</code> em diante</td><td><code>ana</code>, <code>joao</code></td><td>Pessoas. A conta criada na instalação ganhou o UID 1000.</td></tr>
+</table>
+</div>
+
+<p>Todo usuário tem um <strong>grupo principal</strong>. No Debian, ele tem o mesmo nome do usuário e só o próprio usuário está nele. Além disso, o usuário pode participar de vários <strong>grupos extras</strong>.</p>
+
+<hr>
+
+<h2>Quem sou eu? <code>whoami</code>, <code>id</code> e <code>groups</code></h2>
+
+<pre class="term">$ whoami
+ana
+$ groups
+ana cdrom floppy audio dip video plugdev users netdev</pre>
+
+<p>O <code>whoami</code> (<em>who am I</em>, "quem sou eu") mostra o seu usuário. O <code>groups</code> lista os seus grupos. O <code>id</code> mostra tudo isso com os números, e no Debian a palavra "grupos" sai em português:</p>
+
+<pre class="term">$ id
+uid=1000(ana) gid=1000(ana) grupos=1000(ana),24(cdrom),25(floppy),29(audio),30(dip),44(video),46(plugdev),100(users),101(netdev)</pre>
+
+<dl class="anatomy">
+  <dt>uid=1000(ana)</dt><dd>Seu número de usuário e, entre parênteses, o nome.</dd>
+  <dt>gid=1000(ana)</dt><dd>Seu grupo principal (<em>group ID</em>).</dd>
+  <dt>grupos=…</dt><dd>Todos os grupos de que você participa, com número e nome.</dd>
+</dl>
+
+<p>Esses são os grupos que o instalador do Debian dá à primeira conta. O que alguns deles permitem:</p>
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Grupo</th><th>Quem está nele pode…</th></tr>
+<tr><td><code>audio</code>, <code>video</code></td><td>Usar diretamente a placa de som e a de vídeo (webcam, aceleração).</td></tr>
+<tr><td><code>plugdev</code></td><td>Usar alguns dispositivos removíveis.</td></tr>
+<tr><td><code>netdev</code></td><td>Configurar redes sem fio e cabeadas pelo NetworkManager, sem ser root.</td></tr>
+<tr><td><code>users</code></td><td>Grupo geral de pessoas; o Debian coloca nele todo usuário criado pelo <code>adduser</code>.</td></tr>
+<tr><td><code>cdrom</code>, <code>floppy</code>, <code>dip</code></td><td>Usar CD, disquete e conexões discadas (herança antiga).</td></tr>
+<tr><td><code>sudo</code></td><td>Usar o <code>sudo</code>. Repare: a ana <strong>não</strong> está nele.</td></tr>
+</table>
+</div>
+
+<div class="note">
+<strong>Por que a ana não está no grupo <code>sudo</code>?</strong>
+<p>Na instalação, o Debian pergunta a senha do root. Se você a define, o instalador entende que a administração será feita como root: o <code>sudo</code> nem é instalado e a primeira conta fica fora do grupo. Se você deixa a senha do root em branco, acontece o contrário: o <code>sudo</code> é instalado e o primeiro usuário entra no grupo <code>sudo</code>. Veja <a href="root-su-sudo.html">root, su e sudo</a>.</p>
+</div>
+
+<div class="try" data-goal="ran:^id,ran:^groups">
+<p class="try-task"><strong>Missão:</strong> descubra quem você é nesta máquina fictícia com <code>whoami</code>, <code>id</code> e <code>groups</code>. A Ana está no grupo <code>sudo</code>? Qual é o UID dela?</p>
+</div>
+
+<hr>
+
+<h2>Onde ficam as contas</h2>
+
+<h3><code>/etc/passwd</code>: a lista de usuários</h3>
+<p>Apesar do nome, ele não guarda senhas. Tem uma linha por usuário, com 7 campos separados por <code>:</code>.</p>
+
+<pre class="term">$ grep ana /etc/passwd
+ana:x:1000:1000:Ana,,,:/home/ana:/bin/bash</pre>
+
+<dl class="anatomy">
+  <dt>ana</dt><dd>1. Nome de login.</dd>
+  <dt>x</dt><dd>2. Senha: o "x" diz que ela fica em <code>/etc/shadow</code>.</dd>
+  <dt>1000</dt><dd>3. UID.</dd>
+  <dt>1000</dt><dd>4. GID do grupo principal.</dd>
+  <dt>Ana,,,</dt><dd>5. Nome completo e informações (campo "GECOS"). As vírgulas separam campos vazios: sala, telefone do trabalho e telefone de casa, que o <code>adduser</code> pergunta.</dd>
+  <dt>/home/ana</dt><dd>6. Pasta pessoal.</dd>
+  <dt>/bin/bash</dt><dd>7. Shell do login. <code>/usr/sbin/nologin</code> impede o login.</dd>
+</dl>
+
+<h3><code>/etc/group</code>: a lista de grupos</h3>
+<pre class="term">$ grep -E '^(sudo|users)' /etc/group
+sudo:x:27:                « ninguém no grupo sudo
+users:x:100:ana</pre>
+<p>Os campos são: nome do grupo, senha (não usada), GID e os membros, separados por vírgula.</p>
+
+<h3><code>/etc/shadow</code>: as senhas</h3>
+<p>Guarda as senhas na forma de <strong>hash</strong>, uma "impressão digital" que não pode ser revertida para a senha. Só o root e o grupo <code>shadow</code> leem esse arquivo:</p>
+
+<pre class="term">$ ls -l /etc/shadow
+-rw-r----- 1 root shadow 939 out 15 21:12 /etc/shadow
+$ cat /etc/shadow
+cat: /etc/shadow: Permissão negada</pre>
+
+<div class="warning">
+<strong>Não edite esses arquivos à mão</strong>
+<p>Um caractere errado em <code>/etc/passwd</code>, <code>/etc/group</code> ou <code>/etc/shadow</code> pode impedir todo mundo de entrar no sistema. Use os comandos desta página. Se precisar mesmo editar, use <code>vipw</code> e <code>vigr</code>, que travam o arquivo e conferem o formato.</p>
+</div>
+
+<div class="try" data-goal="ran:passwd">
+<p class="try-task"><strong>Missão:</strong> use <code>grep</code> para ver a linha da <code>ana</code> e a do <code>www-data</code> em <code>/etc/passwd</code>. Qual shell o <code>www-data</code> usa? Depois tente ler o <code>/etc/shadow</code> e veja o que acontece.</p>
+</div>
+
+<hr>
+
+<h2>Quem está usando a máquina: <code>who</code> e <code>w</code></h2>
+<pre class="term" data-host="servidor">$ who
+ana      sshd         2026-10-15 21:21 (192.168.0.10)
+joao     sshd         2026-10-15 21:25 (192.168.0.22)</pre>
+
+<p>O <code>who</code> ("quem") lista as sessões abertas: o usuário, por onde entrou (<code>sshd</code> = por SSH; <code>tty1</code> = no console da máquina), a hora do login e, entre parênteses, o IP de origem. O <code>w</code> mostra o mesmo e também o que cada um está rodando e a carga da máquina na primeira linha.</p>
+
+<hr>
+
+<h2>Criar um usuário</h2>
+<p>Daqui em diante, os comandos mudam o sistema e precisam ser feitos como root. No Debian, para a ana eles nem existem: os programas de administração ficam em <code>/usr/sbin</code>, que não está no PATH dela.</p>
+
+<pre class="term">$ adduser joao
+bash: adduser: comando não encontrado
+$ su -
+Senha:                                « a senha do ROOT</pre>
+
+<p>Os próximos exemplos começam já como root (prompt <code>root@notebook:~#</code>). Eles não funcionam no simulador.</p>
+
+<h3>Forma recomendada: <code>adduser</code></h3>
+<p>O <code>adduser</code> foi criado pelo próprio Debian. Ele faz tudo de uma vez: cria o usuário e o grupo dele, a pasta pessoal com os arquivos de <code>/etc/skel</code>, e pergunta a senha e os dados da pessoa.</p>
+
+<dl class="anatomy">
+  <dt>adduser</dt><dd>O programa (de <em>add user</em>, "adicionar usuário").</dd>
+  <dt>joao</dt><dd>O nome de login do novo usuário.</dd>
+</dl>
+
+<pre class="term" data-user="root">#> adduser joao
+Nova senha:                                           « digite a senha; nada aparece
+Redigite a nova senha:
+passwd: senha atualizada com sucesso
+Modificando as informações de usuário para joao
+Informe o novo valor ou pressione ENTER para aceitar o padrão
+	Nome Completo []: João Silva
+	Número da Sala []:                                « Enter deixa em branco
+	Fone de Trabalho []:
+	Fone Residencial []:
+	Outro []:
+chfn: nome com caracteres não-ASCII: 'João Silva'    « só um aviso: o nome foi aceito
+Is the information correct? [Y/n] Y                   « esta pergunta fica em inglês</pre>
+
+<p>Repare em três detalhes do Debian 13: o <code>adduser</code> já não escreve "Adicionando o usuário…" (ele ficou silencioso e só mostra o que pergunta), o aviso do <code>chfn</code> sobre o acento é só informativo, e a confirmação final <code>[Y/n]</code> continua em inglês: <kbd>Enter</kbd> ou <kbd>Y</kbd> confirmam.</p>
+
+<pre class="term" data-user="root">#> id joao
+uid=1001(joao) gid=1001(joao) grupos=1001(joao),100(users)   « o Debian já o coloca no grupo users
+#> ls -ld /home/joao
+drwx------ 2 joao joao 4096 out 15 21:09 /home/joao              « pasta pessoal fechada (700)
+#> ls -a /home/joao
+.  ..  .bash_logout  .bashrc  .profile                           « copiados de /etc/skel</pre>
+
+<h3>Sem perguntas: <code>adduser</code> com opções</h3>
+<p>Em scripts, ou para contas de serviço, dá para responder tudo pela linha de comando:</p>
+
+<dl class="anatomy">
+  <dt>adduser</dt><dd>O programa.</dd>
+  <dt>--comment "Maria Souza"</dt><dd>O nome completo (campo GECOS). Entre aspas, porque tem espaço. O nome antigo desta opção era <code>--gecos</code>.</dd>
+  <dt>--disabled-password</dt><dd>Não pergunta senha; a conta só entra por chave SSH, ou até alguém definir uma senha com <code>passwd</code>.</dd>
+  <dt>maria</dt><dd>O login.</dd>
+</dl>
+
+<pre class="term" data-user="root">#> adduser --comment "Maria Souza" --disabled-password maria
+#> id maria
+uid=1002(maria) gid=1002(maria) grupos=1002(maria),100(users)</pre>
+
+<h3>A forma "crua": <code>useradd</code></h3>
+<p>O <code>useradd</code> existe em toda distribuição Linux, mas faz <strong>só o pedido</strong>: sem as opções certas, nem cria a pasta pessoal, e o shell vira o <code>/bin/sh</code>.</p>
+
+<pre class="term" data-user="root">#> useradd teste9
+#> grep teste9 /etc/passwd
+teste9:x:1003:1003::/home/teste9:/bin/sh             « shell sh, sem nome
+#> ls -ld /home/teste9
+ls: não foi possível acessar '/home/teste9': Arquivo ou diretório inexistente
+#> useradd -m -s /bin/bash teste8
+#> ls -ld /home/teste8
+drwx------ 2 teste8 teste8 4096 out 15 21:10 /home/teste8</pre>
+
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Ferramenta</th><th>Pasta pessoal</th><th>Pergunta senha e nome</th><th>Quando usar</th></tr>
+<tr><td><code>adduser joao</code></td><td>Cria (700)</td><td>Sim</td><td>No dia a dia, no Debian e derivados</td></tr>
+<tr><td><code>adduser --disabled-password --comment "…" joao</code></td><td>Cria</td><td>Não</td><td>Scripts e contas só com chave SSH</td></tr>
+<tr><td><code>useradd -m -s /bin/bash joao</code></td><td>Só com <code>-m</code></td><td>Não</td><td>Scripts que precisam rodar em qualquer distribuição</td></tr>
+</table>
+</div>
+
+<hr>
+
+<h2>Grupos: criar e colocar pessoas</h2>
+
+<h3>Criar um grupo</h3>
+<pre class="term" data-user="root">#> addgroup equipe          « jeito Debian; groupadd equipe faz o mesmo
+#> getent group equipe
+equipe:x:1003:</pre>
+
+<h3>Colocar alguém num grupo: três formas</h3>
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Comando</th><th>O que mostra</th><th>Observação</th></tr>
+<tr><td><code>adduser joao equipe</code></td><td>Nada (silencioso)</td><td>Jeito Debian, com usuário e grupo como argumentos</td></tr>
+<tr><td><code>gpasswd -a joao equipe</code></td><td><code>Adicionando usuário joao ao grupo equipe</code></td><td>Confirma o que fez</td></tr>
+<tr><td><code>usermod -aG equipe joao</code></td><td>Nada</td><td>O mais comum em tutoriais; atenção ao <code>-a</code></td></tr>
+</table>
+</div>
+
+<dl class="anatomy">
+  <dt>usermod</dt><dd>Modifica um usuário (<em>user modify</em>).</dd>
+  <dt>-a</dt><dd><strong>Acrescenta</strong> (<em>append</em>). Sem ele, a lista de grupos é <strong>substituída</strong>.</dd>
+  <dt>-G equipe</dt><dd>Os grupos extras; vários separados por vírgula: <code>-G equipe,audio</code>.</dd>
+  <dt>joao</dt><dd>O usuário.</dd>
+</dl>
+
+<p>Veja na prática o perigo de esquecer o <code>-a</code>:</p>
+
+<pre class="term" data-user="root">#> id joao
+uid=1001(joao) gid=1001(joao) grupos=1001(joao),27(sudo),100(users)
+#> usermod -G cdrom joao                « sem o -a!
+#> id joao
+uid=1001(joao) gid=1001(joao) grupos=1001(joao),24(cdrom)   « perdeu o sudo e o users</pre>
+
+<div class="warning">
+<strong>Atenção: <code>usermod -G</code> sem <code>-a</code></strong>
+<p>Sem o <code>-a</code>, o usuário sai de todos os grupos que não estão na lista. Feito no próprio administrador, ele perde o acesso ao <code>sudo</code>. Use sempre <code>-aG</code>, ou o <code>adduser joao grupo</code>, que nunca tira ninguém de lugar nenhum.</p>
+</div>
+
+<h3>Tirar alguém de um grupo</h3>
+<pre class="term" data-user="root">#> deluser joao equipe                 « jeito Debian: silencioso
+#> gpasswd -d joao equipe
+Removendo usuário joao do grupo equipe
+#> delgroup equipe                     « apaga o grupo (groupdel faz o mesmo)</pre>
+
+<div class="note">
+<strong>O grupo novo só vale no próximo login</strong>
+<p>Quem foi colocado num grupo precisa sair e entrar de novo (ou reconectar o SSH). Até lá, o <code>id</code> da sessão aberta mostra a lista antiga.</p>
+</div>
+
+<hr>
+
+<h2>Senhas</h2>
+
+<h3>Root trocando a senha de alguém</h3>
+<pre class="term" data-user="root">#> passwd joao
+Nova senha:
+Redigite a nova senha:
+passwd: senha atualizada com sucesso</pre>
+
+<h3>O próprio usuário trocando a dele</h3>
+<pre class="term" data-user="joao">$ passwd
+Mudando senha para joao.
+Atual senha:                       « a senha de agora (a tradução é essa mesmo)
+Nova senha:
+Redigite a nova senha:
+passwd: senha atualizada com sucesso</pre>
+
+<h3>Ver e travar contas</h3>
+<pre class="term" data-user="root">#> passwd -S joao
+joao P 2026-10-16 0 99999 7 -1           « P = tem senha; data da última troca
+#> usermod -L joao                        « trava (Lock)
+#> passwd -S joao
+joao L 2026-10-16 0 99999 7 -1           « L = travada
+#> usermod -U joao                        « destrava
+#> chage -l joao
+Última mudança de senha					: out 16, 2026
+Senha expira					: nunca
+Senha inativa					: nunca
+Conta expira						: nunca
+Número mínimo de dias entre troca de senhas		: 0
+Número máximo de dias entre troca de senhas		: 99999
+Número de dias de avisos antes da expiração da senha	: 7</pre>
+
+<hr>
+
+<h2>Remover um usuário</h2>
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Comando</th><th>Efeito</th></tr>
+<tr><td><code>deluser joao</code></td><td>Remove a conta; a pasta <code>/home/joao</code> fica</td></tr>
+<tr><td><code>deluser --remove-home joao</code></td><td>Remove a conta e a pasta pessoal</td></tr>
+<tr><td><code>deluser --backup --remove-home joao</code></td><td>Guarda um <code>.tar</code> dos arquivos antes de apagar</td></tr>
+<tr><td><code>userdel -r joao</code></td><td>O equivalente "cru" de <code>--remove-home</code></td></tr>
+</table>
+</div>
+
+<pre class="term" data-user="root">#> deluser --remove-home joao
+#> id joao
+id: ‘joao’: usuário inexistente</pre>
+
+<div class="warning">
+<strong>Antes de apagar uma pasta pessoal</strong>
+<p><code>--remove-home</code> e <code>userdel -r</code> apagam os arquivos da pessoa sem lixeira. Se houver qualquer chance de alguém precisar deles, use <code>--backup</code> ou copie antes.</p>
+</div>
+
+<hr>
+
+<h2>Trocar de usuário: <code>su</code></h2>
+<pre class="term">$ su - joao
+Senha:                                « a senha do JOAO</pre>
+<pre class="term" data-user="joao">$ whoami
+joao
+$ pwd
+/home/joao
+$ exit</pre>
+<p>O <code>-</code> faz o <code>su</code> abrir uma sessão completa, já na pasta do joao. Como root, o <code>su - joao</code> nem pede senha. Errar a senha dá <code>su: Falha de autenticação</code>.</p>
+
+<hr>
+
+<h2>As regras do <code>adduser</code>: <code>/etc/adduser.conf</code></h2>
+<p>No Debian 13, quase todas as linhas desse arquivo vêm comentadas: valem os padrões do programa. Os mais importantes:</p>
+
+<pre class="file" data-file="/etc/adduser.conf">#DSHELL=/bin/bash                 # shell dos usuários novos
+#FIRST_UID=1000                   # primeiro UID de pessoas
+#LAST_UID=59999
+#USERGROUPS=yes                   # cada usuário ganha um grupo com o próprio nome
+#DIR_MODE=0700                    # pasta pessoal fechada
+#NAME_REGEX="^[a-zA-Z][a-zA-Z0-9_-]*\$?$"
+#EXTRA_GROUPS="users"
+#ADD_EXTRA_GROUPS=0</pre>
+
+<p>Para mudar um padrão, tire o <code>#</code> do começo da linha e troque o valor (como root, com <code>nano /etc/adduser.conf</code>). A mudança vale para os próximos usuários criados.</p>
+
+<hr>
+
+<h2>Quando não funciona</h2>
+
+<div class="cenario">
+<strong>"adduser: comando não encontrado"</strong>
+<pre class="term">$ adduser joao
+bash: adduser: comando não encontrado</pre>
+<p><strong>O que aconteceu:</strong> no Debian, o PATH da usuária comum não inclui <code>/usr/sbin</code>, onde ficam <code>adduser</code>, <code>usermod</code>, <code>groupadd</code>… O programa existe, só não é procurado ali.</p>
+<p><strong>Como resolver:</strong> vire root com <code>su -</code> (o hífen importa: sem ele, o PATH continua o da ana) e rode de novo.</p>
+</div>
+
+<div class="cenario">
+<strong>"fatal: The user `Souza' does not exist."</strong>
+<pre class="term" data-user="root">#> adduser --comment Maria Souza --disabled-password maria
+fatal: The user `Souza' does not exist.</pre>
+<p><strong>O que aconteceu:</strong> sem aspas, o espaço separou "Maria" de "Souza". O <code>adduser</code> leu <code>Souza</code> como usuário e <code>maria</code> como grupo, como em <code>adduser usuario grupo</code>.</p>
+<p><strong>Como resolver:</strong> aspas em volta do nome: <code>--comment "Maria Souza"</code>.</p>
+</div>
+
+<div class="cenario">
+<strong>"The user `joao' already exists"</strong>
+<pre class="term" data-user="root">#> adduser joao
+fatal: The user `joao' already exists.</pre>
+<p><strong>O que aconteceu:</strong> o login já está em uso. As mensagens de erro do <code>adduser</code> saem em inglês, mesmo com o Debian em português.</p>
+<p><strong>Como resolver:</strong> confira com <code>getent passwd joao</code> e escolha outro nome, ou use a conta existente.</p>
+</div>
+
+<div class="cenario">
+<strong>Nome com espaço ou caracteres proibidos</strong>
+<pre class="term" data-user="root">#> adduser "joao silva"
+err: To avoid problems, the username must not start with a
+            dash, plus sign, or tilde, and it must not contain any of the
+            following: colon, comma, slash, or any whitespace characters
+            including spaces, tabs, and newlines.</pre>
+<p><strong>Como resolver:</strong> o login é curto e sem espaços (<code>joao</code>, <code>joao.silva</code>, <code>jsilva</code>); o nome completo vai no <code>--comment</code>.</p>
+</div>
+
+<div class="cenario">
+<strong>"Escolha uma senha mais longa."</strong>
+<pre class="term" data-user="joao">$ passwd
+Mudando senha para joao.
+Atual senha:
+Nova senha:
+Redigite a nova senha:
+Escolha uma senha mais longa.
+Nova senha:</pre>
+<p><strong>O que aconteceu:</strong> o usuário comum precisa escolher uma senha minimamente longa; o <code>passwd</code> pede de novo. O root pode forçar uma senha curta para outro usuário, mas não deve.</p>
+</div>
+
+<div class="cenario">
+<strong>Entrei no grupo, mas nada mudou</strong>
+<p><strong>O que aconteceu:</strong> a sessão aberta ainda usa a lista de grupos antiga.</p>
+<p><strong>Como resolver:</strong> saia e entre de novo. Confira com <code>id</code>: o grupo novo precisa aparecer na lista <code>grupos=</code>.</p>
+</div>
+
+<hr>
+
+<h2>Referência</h2>
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Comando</th><th>O que faz</th></tr>
+<tr><td><code>whoami</code> / <code>id</code> / <code>groups</code></td><td>Quem sou eu, com números, e meus grupos</td></tr>
+<tr><td><code>id joao</code> / <code>groups joao</code></td><td>O mesmo para outro usuário</td></tr>
+<tr><td><code>getent passwd joao</code></td><td>A linha do usuário em <code>/etc/passwd</code></td></tr>
+<tr><td><code>who</code> / <code>w</code></td><td>Quem está conectado</td></tr>
+<tr><td><code>adduser joao</code></td><td>Cria usuário (interativo)</td></tr>
+<tr><td><code>adduser --disabled-password --comment "Nome" joao</code></td><td>Cria sem perguntas</td></tr>
+<tr><td><code>useradd -m -s /bin/bash joao</code></td><td>Cria do jeito "cru"</td></tr>
+<tr><td><code>addgroup equipe</code></td><td>Cria grupo</td></tr>
+<tr><td><code>adduser joao equipe</code> / <code>usermod -aG equipe joao</code></td><td>Põe no grupo</td></tr>
+<tr><td><code>deluser joao equipe</code> / <code>gpasswd -d joao equipe</code></td><td>Tira do grupo</td></tr>
+<tr><td><code>passwd</code> / <code>passwd joao</code></td><td>Troca a sua senha / a de outro (root)</td></tr>
+<tr><td><code>usermod -L</code> / <code>-U joao</code></td><td>Trava / destrava a conta</td></tr>
+<tr><td><code>deluser --remove-home joao</code></td><td>Remove conta e pasta</td></tr>
+<tr><td><code>su - joao</code></td><td>Abre sessão como joao</td></tr>
+</table>
+</div>
+
+<hr>
+
+<h2>Exercícios</h2>
+
+<div class="exercise">
+<h3>1. Acrescentar a um grupo</h3>
+<p>Complete para colocar o joao no grupo <code>audio</code> <strong>sem</strong> tirá-lo dos outros:</p>
+<div class="ex-code">usermod <input data-answer="-aG|-a -G" aria-label="opções"> audio joao</div>
+</div>
+
+<div class="exercise">
+<h3>2. Jeito Debian</h3>
+<p>Complete o comando do Debian que coloca a maria no grupo <code>equipe</code>:</p>
+<div class="ex-code"><input data-answer="adduser" aria-label="comando"> maria equipe</div>
+</div>
+
+<div class="exercise">
+<h3>3. Sem perguntas</h3>
+<p>Complete para criar a conta <code>backup</code> sem senha (só chave SSH):</p>
+<div class="ex-code">adduser <input data-answer="--disabled-password" aria-label="opção"> --comment "Backup" backup</div>
+</div>
+
+<div class="mc" data-answer="4">
+<p class="mc-q">4. A ana digita <code>usermod -aG sudo ana</code> no Debian. O que aparece?</p>
+<label><input type="radio" name="q4"> Nada: ela entrou no grupo sudo.</label>
+<label><input type="radio" name="q4"> <code>usermod: Permissão negada</code></label>
+<label><input type="radio" name="q4"> <code>Adicionando usuário ana ao grupo sudo</code></label>
+<label><input type="radio" name="q4"> <code>bash: usermod: comando não encontrado</code></label>
+</div>
+
+<div class="mc" data-answer="2">
+<p class="mc-q">5. Depois de <code>usermod -G cdrom joao</code>, o que acontece com os outros grupos extras do joao?</p>
+<label><input type="radio" name="q5"> Continuam iguais; o cdrom foi acrescentado.</label>
+<label><input type="radio" name="q5"> Somem: ele fica só no grupo próprio e no cdrom.</label>
+<label><input type="radio" name="q5"> Viram o grupo principal dele.</label>
+<label><input type="radio" name="q5"> O comando dá erro sem o <code>-a</code>.</label>
+</div>
+
+<hr>
+
+<h2>Resumo</h2>
+<ul>
+  <li><code>id</code> mostra UID, grupo principal e <code>grupos=</code>; no Debian, a primeira conta não está no grupo <code>sudo</code> se o root tem senha.</li>
+  <li>Contas ficam em <code>/etc/passwd</code>, grupos em <code>/etc/group</code>, senhas (hash) em <code>/etc/shadow</code>.</li>
+  <li>Administração é feita como root (<code>su -</code>): os comandos ficam em <code>/usr/sbin</code>.</li>
+  <li><code>adduser</code> é o jeito Debian: cria tudo e pergunta senha e nome; <code>useradd</code> precisa de <code>-m -s /bin/bash</code>.</li>
+  <li>Para grupos: <code>adduser joao grupo</code> ou <code>usermod -aG grupo joao</code>; nunca <code>-G</code> sem <code>-a</code>.</li>
+  <li><code>deluser --remove-home</code> apaga conta e arquivos, sem lixeira.</li>
+</ul>
+
+<div class="pager"></div>
+
+</div>
+</main>
+</div>
+<script src="assets/site.js"></script>
+</body>
+</html>

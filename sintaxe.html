@@ -1,0 +1,398 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Debian Sintaxe dos Comandos — opções, argumentos e aspas | Guia Debian</title>
+<meta name="description" content="A gramática dos comandos no Debian: comando, opções curtas e longas, opções com valor, argumentos, aspas simples e duplas, espaços em nomes e como encadear comandos com ; && e ||.">
+<link rel="stylesheet" href="assets/style.css">
+<script>try{var t=localStorage.getItem("tema");if(t)document.documentElement.setAttribute("data-theme",t)}catch(e){}</script>
+</head>
+<body>
+<div class="layout">
+<nav class="sidebar" id="sidebar" aria-label="Tópicos"></nav>
+<main class="main">
+<div class="content">
+
+<div class="pager"></div>
+
+<h1>Debian <span class="hl">Sintaxe dos Comandos</span></h1>
+
+<p class="intro">Quase todo comando do terminal segue a mesma gramática: o nome do programa, depois opções que mudam o comportamento e, por fim, argumentos que dizem sobre o que agir. Entender essa gramática uma vez vale para centenas de comandos, no Debian e em qualquer outro Linux.</p>
+
+<div class="note">
+<strong>Você vai aprender</strong>
+<ul>
+  <li>As três partes de um comando e como reconhecer cada uma.</li>
+  <li>Opções curtas (<code>-a</code>), longas (<code>--all</code>), combinadas (<code>-lah</code>) e com valor (<code>-n 3</code>).</li>
+  <li>Quando usar aspas simples, aspas duplas ou nenhuma.</li>
+  <li>Encadear comandos com <code>;</code>, <code>&amp;&amp;</code> e <code>||</code>, entendendo o código de saída.</li>
+  <li>Ler as mensagens de "opção inválida" e "falta operando".</li>
+</ul>
+</div>
+
+<hr>
+
+<h2>A forma geral</h2>
+<pre class="syntax">comando [opções] [argumentos]</pre>
+<p>Os colchetes <code>[ ]</code> indicam que a parte é opcional. Você não digita os colchetes. Veja as três partes num comando real:</p>
+
+<dl class="anatomy">
+  <dt>ls</dt><dd><strong>Comando</strong>: o programa a executar. Aqui, o que lista arquivos.</dd>
+  <dt>-l</dt><dd><strong>Opção</strong> (ou <em>flag</em>): muda o comportamento. <code>-l</code> pede o formato longo, com detalhes.</dd>
+  <dt>/etc/apt</dt><dd><strong>Argumento</strong>: aquilo sobre o que o comando age. Aqui, a pasta a listar.</dd>
+</dl>
+
+<pre class="term">$ ls -l /etc/apt
+total 36
+drwxr-xr-x 2 root root 4096 out 15 20:54 apt.conf.d
+drwxr-xr-x 2 root root 4096 jun 24  2025 auth.conf.d
+drwxr-xr-x 2 root root 4096 jun 24  2025 keyrings
+-rw-r--r-- 1 root root  147 out 15 20:50 listchanges.conf
+drwxr-xr-x 2 root root 4096 out  6  2024 listchanges.conf.d
+drwxr-xr-x 2 root root 4096 out 15 21:13 preferences.d
+-rw-r--r-- 1 root root 1032 out 15 20:54 sources.list             « a lista de repositórios
+-rw-r--r-- 1 root root    0 out 15 20:29 sources.list~
+drwxr-xr-x 2 root root 4096 out 15 21:14 sources.list.d
+drwxr-xr-x 2 root root 4096 out 15 20:21 trusted.gpg.d</pre>
+
+<p>Tire a opção e o resultado muda de forma; tire o argumento e muda de lugar. Sem <code>-l</code>, só os nomes. Sem <code>/etc/apt</code>, o <code>ls</code> usa a pasta atual:</p>
+
+<pre class="term">$ ls
+'Área de trabalho'   Downloads    Imagens   Música    Vídeos
+ Documentos          frutas.txt   Modelos   Público</pre>
+
+<hr>
+
+<h2>Opções curtas e longas</h2>
+<p>Muitas opções existem em duas formas que fazem a mesma coisa:</p>
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Forma</th><th>Como é</th><th>Exemplo</th><th>Vantagem</th></tr>
+<tr><td>Curta</td><td>Um hífen e uma letra</td><td><code>-a</code></td><td>Rápida de digitar</td></tr>
+<tr><td>Longa</td><td>Dois hífens e uma palavra em inglês</td><td><code>--all</code></td><td>Fácil de lembrar e de entender em scripts</td></tr>
+</table>
+</div>
+
+<pre class="term" data-cwd="~/Documentos">$ ls -a
+.  ..  acesso.log  notas.txt  projetos  relatorio.odt
+$ ls --all
+.  ..  acesso.log  notas.txt  projetos  relatorio.odt          « o mesmo resultado</pre>
+
+<h3>Juntando opções curtas</h3>
+<p>Opções curtas podem dividir um único hífen. A ordem das letras não importa:</p>
+
+<dl class="anatomy">
+  <dt>ls</dt><dd>O programa.</dd>
+  <dt>-lah</dt><dd>Três opções juntas: <code>-l</code> (detalhes), <code>-a</code> (ocultos) e <code>-h</code> (tamanhos legíveis, de <em>human-readable</em>).</dd>
+</dl>
+
+<pre class="term" data-cwd="~/Documentos">$ ls -l -a -h
+total 32K
+drwxr-xr-x  3 ana ana 4,0K out 12 08:03 .
+drwx------ 10 ana ana 4,0K out 15 08:47 ..
+-rw-rw-r--  1 ana ana  389 out 15 09:07 acesso.log
+-rw-rw-r--  1 ana ana   71 out 14 17:40 notas.txt
+drwxrwxr-x  3 ana ana 4,0K out 12 08:03 projetos
+-rw-rw-r--  1 ana ana 8,2K out 14 17:40 relatorio.odt
+$ ls -lah
+total 32K                                       « idêntico ao anterior
+…</pre>
+
+<div class="note">
+<strong>Opções longas não se juntam</strong>
+<p><code>--all--human-readable</code> não funciona. Cada opção longa vai separada: <code>ls --all --human-readable</code>.</p>
+</div>
+
+<div class="try" data-setup="cd Documentos" data-goal="ran:ls\s+-[a-zA-Z]*l[a-zA-Z]*h|ls\s+-[a-zA-Z]*h[a-zA-Z]*l">
+<p class="try-task"><strong>Missão:</strong> você está em <code>Documentos</code>. Liste os arquivos com detalhes e tamanhos legíveis (em K e M), juntando as opções num único hífen.</p>
+</div>
+
+<hr>
+
+<h2>Opções que recebem um valor</h2>
+<p>Algumas opções precisam de um valor logo depois. O <code>head</code>, que mostra o começo de um arquivo, recebe o número de linhas na opção <code>-n</code>:</p>
+
+<dl class="anatomy">
+  <dt>head</dt><dd>Mostra o começo de um arquivo (veja <a href="ver-arquivos.html">cat, less, head, tail</a>).</dd>
+  <dt>-n</dt><dd>A opção <em>number of lines</em>, "número de linhas".</dd>
+  <dt>3</dt><dd>O valor da opção. Pertence ao <code>-n</code>, não é um argumento.</dd>
+  <dt>/etc/passwd</dt><dd>O argumento: o arquivo a ler (a lista de usuários do sistema).</dd>
+</dl>
+
+<pre class="term">$ head -n 3 /etc/passwd
+root:x:0:0:root:/root:/bin/bash
+daemon:x:1:1:daemon:/usr/sbin:/usr/sbin/nologin
+bin:x:2:2:bin:/bin:/usr/sbin/nologin</pre>
+
+<p>Há quatro formas de escrever a mesma coisa:</p>
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Forma</th><th>Exemplo</th></tr>
+<tr><td>Curta com espaço</td><td><code>head -n 3 /etc/passwd</code></td></tr>
+<tr><td>Curta grudada</td><td><code>head -n3 /etc/passwd</code></td></tr>
+<tr><td>Longa com <code>=</code></td><td><code>head --lines=3 /etc/passwd</code></td></tr>
+<tr><td>Longa com espaço</td><td><code>head --lines 3 /etc/passwd</code></td></tr>
+</table>
+</div>
+
+<div class="tip">
+<strong>Nem todo comando segue as regras à risca</strong>
+<p>O <code>find</code> usa palavras inteiras com um hífen só (<code>-name</code>, <code>-type</code>). O <code>dd</code> usa <code>chave=valor</code> (<code>if=</code>, <code>of=</code>). Na dúvida, consulte a ajuda do comando (veja <a href="ajuda.html">Obtendo Ajuda</a>).</p>
+</div>
+
+<hr>
+
+<h2>A ordem importa?</h2>
+<p>Nos comandos GNU do Debian, as opções podem vir antes ou depois dos argumentos:</p>
+
+<pre class="term">$ ls -l /etc/hostname
+-rw-r--r-- 1 root root 9 out 15 20:29 /etc/hostname
+$ ls /etc/hostname -l
+-rw-r--r-- 1 root root 9 out 15 20:29 /etc/hostname           « funciona igual</pre>
+
+<p>O costume, e o mais seguro, é colocar as opções logo depois do comando. Em scripts e em outros sistemas (como o macOS e o FreeBSD), a ordem pode importar.</p>
+
+<hr>
+
+<h2>Argumentos</h2>
+<p>Um comando pode receber nenhum, um ou vários argumentos, separados por espaço:</p>
+
+<pre class="term">$ ls Documentos/projetos
+backup.sh  site
+$ ls Documentos/projetos Imagens
+Documentos/projetos:
+backup.sh  site
+
+Imagens:
+ferias.jpg  perfil.png</pre>
+
+<p>Com dois argumentos, o <code>ls</code> mostra um título com o nome de cada pasta antes do conteúdo.</p>
+
+<h3>Subcomandos</h3>
+<p>Alguns programas fazem muitas coisas diferentes e usam uma palavra logo depois do nome para escolher a ação. Essa palavra é o <strong>subcomando</strong>:</p>
+
+<dl class="anatomy">
+  <dt>apt</dt><dd>O programa de pacotes.</dd>
+  <dt>list</dt><dd>O subcomando: a ação "listar".</dd>
+  <dt>--installed</dt><dd>Uma opção do subcomando: só os instalados.</dd>
+</dl>
+
+<p>Outros exemplos no Debian: <code>apt install</code>, <code>systemctl status</code>, <code>dpkg-query -l</code>, <code>git commit</code>.</p>
+
+<hr>
+
+<h2>O separador --</h2>
+<p>Dois hífens sozinhos avisam: "acabaram as opções, o que vem depois é argumento". Serve para arquivos cujo nome começa com hífen, que o comando confundiria com uma opção:</p>
+
+<pre class="term">$ rm -arquivo
+rm: opção inválida -- “a”
+Tente "rm ./-arquivo" para remover o arquivo '-arquivo'.
+Tente "rm --help" para mais informações.
+$ rm -- -arquivo</pre>
+
+<p>O próprio <code>rm</code> sugere a outra forma: <code>rm ./-arquivo</code>, que também funciona porque o nome passa a começar com <code>.</code>.</p>
+
+<hr>
+
+<h2>Maiúsculas e minúsculas</h2>
+<p>O Linux diferencia maiúsculas de minúsculas em tudo: comandos, opções, arquivos e pastas.</p>
+
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Isto</th><th>é diferente disto</th></tr>
+<tr><td><code>ls</code></td><td><code>LS</code> (não existe)</td></tr>
+<tr><td><code>ls -a</code> (todos, com . e ..)</td><td><code>ls -A</code> (todos, sem . e ..)</td></tr>
+<tr><td><code>Documentos</code></td><td><code>documentos</code></td></tr>
+</table>
+</div>
+
+<pre class="term">$ LS
+bash: LS: comando não encontrado
+$ ls documentos
+ls: não foi possível acessar 'documentos': Arquivo ou diretório inexistente</pre>
+
+<hr>
+
+<h2>Espaços em nomes</h2>
+<p>O espaço separa argumentos. Um nome com espaço vira vários argumentos, a não ser que você avise o shell:</p>
+
+<pre class="term">$ ls Área de trabalho
+ls: não foi possível acessar 'Área': Arquivo ou diretório inexistente
+ls: não foi possível acessar 'de': Arquivo ou diretório inexistente
+ls: não foi possível acessar 'trabalho': Arquivo ou diretório inexistente</pre>
+
+<p>O <code>ls</code> recebeu três argumentos e procurou três pastas. Há três formas de corrigir:</p>
+
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Forma</th><th>Exemplo</th><th>Quando usar</th></tr>
+<tr><td>Aspas</td><td><code>ls "Área de trabalho"</code></td><td>A mais legível. Use sempre em scripts.</td></tr>
+<tr><td>Barra invertida</td><td><code>ls Área\ de\ trabalho</code></td><td>A <code>\</code> "protege" o caractere seguinte.</td></tr>
+<tr><td>Tab</td><td><code>ls Ár</code> + <kbd>Tab</kbd></td><td>O shell completa e coloca as <code>\</code> para você.</td></tr>
+</table>
+</div>
+
+<hr>
+
+<h2>Aspas simples, duplas ou nenhuma</h2>
+<p>As aspas não só juntam palavras com espaço: elas também decidem se o shell vai trocar coisas especiais, como variáveis. Uma <strong>variável</strong> é um nome que guarda um valor; <code>$USER</code> guarda o nome do usuário.</p>
+
+<pre class="term">$ echo Olá $USER
+Olá ana                                         « sem aspas: $USER foi trocado
+$ echo "Olá $USER"
+Olá ana                                         « aspas duplas: $USER foi trocado
+$ echo 'Olá $USER'
+Olá $USER                                       « aspas simples: nada foi trocado</pre>
+
+<p>A diferença entre sem aspas e aspas duplas aparece com espaços repetidos:</p>
+
+<pre class="term">$ echo muitos     espaços
+muitos espaços                                  « sem aspas: viraram dois argumentos
+$ echo "muitos     espaços"
+muitos     espaços                              « com aspas: um argumento, espaços mantidos</pre>
+
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Escrita</th><th><code>$VAR</code> e <code>$(comando)</code></th><th>Espaços</th><th>Use quando…</th></tr>
+<tr><td>sem aspas</td><td>trocados</td><td>separam argumentos</td><td>A palavra é simples, sem espaços.</td></tr>
+<tr><td><code>"duplas"</code></td><td>trocados</td><td>mantidos</td><td>Quer o valor das variáveis e proteger espaços. É o padrão mais seguro.</td></tr>
+<tr><td><code>'simples'</code></td><td>mantidos como estão</td><td>mantidos</td><td>Quer o texto exatamente como digitou.</td></tr>
+</table>
+</div>
+
+<p>O mesmo vale para a substituição de comando, <code>$(comando)</code>, que roda o comando e coloca o resultado no lugar:</p>
+
+<pre class="term">$ echo "Hoje é $(date +%A)"
+Hoje é quinta</pre>
+
+<div class="tip">
+<strong>Aspas no su -c</strong>
+<p>No Debian sem <code>sudo</code>, você vai escrever muito <code>su -c 'comando'</code>. As aspas simples entregam o comando inteiro para o root, como um só argumento: <code>su -c 'apt install tree'</code>.</p>
+</div>
+
+<div class="try" data-goal="ran:^\s*echo\s+'[^']*\$USER">
+<p class="try-task"><strong>Missão:</strong> faça o <code>echo</code> mostrar literalmente o texto <code>Meu usuário é $USER</code>, sem trocar a variável. Depois compare com a versão em aspas duplas.</p>
+</div>
+
+<hr>
+
+<h2>Encadear comandos: ; &amp;&amp; ||</h2>
+<p>Todo comando, ao terminar, devolve um <strong>código de saída</strong>: <code>0</code> quando deu certo, outro número quando deu errado. Os separadores usam esse código:</p>
+
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Separador</th><th>Lê-se</th><th>O segundo comando roda…</th></tr>
+<tr><td><code>a ; b</code></td><td>"e depois"</td><td>Sempre</td></tr>
+<tr><td><code>a &amp;&amp; b</code></td><td>"e, se deu certo,"</td><td>Só se <code>a</code> deu certo (código 0)</td></tr>
+<tr><td><code>a || b</code></td><td>"ou então"</td><td>Só se <code>a</code> deu errado</td></tr>
+</table>
+</div>
+
+<pre class="term" data-cwd="/tmp">$ mkdir teste &amp;&amp; echo criou
+criou
+$ mkdir teste || echo "não deu"
+mkdir: cannot create directory ‘teste’: Arquivo existe            « o mkdir falhou…
+não deu                                                           « …então o || rodou o echo
+$ ls nada; echo "rodou mesmo assim"
+ls: não foi possível acessar 'nada': Arquivo ou diretório inexistente
+rodou mesmo assim</pre>
+
+<p>Repare na mensagem do <code>mkdir</code>: no Debian 13 ela mistura inglês e português. A primeira parte ("cannot create directory") não tem tradução no pacote do Debian; a segunda vem da biblioteca do sistema, que está em português.</p>
+
+<p>Um uso clássico no Debian, como root: atualizar e, só se a lista baixou direito, instalar as atualizações:</p>
+<pre class="term" data-user="root" data-cwd="~">#> apt update &amp;&amp; apt upgrade</pre>
+
+<div class="try" data-goal="dir:~/backup,ran:mkdir.*&amp;&amp;">
+<p class="try-task"><strong>Missão:</strong> numa só linha, crie a pasta <code>backup</code> e, <strong>só se deu certo</strong>, entre nela.</p>
+</div>
+
+<hr>
+
+<h2>Quando não funciona</h2>
+
+<div class="cenario">
+<strong>"opção inválida"</strong>
+<pre class="term">$ ls -j
+ls: opção inválida -- “j”
+Tente "ls --help" para mais informações.</pre>
+<p><strong>O que aconteceu:</strong> o comando não tem a opção <code>-j</code>. Quase sempre é erro de digitação.</p>
+<p><strong>Como resolver:</strong> confira a opção com <code>ls --help</code> ou <code>man ls</code>.</p>
+</div>
+
+<div class="cenario">
+<strong>"opção não reconhecida"</strong>
+<pre class="term">$ ls --versao
+ls: opção não reconhecida “--versao”
+Tente "ls --help" para mais informações.</pre>
+<p><strong>O que aconteceu:</strong> opções longas são em inglês: o certo é <code>--version</code>.</p>
+</div>
+
+<div class="cenario">
+<strong>"falta o operando"</strong>
+<pre class="term">$ cp /etc/hostname
+cp: falta o operando arquivo de destino após '/etc/hostname'
+Tente "cp --help" para mais informações.</pre>
+<p><strong>O que aconteceu:</strong> "operando" é o nome técnico de argumento. O <code>cp</code> precisa de dois: de onde e para onde.</p>
+<p><strong>Como resolver:</strong> informe o destino: <code>cp /etc/hostname ~/</code>.</p>
+</div>
+
+<div class="cenario">
+<strong>O comando "parou" e não volta o prompt</strong>
+<pre class="term">$ cat
+</pre>
+<p><strong>O que aconteceu:</strong> sem argumento, alguns comandos (como <code>cat</code>) leem do teclado e ficam esperando você digitar.</p>
+<p><strong>Como resolver:</strong> aperte <kbd>Ctrl</kbd>+<kbd>C</kbd> para cancelar.</p>
+</div>
+
+<hr>
+
+<h2>Exercícios</h2>
+
+<div class="exercise">
+<h3>1. Juntar opções</h3>
+<p>Escreva <code>ls -l -a -h</code> com um único hífen:</p>
+<div class="ex-code">ls <input data-answer="-lah|-lha|-alh|-ahl|-hla|-hal" aria-label="opções"></div>
+</div>
+
+<div class="exercise">
+<h3>2. Opção longa com valor</h3>
+<p>Complete para mostrar as 5 primeiras linhas usando a forma longa com <code>=</code>:</p>
+<div class="ex-code">head <input data-answer="--lines=5" aria-label="opção"> /etc/passwd</div>
+</div>
+
+<div class="mc" data-answer="2">
+<p class="mc-q">3. O que o comando <code>echo 'Casa de $USER'</code> mostra?</p>
+<label><input type="radio" name="q3"> <code>Casa de ana</code></label>
+<label><input type="radio" name="q3"> <code>Casa de $USER</code></label>
+<label><input type="radio" name="q3"> Um erro</label>
+<label><input type="radio" name="q3"> Nada</label>
+</div>
+
+<div class="mc" data-answer="4">
+<p class="mc-q">4. Em <code>apt update &amp;&amp; apt upgrade</code>, quando o <code>apt upgrade</code> roda?</p>
+<label><input type="radio" name="q4"> Sempre.</label>
+<label><input type="radio" name="q4"> Só se o <code>apt update</code> falhar.</label>
+<label><input type="radio" name="q4"> Antes do <code>apt update</code>.</label>
+<label><input type="radio" name="q4"> Só se o <code>apt update</code> der certo.</label>
+</div>
+
+<hr>
+
+<h2>Resumo</h2>
+<ul>
+  <li>Forma geral: <code>comando [opções] [argumentos]</code>.</li>
+  <li>Opções curtas (<code>-a</code>) podem se juntar (<code>-lah</code>); longas (<code>--all</code>) vão separadas.</li>
+  <li>Use aspas duplas para proteger espaços e manter variáveis; simples para texto literal.</li>
+  <li><code>;</code> roda sempre, <code>&amp;&amp;</code> só se deu certo, <code>||</code> só se deu errado.</li>
+  <li>Leia as mensagens: "opção inválida", "não reconhecida" e "falta o operando" dizem exatamente o que corrigir.</li>
+</ul>
+
+<div class="pager"></div>
+
+</div>
+</main>
+</div>
+<script src="assets/site.js"></script>
+</body>
+</html>

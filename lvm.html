@@ -1,0 +1,384 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Debian LVM — volumes lógicos que crescem sem parar o sistema | Guia Debian</title>
+<meta name="description" content="Aprenda LVM no Debian 13: volumes físicos, grupos e volumes lógicos, aumentar um volume montado com lvextend -r, snapshots e o LVM criado pelo instalador do Debian, tudo num laboratório com losetup e saídas reais.">
+<link rel="stylesheet" href="assets/style.css">
+<script>try{var t=localStorage.getItem("tema");if(t)document.documentElement.setAttribute("data-theme",t)}catch(e){}</script>
+</head>
+<body>
+<div class="layout">
+<nav class="sidebar" id="sidebar" aria-label="Tópicos"></nav>
+<main class="main">
+<div class="content">
+
+<div class="pager"></div>
+
+<h1>Debian <span class="hl">LVM</span></h1>
+
+<p class="intro">Com partições comuns, o tamanho de cada pedaço do disco fica fixo: se <code>/home</code> encher, você precisa reparticionar. O <strong>LVM</strong> (<em>Logical Volume Manager</em>, "gerenciador de volumes lógicos") junta discos numa "piscina" de espaço e tira dela volumes que podem crescer depois, com o sistema ligado.</p>
+
+<div class="note">
+<strong>Você vai aprender</strong>
+<ul>
+  <li>As três camadas do LVM: PV, VG e LV.</li>
+  <li>Montar um laboratório com dois "discos" que são arquivos.</li>
+  <li>Criar, formatar e montar um volume lógico.</li>
+  <li>Aumentar um volume <strong>montado</strong> com <code>lvextend -r</code>.</li>
+  <li>Entender o LVM que o instalador do Debian cria na opção "LVM guiado".</li>
+  <li>Tirar um snapshot antes de uma mudança arriscada.</li>
+</ul>
+</div>
+
+<p>Todos os comandos rodam como <strong>root</strong> (<code>su -</code>), na máquina fictícia <strong>servidor</strong>. As saídas foram geradas num Debian 13 real, com o lvm2 2.03.31. O LVM do Debian responde em inglês: o pacote não tem tradução.</p>
+
+<hr>
+
+<h2>Conceito: caixas d'água e torneiras</h2>
+<p>Pense em várias <strong>caixas d'água</strong> (os discos) ligadas num <strong>reservatório</strong> único. Do reservatório saem <strong>torneiras</strong> de tamanhos diferentes. Se uma torneira precisar de mais água, é só puxar mais do reservatório.</p>
+
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Camada</th><th>Sigla</th><th>Analogia</th><th>Exemplo</th></tr>
+<tr><td>Volume físico</td><td><strong>PV</strong> (<em>Physical Volume</em>)</td><td>Cada caixa d'água</td><td><code>/dev/sdb</code>, <code>/dev/sdc1</code></td></tr>
+<tr><td>Grupo de volumes</td><td><strong>VG</strong> (<em>Volume Group</em>)</td><td>O reservatório que junta as caixas</td><td><code>dados</code></td></tr>
+<tr><td>Volume lógico</td><td><strong>LV</strong> (<em>Logical Volume</em>)</td><td>Uma torneira: é ele que você formata e monta</td><td><code>/dev/dados/fotos</code></td></tr>
+</table>
+</div>
+
+<p>O espaço do VG é dividido em blocos de 4 MiB chamados <strong>extents</strong>. Quando você cria um LV de 500 MiB, o LVM separa 125 extents para ele.</p>
+
+<hr>
+
+<h2>Instalar o LVM</h2>
+<p>Numa instalação "Disco inteiro" sem LVM, o Debian não instala as ferramentas. Se você tentar usar, recebe:</p>
+<pre class="term" data-host="servidor" data-user="root">#> pvs
+-bash: pvs: comando não encontrado
+#> apt install lvm2</pre>
+<p>Se você escolheu "LVM guiado" na instalação, o <code>lvm2</code> já está lá.</p>
+
+<hr>
+
+<h2>Laboratório seguro com <code>losetup</code></h2>
+<p>Dois arquivos de 1 GB vão fazer o papel de dois discos. Veja a aula <a href="particionar.html">Particionar e Formatar</a> para os detalhes do <code>losetup</code>.</p>
+
+<pre class="term" data-host="servidor" data-user="root" data-cwd="~/lab">#> truncate -s 1G d1.img
+#> truncate -s 1G d2.img
+#> losetup -f --show d1.img
+/dev/loop0
+#> losetup -f --show d2.img
+/dev/loop1</pre>
+
+<p>Num servidor de verdade, troque <code>/dev/loop0</code> e <code>/dev/loop1</code> pelos discos novos (<code>/dev/sdb</code>, <code>/dev/sdc</code>), sempre conferindo com <code>lsblk</code> antes.</p>
+
+<hr>
+
+<h2>Passo 1: criar os volumes físicos (PV)</h2>
+
+<dl class="anatomy">
+  <dt>pvcreate</dt><dd>"<em>physical volume create</em>": marca um disco ou partição para uso do LVM.</dd>
+  <dt>/dev/loop0 /dev/loop1</dt><dd>Os discos. Pode passar vários de uma vez.</dd>
+</dl>
+
+<pre class="term" data-host="servidor" data-user="root">#> pvcreate /dev/loop0 /dev/loop1
+  Physical volume "/dev/loop0" successfully created.
+  Physical volume "/dev/loop1" successfully created.
+#> pvs
+  PV         VG Fmt  Attr PSize PFree
+  /dev/loop0    lvm2 ---  1,00g 1,00g              « ainda sem grupo (coluna VG vazia)
+  /dev/loop1    lvm2 ---  1,00g 1,00g</pre>
+
+<p>Repare que os tamanhos usam vírgula (<code>1,00g</code>): o LVM segue o idioma do sistema para números, mesmo com as mensagens em inglês.</p>
+
+<hr>
+
+<h2>Passo 2: criar o grupo (VG)</h2>
+
+<dl class="anatomy">
+  <dt>vgcreate</dt><dd>"<em>volume group create</em>": cria o reservatório.</dd>
+  <dt>dados</dt><dd>O nome do grupo. Ele vira parte do caminho: <code>/dev/dados/…</code>.</dd>
+  <dt>/dev/loop0 /dev/loop1</dt><dd>Os PVs que entram no grupo.</dd>
+</dl>
+
+<pre class="term" data-host="servidor" data-user="root">#> vgcreate dados /dev/loop0 /dev/loop1
+  Volume group "dados" successfully created
+#> vgs
+  VG    #PV #LV #SN Attr   VSize VFree
+  dados   2   0   0 wz--n- 1,99g 1,99g             « 2 discos, nenhum volume ainda</pre>
+
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Coluna</th><th>Significado</th></tr>
+<tr><td><code>#PV</code></td><td>Quantos volumes físicos o grupo tem</td></tr>
+<tr><td><code>#LV</code></td><td>Quantos volumes lógicos foram criados</td></tr>
+<tr><td><code>#SN</code></td><td>Quantos snapshots</td></tr>
+<tr><td><code>VSize</code> / <code>VFree</code></td><td>Tamanho total e espaço ainda livre</td></tr>
+</table>
+</div>
+
+<hr>
+
+<h2>Passo 3: criar o volume lógico (LV)</h2>
+
+<dl class="anatomy">
+  <dt>lvcreate</dt><dd>"<em>logical volume create</em>": tira uma "torneira" do grupo.</dd>
+  <dt>-n fotos</dt><dd><code>-n</code> (<em>name</em>): o nome do volume.</dd>
+  <dt>-L 500M</dt><dd><code>-L</code> maiúsculo: tamanho exato (500 MiB).</dd>
+  <dt>dados</dt><dd>De qual grupo tirar o espaço.</dd>
+</dl>
+
+<pre class="term" data-host="servidor" data-user="root">#> lvcreate -n fotos -L 500M dados
+  Logical volume "fotos" created.</pre>
+
+<p>Para usar tudo o que sobrou, use <code>-l</code> minúsculo com porcentagem:</p>
+
+<dl class="anatomy">
+  <dt>-l 100%FREE</dt><dd><code>-l</code> minúsculo conta em extents ou porcentagem: "100% do espaço livre".</dd>
+</dl>
+
+<pre class="term" data-host="servidor" data-user="root">#> lvcreate -n docs -l 100%FREE dados
+  Logical volume "docs" created.
+#> lvs
+  LV    VG    Attr       LSize   Pool Origin Data%  Meta%  Move Log Cpy%Sync Convert
+  docs  dados -wi-a-----   1,50g
+  fotos dados -wi-a----- 500,00m
+#> lsblk /dev/loop0 /dev/loop1
+NAME          MAJ:MIN RM  SIZE RO TYPE MOUNTPOINTS
+loop0           7:0    0    1G  0 loop
+├─dados-fotos 254:0    0  500M  0 lvm
+└─dados-docs  254:1    0  1,5G  0 lvm                « o "docs" usa pedaços dos dois discos
+loop1           7:1    0    1G  0 loop
+└─dados-docs  254:1    0  1,5G  0 lvm</pre>
+
+<p>O <code>lsblk</code> mostra a mágica: o volume <code>docs</code> tem 1,5 GB, mais do que cabe num disco só. Ele usa o espaço que sobrou no <code>loop0</code> e o <code>loop1</code> inteiro.</p>
+
+<hr>
+
+<h2>Passo 4: formatar e montar</h2>
+<p>Cada LV aparece em dois caminhos que apontam para o mesmo lugar:</p>
+<pre class="term" data-host="servidor" data-user="root">#> ls -l /dev/dados/
+total 0
+lrwxrwxrwx 1 root root 22 out 15 22:49 docs -&gt; /dev/mapper/dados-docs
+lrwxrwxrwx 1 root root 23 out 15 22:49 fotos -&gt; /dev/mapper/dados-fotos</pre>
+
+<pre class="term" data-host="servidor" data-user="root">#> mkfs.ext4 -q /dev/dados/fotos
+#> mkdir -p /mnt/fotos
+#> mount /dev/dados/fotos /mnt/fotos
+#> df -h /mnt/fotos
+Sist. Arq.               Tam. Usado Disp. Uso% Montado em
+/dev/mapper/dados-fotos  459M  139K  430M   1% /mnt/fotos</pre>
+
+<p>Para montar sempre no boot, use o <code>/etc/fstab</code> com o caminho <code>/dev/dados/fotos</code> ou o UUID (veja <a href="montar.html">mount e fstab</a>).</p>
+
+<hr>
+
+<h2>Aumentar um volume com o sistema ligado</h2>
+<p>É aqui que o LVM brilha. Primeiro, libere espaço no grupo (vamos apagar o <code>docs</code>, que estava vazio):</p>
+<pre class="term" data-host="servidor" data-user="root">#> lvremove -y dados/docs
+  Logical volume "docs" successfully removed.</pre>
+
+<p>Agora aumente o <code>fotos</code> em 200 MiB, <strong>montado</strong>, sem desligar nada:</p>
+
+<dl class="anatomy">
+  <dt>lvextend</dt><dd>"<em>logical volume extend</em>": aumenta um LV.</dd>
+  <dt>-r</dt><dd><em>resizefs</em>: depois de aumentar o volume, aumenta também o sistema de arquivos dentro dele. Sem isso, o espaço novo fica invisível.</dd>
+  <dt>-L +200M</dt><dd>O <code>+</code> significa "a mais". Sem o <code>+</code>, seria o tamanho final.</dd>
+  <dt>dados/fotos</dt><dd>Grupo/volume.</dd>
+</dl>
+
+<pre class="term" data-host="servidor" data-user="root">#> lvextend -r -L +200M dados/fotos
+  File system ext4 found on dados/fotos mounted at /mnt/fotos.
+  Size of logical volume dados/fotos changed from 500,00 MiB (125 extents) to 700,00 MiB (175 extents).
+  Extending file system ext4 to 700,00 MiB (734003200 bytes) on dados/fotos...
+resize2fs /dev/dados/fotos
+resize2fs 1.47.2 (1-Jan-2025)
+Filesystem at /dev/dados/fotos is mounted on /mnt/fotos; on-line resizing required   « aumenta "ao vivo"
+old_desc_blocks = 4, new_desc_blocks = 6
+The filesystem on /dev/dados/fotos is now 716800 (1k) blocks long.
+resize2fs done
+  Extended file system ext4 on dados/fotos.
+  Logical volume dados/fotos successfully resized.
+#> df -h /mnt/fotos
+Sist. Arq.               Tam. Usado Disp. Uso% Montado em
+/dev/mapper/dados-fotos  646M  139K  609M   1% /mnt/fotos                            « de 459M para 646M</pre>
+
+<h3>Formas diferentes de aumentar</h3>
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Comando</th><th>O que faz</th><th>Quando usar</th></tr>
+<tr><td><code>lvextend -r -L +200M dados/fotos</code></td><td>Aumenta 200 MiB</td><td>Você sabe quanto quer a mais.</td></tr>
+<tr><td><code>lvextend -r -L 2G dados/fotos</code></td><td>Deixa com 2 GiB no total</td><td>Você sabe o tamanho final.</td></tr>
+<tr><td><code>lvextend -r -l +100%FREE dados/fotos</code></td><td>Usa todo o espaço livre do grupo</td><td>O volume é o único que vai crescer.</td></tr>
+<tr><td><code>lvextend -L +200M …</code> e depois <code>resize2fs</code></td><td>Em duas etapas</td><td>Sistemas antigos; o <code>-r</code> faz as duas sozinho.</td></tr>
+</table>
+</div>
+
+<h3>Acabou o espaço no grupo? Adicione um disco</h3>
+<pre class="term" data-host="servidor" data-user="root">#> pvcreate /dev/sdd
+#> vgextend dados /dev/sdd                            « o grupo cresce com o disco novo
+#> lvextend -r -l +100%FREE dados/fotos</pre>
+
+<hr>
+
+<h2>Cenário real: o LVM do instalador do Debian</h2>
+<p>Na instalação, o particionamento <strong>assistido com LVM</strong> (usar o disco inteiro e configurar o LVM) cria um grupo com o nome da máquina terminado em <code>-vg</code> e dois volumes: <code>root</code> e <code>swap_1</code>. Numa máquina chamada <code>servidor</code> fica assim (saída típica):</p>
+
+<pre class="term" data-host="servidor" data-user="root">#> lvs
+  LV     VG           Attr       LSize   Pool Origin Data%  Meta%  Move Log Cpy%Sync Convert
+  root   servidor-vg  -wi-ao---- &lt;98,09g
+  swap_1 servidor-vg  -wi-ao----  &lt;1,00g
+#> df -h /
+Sist. Arq.                       Tam. Usado Disp. Uso% Montado em
+/dev/mapper/servidor--vg-root     97G  1,9G   90G   3% /                        « o "-" do nome vira "--"</pre>
+
+<p>Ao contrário do instalador do Ubuntu Server, o do Debian usa todo o espaço do grupo nos volumes, então não sobra espaço livre "escondido". Para crescer, você adiciona um disco ao grupo (seção anterior) ou aumenta o disco virtual e o PV.</p>
+
+<hr>
+
+<h2>Snapshots: uma foto antes da mudança</h2>
+<p>Um <strong>snapshot</strong> congela o estado de um volume. Útil antes de uma atualização arriscada: se der errado, você volta.</p>
+
+<dl class="anatomy">
+  <dt>lvcreate -s</dt><dd><code>-s</code> (<em>snapshot</em>): cria uma "foto" em vez de um volume novo.</dd>
+  <dt>-n fotos-snap</dt><dd>Nome da foto.</dd>
+  <dt>-L 100M</dt><dd>Espaço para guardar as <strong>diferenças</strong> que acontecerem depois da foto.</dd>
+  <dt>dados/fotos</dt><dd>O volume fotografado.</dd>
+</dl>
+
+<pre class="term" data-host="servidor" data-user="root">#> lvcreate -s -n fotos-snap -L 100M dados/fotos
+  Logical volume "fotos-snap" created.
+#> lvs
+  LV         VG    Attr       LSize   Pool Origin Data%  Meta%  Move Log Cpy%Sync Convert
+  fotos      dados owi-aos--- 700,00m                                « "o" = tem snapshot (origin)
+  fotos-snap dados swi-a-s--- 100,00m      fotos  0,51               « 0,51% do espaço da foto usado</pre>
+
+<p>A coluna <code>Data%</code> mostra quanto do espaço do snapshot já foi gasto com diferenças. Se chegar a 100%, o snapshot fica inválido. Para voltar ao estado da foto: desmonte o volume e rode <code>lvconvert --merge dados/fotos-snap</code>. Para descartar a foto: <code>lvremove dados/fotos-snap</code>.</p>
+
+<hr>
+
+<h2>Remover volumes e grupos</h2>
+<p>A ordem é a inversa da criação: LV → VG → PV.</p>
+<pre class="term" data-host="servidor" data-user="root" data-cwd="~/lab">#> umount /mnt/fotos
+#> lvremove dados/fotos
+Do you really want to remove active logical volume dados/fotos? [y/n]: y
+  Logical volume "fotos" successfully removed.
+#> vgremove dados
+  Volume group "dados" successfully removed
+#> pvremove /dev/loop0 /dev/loop1
+  Labels on physical volume "/dev/loop0" successfully wiped.
+  Labels on physical volume "/dev/loop1" successfully wiped.
+#> losetup -d /dev/loop0 /dev/loop1
+#> rm d1.img d2.img</pre>
+
+<div class="warning">
+<strong>Atenção</strong>
+<p><code>lvremove</code> apaga o volume e tudo dentro dele. Ele pergunta antes (responda <code>n</code> se tiver dúvida); com <code>-y</code>, não pergunta.</p>
+</div>
+
+<hr>
+
+<h2>Quando não funciona</h2>
+
+<div class="cenario">
+<strong>"Insufficient free space"</strong>
+<pre class="term" data-host="servidor" data-user="root">#> lvextend -L +5G dados/fotos
+  Insufficient free space: 1280 extents needed, but only 335 available</pre>
+<p><strong>O que aconteceu:</strong> o grupo não tem espaço livre suficiente. 5 GiB são 1280 extents de 4 MiB; só há 335 livres (1,3 GiB).</p>
+<p><strong>Como resolver:</strong> confira o livre com <code>vgs</code> (coluna <code>VFree</code>), peça menos (<code>-l +100%FREE</code>) ou adicione um disco com <code>vgextend</code>.</p>
+</div>
+
+<div class="cenario">
+<strong>"Volume group … not found"</strong>
+<pre class="term" data-host="servidor" data-user="root">#> lvs dados
+  Volume group "dados" not found
+  Cannot process volume group dados</pre>
+<p><strong>O que aconteceu:</strong> o nome está errado ou o grupo não existe (ou os discos dele não estão conectados).</p>
+<p><strong>Como resolver:</strong> liste os grupos com <code>vgs</code> e os discos com <code>pvs</code>. Se os discos acabaram de ser conectados, rode <code>vgscan</code> e <code>vgchange -ay</code>.</p>
+</div>
+
+<div class="cenario">
+<strong>Aumentei o volume e o <code>df</code> não mudou</strong>
+<p><strong>O que aconteceu:</strong> você usou <code>lvextend</code> sem o <code>-r</code>. O volume cresceu, mas o sistema de arquivos dentro dele continua do tamanho antigo.</p>
+<p><strong>Como resolver:</strong> rode <code>resize2fs /dev/dados/fotos</code> (ext4) ou <code>xfs_growfs /mnt/fotos</code> (xfs). Da próxima vez, use <code>-r</code>.</p>
+</div>
+
+<div class="cenario">
+<strong>"pvs: comando não encontrado"</strong>
+<p><strong>O que aconteceu:</strong> ou você não é root (as ferramentas ficam em <code>/usr/sbin</code>), ou o pacote <code>lvm2</code> não está instalado.</p>
+<p><strong>Como resolver:</strong> <code>su -</code> e, se ainda faltar, <code>apt install lvm2</code>.</p>
+</div>
+
+<hr>
+
+<h2>Referência rápida</h2>
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Comando</th><th>O que faz</th></tr>
+<tr><td><code>pvcreate /dev/sdb</code></td><td>Prepara um disco para o LVM</td></tr>
+<tr><td><code>pvs</code> / <code>pvdisplay</code></td><td>Lista PVs (resumo / detalhes)</td></tr>
+<tr><td><code>vgcreate NOME /dev/sdb …</code></td><td>Cria um grupo</td></tr>
+<tr><td><code>vgextend NOME /dev/sdc</code></td><td>Adiciona um disco ao grupo</td></tr>
+<tr><td><code>vgs</code> / <code>vgdisplay</code></td><td>Lista grupos</td></tr>
+<tr><td><code>lvcreate -n NOME -L 10G GRUPO</code></td><td>Cria um volume com tamanho exato</td></tr>
+<tr><td><code>lvcreate -n NOME -l 100%FREE GRUPO</code></td><td>Cria um volume com todo o espaço livre</td></tr>
+<tr><td><code>lvextend -r -L +5G GRUPO/NOME</code></td><td>Aumenta volume e sistema de arquivos</td></tr>
+<tr><td><code>lvcreate -s -n SNAP -L 1G GRUPO/NOME</code></td><td>Cria um snapshot</td></tr>
+<tr><td><code>lvs</code> / <code>lvdisplay</code></td><td>Lista volumes</td></tr>
+<tr><td><code>lvremove</code> / <code>vgremove</code> / <code>pvremove</code></td><td>Remove, na ordem LV → VG → PV</td></tr>
+</table>
+</div>
+
+<hr>
+
+<h2>Exercícios</h2>
+
+<div class="exercise">
+<h3>1. Do disco ao grupo</h3>
+<p>Complete a ordem dos comandos para criar o grupo <code>arquivos</code> no disco <code>/dev/sdb</code>:</p>
+<div class="ex-code"><input data-answer="pvcreate" aria-label="comando 1"> /dev/sdb
+<input data-answer="vgcreate" aria-label="comando 2"> arquivos /dev/sdb</div>
+</div>
+
+<div class="exercise">
+<h3>2. Crescer de verdade</h3>
+<p>Complete para aumentar o volume <code>arquivos/backup</code> em 10 GB <strong>e</strong> o sistema de arquivos dentro dele:</p>
+<div class="ex-code">lvextend <input data-answer="-r" aria-label="opção"> -L +10G arquivos/backup</div>
+</div>
+
+<div class="mc" data-answer="3">
+<p class="mc-q">3. No <code>df -h</code> de um Debian instalado com "LVM guiado" aparece <code>/dev/mapper/servidor--vg-root</code>. Qual é o nome do grupo?</p>
+<label><input type="radio" name="q3"> <code>servidor--vg</code></label>
+<label><input type="radio" name="q3"> <code>root</code></label>
+<label><input type="radio" name="q3"> <code>servidor-vg</code> (o traço do nome vira dois traços no mapper)</label>
+<label><input type="radio" name="q3"> <code>mapper</code></label>
+</div>
+
+<div class="mc" data-answer="1">
+<p class="mc-q">4. Qual a diferença entre <code>-L 500M</code> e <code>-l 100%FREE</code>?</p>
+<label><input type="radio" name="q4"> <code>-L</code> é um tamanho exato; <code>-l</code> conta em extents ou porcentagem.</label>
+<label><input type="radio" name="q4"> Nenhuma, são a mesma opção.</label>
+<label><input type="radio" name="q4"> <code>-L</code> cria snapshot e <code>-l</code> cria volume.</label>
+<label><input type="radio" name="q4"> <code>-l</code> é só para discos pequenos.</label>
+</div>
+
+<hr>
+
+<h2>Resumo</h2>
+<ul>
+  <li>LVM tem três camadas: <strong>PV</strong> (disco) → <strong>VG</strong> (reservatório) → <strong>LV</strong> (volume que você formata).</li>
+  <li><code>pvcreate</code>, <code>vgcreate</code>, <code>lvcreate</code> criam; <code>pvs</code>, <code>vgs</code>, <code>lvs</code> mostram.</li>
+  <li><code>lvextend -r</code> aumenta volume e sistema de arquivos com tudo montado.</li>
+  <li>O instalador do Debian chama o grupo de <code>MÁQUINA-vg</code>, com volumes <code>root</code> e <code>swap_1</code>.</li>
+  <li>No Debian: rode como root (<code>su -</code>) e instale o <code>lvm2</code> se não usou LVM na instalação.</li>
+</ul>
+
+<div class="pager"></div>
+
+</div>
+</main>
+</div>
+<script src="assets/site.js"></script>
+</body>
+</html>

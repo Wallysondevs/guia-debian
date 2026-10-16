@@ -1,0 +1,447 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Debian Backup — rsync, tar e restic | Guia Debian</title>
+<meta name="description" content="Aprenda a fazer backup no Debian com rsync, tar e restic: cada opção explicada, saídas reais do Debian 13, a barra final do rsync, backups com data no nome e o teste de restauração.">
+<link rel="stylesheet" href="assets/style.css">
+<script>try{var t=localStorage.getItem("tema");if(t)document.documentElement.setAttribute("data-theme",t)}catch(e){}</script>
+</head>
+<body>
+<div class="layout">
+<nav class="sidebar" id="sidebar" aria-label="Tópicos"></nav>
+<main class="main">
+<div class="content">
+
+<div class="pager"></div>
+
+<h1>Debian <span class="hl">Backup</span></h1>
+
+<p class="intro">Backup é uma cópia dos seus arquivos guardada em outro lugar, para quando o disco queimar, o notebook for roubado ou você apagar algo sem querer. Nesta aula você vai copiar a pasta pessoal para um HD externo com <code>rsync</code>, empacotar com <code>tar</code>, guardar versões com <code>restic</code> e, o mais importante, testar se dá para restaurar.</p>
+
+<div class="note">
+<strong>Você vai aprender</strong>
+<ul>
+  <li>A regra 3-2-1 e o que vale a pena copiar.</li>
+  <li>O <code>rsync</code> parte por parte, incluindo a "barra final" que confunde todo mundo.</li>
+  <li>Fazer backups com data no nome usando <code>tar</code> e <code>$(date +%F)</code>.</li>
+  <li>Guardar várias versões com o <code>restic</code>, dos repositórios do Debian.</li>
+  <li>Restaurar um arquivo e conferir se a cópia está completa.</li>
+</ul>
+</div>
+
+<hr>
+
+<h2>Antes dos comandos: o que é um bom backup</h2>
+<p>Um backup só existe de verdade quando você já conseguiu restaurar algo dele. Uma regra simples, usada por profissionais, é a <strong>3-2-1</strong>:</p>
+
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Número</th><th>Regra</th><th>Exemplo da Ana</th></tr>
+<tr><td>3</td><td>Tenha 3 cópias dos dados (o original + 2 backups).</td><td>Notebook + HD externo + nuvem.</td></tr>
+<tr><td>2</td><td>Em 2 tipos de mídia diferentes.</td><td>SSD do notebook e HD externo.</td></tr>
+<tr><td>1</td><td>1 cópia fora de casa.</td><td>Um serviço de nuvem ou um HD na casa de um parente.</td></tr>
+</table>
+</div>
+
+<h3>O que copiar</h3>
+<div class="table-wrap">
+<table class="ref">
+<tr><th>O quê</th><th>Onde fica</th><th>Precisa?</th></tr>
+<tr><td>Seus arquivos</td><td><code>/home/ana</code></td><td>Sim, é o mais importante.</td></tr>
+<tr><td>Configurações do sistema que você mudou</td><td><code>/etc</code></td><td>Em servidores, sim (como root).</td></tr>
+<tr><td>Lista dos programas instalados</td><td>Gerada com <code>apt-mark showmanual</code></td><td>Sim; ocupa poucos KB.</td></tr>
+<tr><td>Caches</td><td><code>~/.cache</code></td><td>Não; o sistema recria sozinho.</td></tr>
+<tr><td>O próprio Debian</td><td><code>/usr</code>, <code>/bin</code>…</td><td>Não; é mais rápido reinstalar.</td></tr>
+<tr><td>A pasta <code>/tmp</code></td><td>Memória (tmpfs)</td><td>Não; no Debian 13 ela é apagada a cada boot.</td></tr>
+</table>
+</div>
+
+<hr>
+
+<h2>rsync: copiar só o que mudou</h2>
+<p><code>rsync</code> vem de <em>remote sync</em>, "sincronização remota". Ele copia arquivos de um lugar para outro, local ou por rede. A grande vantagem sobre o <code>cp</code>: na segunda vez, ele copia <strong>só o que mudou</strong>. Um backup de 50 GB que levou uma hora passa a levar segundos.</p>
+
+<h3>Instalar o rsync</h3>
+<p>Diferente do Ubuntu, uma instalação padrão do Debian <strong>não traz</strong> o rsync:</p>
+<pre class="term">$ rsync -avh ~/Documentos/ /media/ana/BACKUP/Documentos/
+bash: rsync: comando não encontrado
+$ su -c "apt install rsync"
+Senha:</pre>
+
+<p>Depois de instalado, ele funciona como usuária comum para copiar os seus próprios arquivos.</p>
+
+<dl class="anatomy">
+  <dt>rsync</dt><dd>O programa.</dd>
+  <dt>-a</dt><dd><em>Archive</em>: copia tudo (subpastas, permissões, datas, links), igual ao original.</dd>
+  <dt>-v</dt><dd><em>Verbose</em>: lista cada arquivo copiado.</dd>
+  <dt>-h</dt><dd>Tamanhos legíveis no resumo final.</dd>
+  <dt>~/Documentos/</dt><dd>A origem. A barra final importa (veja abaixo).</dd>
+  <dt>/media/ana/BACKUP/Documentos/</dt><dd>O destino: o HD externo, montado pelo desktop.</dd>
+</dl>
+
+<pre class="term">$ rsync -avh ~/Documentos/ /media/ana/BACKUP/Documentos/
+sending incremental file list
+created directory /media/ana/BACKUP/Documentos           « o destino não existia; ele criou
+./
+notas.txt
+relatorio.odt
+projetos/
+projetos/backup.sh
+projetos/site/
+projetos/site/index.html
+
+sent 8,92K bytes  received 154 bytes  18,15K bytes/sec
+total size is 8,52K  speedup is 0,94</pre>
+
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Linha</th><th>Significado</th></tr>
+<tr><td><code>sending incremental file list</code></td><td>"Enviando a lista de arquivos aos poucos". O rsync responde em inglês, mas os números usam vírgula decimal, como manda o idioma do sistema.</td></tr>
+<tr><td>Nomes de arquivos</td><td>O que foi copiado agora.</td></tr>
+<tr><td><code>sent … received …</code></td><td>Quantos bytes foram enviados e recebidos.</td></tr>
+<tr><td><code>speedup is …</code></td><td>Quanto o rsync economizou. Na segunda execução, esse número fica bem maior que 1.</td></tr>
+</table>
+</div>
+
+<p>Agora a Ana cria um arquivo novo e roda o mesmo comando de novo:</p>
+
+<pre class="term">$ echo "reunião às 15h" &gt; ~/Documentos/lembrete.txt
+$ rsync -avh ~/Documentos/ /media/ana/BACKUP/Documentos/
+sending incremental file list
+./
+lembrete.txt                                             « só o que mudou
+
+sent 305 bytes  received 40 bytes  690,00 bytes/sec
+total size is 8,53K  speedup is 24,73</pre>
+
+<h3>A barra final na origem</h3>
+<p>Este é o detalhe que mais confunde no rsync. Uma barra no fim da <strong>origem</strong> muda o resultado:</p>
+
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Comando</th><th>Resultado no destino</th></tr>
+<tr><td><code>rsync -a ~/Documentos/ /backup/</code></td><td>Copia o <strong>conteúdo</strong>: <code>/backup/notas.txt</code></td></tr>
+<tr><td><code>rsync -a ~/Documentos /backup/</code></td><td>Copia a <strong>pasta</strong>: <code>/backup/Documentos/notas.txt</code></td></tr>
+</table>
+</div>
+
+<p>Leia a barra como "o que está dentro de". No destino, a barra não faz diferença.</p>
+
+<h3>Ver antes de fazer: <code>-n</code></h3>
+<p>A opção <code>-n</code> (de <em>dry run</em>, "ensaio") mostra o que seria feito, sem copiar nada. Use sempre que mudar o comando:</p>
+
+<pre class="term">$ rsync -avhn ~/Documentos/ /media/ana/BACKUP/Documentos/
+sending incremental file list
+
+sent 238 bytes  received 14 bytes  504,00 bytes/sec
+total size is 8,53K  speedup is 33,86 (DRY RUN)              « (DRY RUN): nada foi copiado</pre>
+
+<h3>Espelho exato: <code>--delete</code></h3>
+<p>Por padrão, se você apaga um arquivo no notebook, ele continua no backup. Com <code>--delete</code>, o rsync apaga do destino o que não existe mais na origem, deixando um espelho exato.</p>
+
+<pre class="term">$ rm ~/Documentos/lembrete.txt
+$ rsync -avh --delete ~/Documentos/ /media/ana/BACKUP/Documentos/
+sending incremental file list
+deleting lembrete.txt                                    « apagado também do backup
+
+sent 216 bytes  received 37 bytes  506,00 bytes/sec
+total size is 8,52K  speedup is 33,66</pre>
+
+<div class="warning">
+<strong>Cuidado com --delete</strong>
+<p>Se você trocar origem e destino de lugar, o <code>--delete</code> apaga os seus arquivos originais. Se você apagar algo sem querer e rodar o backup em seguida, a cópia também some. Rode antes com <code>-n</code> e mantenha mais de um backup (o <code>restic</code>, mais abaixo, guarda versões).</p>
+</div>
+
+<h3>Deixar pastas de fora: <code>--exclude</code></h3>
+<pre class="term">$ rsync -avh --delete --exclude='.cache' --exclude='Downloads' ~/ /media/ana/BACKUP/home/</pre>
+<p>Cada <code>--exclude</code> recebe um nome ou padrão. As aspas evitam que o shell expanda curingas antes da hora.</p>
+
+<h3>Ver o progresso: <code>--progress</code></h3>
+<p>Em arquivos grandes, <code>--progress</code> (ou <code>-P</code>) mostra a porcentagem e a velocidade de cada arquivo:</p>
+
+<pre class="term">$ rsync -avh --progress ~/Imagens/ /media/ana/BACKUP/Imagens/
+sending incremental file list
+created directory /media/ana/BACKUP/Imagens
+./
+ferias.jpg
+          2,20M 100%  206,68MB/s    0:00:00 (xfr#1, to-chk=1/3)
+perfil.png
+        102,40K 100%    8,88MB/s    0:00:00 (xfr#2, to-chk=0/3)
+
+sent 2,30M bytes  received 97 bytes  4,61M bytes/sec
+total size is 2,30M  speedup is 1,00</pre>
+
+<p><code>xfr#1</code> é o número da transferência; <code>to-chk=1/3</code> quer dizer "falta conferir 1 de 3 itens".</p>
+
+<hr>
+
+<h2>tar: um pacote com data no nome</h2>
+<p>O rsync mantém um espelho atualizado. Às vezes você quer fotografias de cada dia, para poder voltar a uma versão antiga. Para isso, empacote com <code>tar</code> (que vem instalado) e coloque a data no nome.</p>
+
+<p>Primeiro, entenda o <code>$(date +%F)</code>. O <code>date +%F</code> imprime a data no formato ano-mês-dia, e o <code>$( )</code> coloca essa saída dentro de outro comando:</p>
+
+<pre class="term">$ date +%F
+2026-10-15
+$ echo "backup-$(date +%F).tar.gz"
+backup-2026-10-15.tar.gz</pre>
+
+<dl class="anatomy">
+  <dt>tar</dt><dd>O programa que empacota (veja <a href="compactar.html">tar, zip, gzip</a>).</dd>
+  <dt>-czf</dt><dd><code>c</code> = criar, <code>z</code> = compactar com gzip, <code>f</code> = o próximo nome é o arquivo.</dd>
+  <dt>/media/ana/BACKUP/documentos-$(date +%F).tar.gz</dt><dd>O arquivo a criar, com a data de hoje no nome.</dd>
+  <dt>-C ~</dt><dd>Entra na pasta pessoal antes de empacotar, para os caminhos ficarem curtos.</dd>
+  <dt>Documentos</dt><dd>O que empacotar.</dd>
+</dl>
+
+<pre class="term">$ tar -czf /media/ana/BACKUP/documentos-$(date +%F).tar.gz -C ~ Documentos
+$ ls -lh /media/ana/BACKUP/*.tar.gz
+-rw-rw-r-- 1 ana ana 8,8K out 13 22:00 /media/ana/BACKUP/documentos-2026-10-13.tar.gz
+-rw-rw-r-- 1 ana ana 8,8K out 14 22:00 /media/ana/BACKUP/documentos-2026-10-14.tar.gz
+-rw-rw-r-- 1 ana ana 8,8K out 15 21:17 /media/ana/BACKUP/documentos-2026-10-15.tar.gz</pre>
+
+<p>Para ver o que tem dentro sem extrair, use <code>-t</code> (de <em>list</em>):</p>
+
+<pre class="term">$ tar -tzf /media/ana/BACKUP/documentos-2026-10-15.tar.gz
+Documentos/
+Documentos/relatorio.odt
+Documentos/notas.txt
+Documentos/projetos/
+Documentos/projetos/backup.sh
+Documentos/projetos/site/
+Documentos/projetos/site/index.html</pre>
+
+<div class="try" data-setup="mkdir backups" data-goal="dir:~/backups/2026-10-15,file:~/backups/2026-10-15/notas.txt">
+<p class="try-task"><strong>Missão:</strong> o simulador não tem <code>tar</code>, mas tem <code>cp</code> e <code>$( )</code>. Copie a pasta <code>Documentos</code> para dentro de <code>backups</code>, numa pasta com o nome da data de hoje. Dica: <code>cp -r Documentos backups/$(date +%F)</code>. Depois confira com <code>ls backups/*</code>.</p>
+</div>
+
+<hr>
+
+<h2>restic: várias versões, criptografadas</h2>
+<p>O rsync guarda só a última versão; o tar guarda versões, mas repete tudo a cada dia. O <code>restic</code> junta o melhor dos dois: guarda <strong>fotografias</strong> (<em>snapshots</em>) de cada backup, copia só o que mudou e protege tudo com senha. Ele está nos repositórios do Debian: <code>su -c "apt install restic"</code>.</p>
+
+<ol class="passo">
+<li><strong>Crie o repositório</strong> (a pasta onde ficam as cópias) e escolha uma senha:
+<pre class="term">$ restic init --repo /media/ana/BACKUP/restic
+enter password for new repository:
+enter password again:
+created restic repository c66477b938 at /media/ana/BACKUP/restic
+
+Please note that knowledge of your password is required to access
+the repository. Losing your password means that your data is
+irrecoverably lost.</pre>
+<p>Guarde a senha num gerenciador de senhas: sem ela, o backup é inútil.</p>
+</li>
+<li><strong>Faça o backup:</strong>
+<pre class="term">$ restic --repo /media/ana/BACKUP/restic backup ~/Documentos
+enter password for repository:
+…
+Added to the repository: 10.826 KiB (10.053 KiB stored)
+
+processed 4 files, 8.322 KiB in 0:00
+snapshot f4e72fbc saved                                   « o código desta fotografia</pre>
+</li>
+<li><strong>Liste as fotografias:</strong>
+<pre class="term">$ restic --repo /media/ana/BACKUP/restic snapshots
+enter password for repository:
+ID        Time                 Host        Tags        Paths                    Size
+-----------------------------------------------------------------------------------------
+f4e72fbc  2026-10-15 21:17:44  notebook                /home/ana/Documentos     8.322 KiB
+-----------------------------------------------------------------------------------------
+1 snapshots</pre>
+</li>
+<li><strong>Restaure numa pasta de teste:</strong>
+<pre class="term">$ restic --repo /media/ana/BACKUP/restic restore latest --target ~/teste-restauracao
+enter password for repository:
+…
+Summary: Restored 7 files/dirs (8.322 KiB) in 0:00</pre>
+</li>
+</ol>
+
+<p>Se a senha estiver errada, o restic responde <code>Fatal: wrong password or no key found</code>. As mensagens do restic são todas em inglês.</p>
+
+<hr>
+
+<h2>Testar a restauração</h2>
+<p>Um backup que nunca foi restaurado é só uma esperança. Faça o teste uma vez por mês.</p>
+
+<ol class="passo">
+<li><strong>Restaure um arquivo do espelho do rsync</strong> para uma pasta de teste, sem sobrescrever o original:
+<pre class="term">$ mkdir -p ~/teste-restauracao
+$ rsync -avh /media/ana/BACKUP/Documentos/notas.txt ~/teste-restauracao/
+sending incremental file list
+notas.txt
+
+sent 177 bytes  received 35 bytes  424,00 bytes/sec
+total size is 71  speedup is 0,33
+$ cat ~/teste-restauracao/notas.txt
+Comprar café
+Ligar para o João
+Estudar Debian
+Fazer backup das fotos</pre>
+</li>
+<li><strong>Compare a pasta inteira com o original.</strong> O <code>diff -r</code> compara pastas recursivamente; se não mostrar nada, são idênticas:
+<pre class="term">$ diff -r ~/Documentos /media/ana/BACKUP/Documentos
+$ echo $?
+0                                                        « 0 = idênticas</pre>
+<p>Se algo mudou depois do último backup, o <code>diff</code> mostra o quê:</p>
+<pre class="term">$ diff -r ~/Documentos /media/ana/BACKUP/Documentos
+diff -r /home/ana/Documentos/notas.txt /media/ana/BACKUP/Documentos/notas.txt
+5d4
+&lt; extra                                                  « linha que só existe no original
+$ echo $?
+1</pre>
+</li>
+<li><strong>Extraia um pacote tar</strong> numa pasta separada, com <code>-x</code> (extrair) e <code>-C</code> (onde):
+<pre class="term">$ tar -xzf /media/ana/BACKUP/documentos-2026-10-15.tar.gz -C ~/teste-restauracao
+$ ls ~/teste-restauracao
+Documentos  notas.txt</pre>
+</li>
+</ol>
+
+<p>Apague a pasta de teste quando terminar: <code>rm -r ~/teste-restauracao</code>.</p>
+
+<hr>
+
+<h2>A lista de programas instalados</h2>
+<p>Em vez de copiar os programas, guarde a lista deles. O <code>apt-mark showmanual</code> mostra os pacotes que foram instalados de propósito (e não como dependência). Funciona como usuária comum:</p>
+
+<pre class="term">$ apt-mark showmanual &gt; /media/ana/BACKUP/pacotes.txt
+$ wc -l /media/ana/BACKUP/pacotes.txt
+206 /media/ana/BACKUP/pacotes.txt</pre>
+
+<p>Num Debian novo, reinstale tudo de uma vez, como root:</p>
+<pre class="term">$ su -
+Senha:
+#> xargs apt install -y &lt; /media/ana/BACKUP/pacotes.txt</pre>
+
+<hr>
+
+<h2>Formas diferentes de fazer backup</h2>
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Ferramenta</th><th>Como instalar</th><th>Melhor quando…</th></tr>
+<tr><td><code>rsync</code></td><td><code>apt install rsync</code></td><td>Você quer um espelho atualizado num HD ou servidor.</td></tr>
+<tr><td><code>tar</code> + data</td><td>Já vem instalado</td><td>Você quer pacotes simples, fáceis de abrir em qualquer lugar.</td></tr>
+<tr><td><code>restic</code></td><td><code>apt install restic</code></td><td>Você quer versões, criptografia e cópia para a nuvem (S3, SFTP…).</td></tr>
+<tr><td><code>borgbackup</code></td><td><code>apt install borgbackup</code></td><td>Parecido com o restic; muito usado em servidores.</td></tr>
+<tr><td>Backups (Déjà Dup)</td><td><code>apt install deja-dup</code></td><td>Você usa o GNOME e prefere um app gráfico com agendamento.</td></tr>
+<tr><td>Timeshift</td><td><code>apt install timeshift</code></td><td>Você quer "fotografias" do <strong>sistema</strong> (não dos seus arquivos) para voltar atrás depois de uma atualização ruim.</td></tr>
+</table>
+</div>
+
+<p>Para rodar o backup sozinho todo dia, combine um script com o <code>cron</code>. Veja <a href="script-intro.html">Primeiro Script</a> e <a href="cron.html">Agendar Tarefas (cron)</a>.</p>
+
+<hr>
+
+<h2>Quando não funciona</h2>
+
+<div class="cenario">
+<strong>"rsync: comando não encontrado"</strong>
+<pre class="term">$ rsync -avh ~/Documentos/ /media/ana/BACKUP/
+bash: rsync: comando não encontrado</pre>
+<p><strong>O que aconteceu:</strong> o rsync não vem na instalação padrão do Debian.</p>
+<p><strong>Como resolver:</strong> <code>su -c "apt install rsync"</code>.</p>
+</div>
+
+<div class="cenario">
+<strong>"mkdir … failed: No such file or directory": o HD não está montado</strong>
+<pre class="term">$ rsync -avh ~/Documentos/ /media/ana/BACKUP/
+sending incremental file list
+rsync: [Receiver] mkdir "/media/ana/BACKUP" failed: No such file or directory (2)
+rsync error: error in file IO (code 11) at main.c(808) [Receiver=3.5.0]</pre>
+<p><strong>O que aconteceu:</strong> o HD externo não está conectado ou não foi montado, então a pasta de destino não existe.</p>
+<p><strong>Como resolver:</strong> conecte o HD, confira com <code>findmnt /media/ana/BACKUP</code> e rode de novo. Num script, teste antes se a pasta existe (veja <a href="script-condicionais.html">Condicionais</a>).</p>
+</div>
+
+<div class="warning">
+<strong>O perigo de copiar para um HD que não está montado</strong>
+<p>Se a pasta de destino existir, mas o HD não estiver montado nela, o rsync copia para o <strong>disco do notebook</strong>, enchendo-o sem você perceber. Use destinos em <code>/media</code> (que somem quando o HD sai) ou confira com <code>findmnt</code> antes.</p>
+</div>
+
+<div class="cenario">
+<strong>"code 23": alguns arquivos não foram copiados</strong>
+<pre class="term">$ rsync -avh /etc/ssh/ ~/backup-ssh/
+sending incremental file list
+rsync: [sender] send_files failed to open "/etc/ssh/ssh_host_ecdsa_key": Permission denied (13)
+…
+rsync error: some files/attrs were not transferred (see previous errors) (code 23) at main.c(1394) [sender=3.5.0]</pre>
+<p><strong>O que aconteceu:</strong> a usuária comum não pode ler alguns arquivos do sistema. O backup ficou incompleto, e o rsync avisa com o código 23.</p>
+<p><strong>Como resolver:</strong> para copiar arquivos do sistema, rode o rsync como root (<code>su -</code>). Num script, confira o código de saída (<code>$?</code>) para saber se o backup foi completo.</p>
+</div>
+
+<hr>
+
+<h2>Referência</h2>
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Opção do rsync</th><th>Descrição</th></tr>
+<tr><td><code>-a</code></td><td>Modo arquivo: copia tudo, mantendo permissões e datas</td></tr>
+<tr><td><code>-v</code> / <code>-h</code></td><td>Lista os arquivos / tamanhos legíveis</td></tr>
+<tr><td><code>-n</code></td><td>Ensaio: mostra sem copiar</td></tr>
+<tr><td><code>--delete</code></td><td>Apaga do destino o que sumiu da origem</td></tr>
+<tr><td><code>--exclude='padrão'</code></td><td>Deixa de fora</td></tr>
+<tr><td><code>-P</code> / <code>--progress</code></td><td>Mostra o progresso</td></tr>
+<tr><td><code>-z</code></td><td>Compacta durante a transferência (útil pela rede)</td></tr>
+<tr><td><code>-e "ssh -p 2222"</code></td><td>Usa SSH numa porta diferente (veja <a href="scp-rsync.html">scp e rsync</a>)</td></tr>
+</table>
+</div>
+
+<hr>
+
+<h2>Exercícios</h2>
+
+<div class="exercise">
+<h3>1. O conteúdo, não a pasta</h3>
+<p>Complete para copiar o <strong>conteúdo</strong> de Documentos para <code>/backup/docs</code>:</p>
+<div class="ex-code">rsync -avh ~/Documentos<input data-answer="/" aria-label="caractere"> /backup/docs/</div>
+</div>
+
+<div class="exercise">
+<h3>2. Ensaio</h3>
+<p>Complete para ver o que o espelho faria, sem copiar nem apagar nada:</p>
+<div class="ex-code">rsync -avh <input data-answer="-n|--dry-run" aria-label="opção"> --delete ~/Documentos/ /backup/docs/</div>
+</div>
+
+<div class="exercise">
+<h3>3. Data no nome</h3>
+<p>Complete para criar <code>fotos-2026-10-15.tar.gz</code> com a data de hoje:</p>
+<div class="ex-code">tar -czf fotos-<input data-answer="$(date +%F)" aria-label="data">.tar.gz Imagens</div>
+</div>
+
+<div class="mc" data-answer="2">
+<p class="mc-q">4. Num Debian recém-instalado, você digita <code>rsync</code> e aparece "comando não encontrado". Por quê?</p>
+<label><input type="radio" name="q4"> O rsync foi removido do Debian 13.</label>
+<label><input type="radio" name="q4"> Ele não vem na instalação padrão; instale com <code>apt install rsync</code> como root.</label>
+<label><input type="radio" name="q4"> Ele só funciona como root.</label>
+<label><input type="radio" name="q4"> Falta montar o HD.</label>
+</div>
+
+<div class="mc" data-answer="4">
+<p class="mc-q">5. Quando um backup pode ser considerado confiável?</p>
+<label><input type="radio" name="q5"> Quando o rsync termina sem mostrar nada.</label>
+<label><input type="radio" name="q5"> Quando o HD externo é novo.</label>
+<label><input type="radio" name="q5"> Quando ele tem mais de 1 GB.</label>
+<label><input type="radio" name="q5"> Quando você já conseguiu restaurar arquivos dele.</label>
+</div>
+
+<hr>
+
+<h2>Resumo</h2>
+<ul>
+  <li>Regra 3-2-1: 3 cópias, 2 mídias, 1 fora de casa.</li>
+  <li><code>rsync -avh origem/ destino/</code> copia só o que mudou; no Debian, instale-o antes.</li>
+  <li>A barra final na origem significa "o conteúdo de". Teste com <code>-n</code> antes do <code>--delete</code>.</li>
+  <li><code>tar -czf nome-$(date +%F).tar.gz</code> guarda uma versão por dia; o <code>restic</code> guarda versões criptografadas.</li>
+  <li>Teste a restauração com <code>diff -r</code> e guarde a lista de pacotes com <code>apt-mark showmanual</code>.</li>
+</ul>
+
+<div class="pager"></div>
+
+</div>
+</main>
+</div>
+<script src="assets/site.js"></script>
+</body>
+</html>

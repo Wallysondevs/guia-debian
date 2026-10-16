@@ -1,0 +1,407 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Debian Logs com journalctl — onde foi parar o /var/log/syslog | Guia Debian</title>
+<meta name="description" content="Como ler os logs no Debian 13 com journalctl: por que não existe /var/log/syslog, filtros por serviço, boot, gravidade e horário, o aviso para usuários comuns e a investigação de um serviço que não sobe.">
+<link rel="stylesheet" href="assets/style.css">
+<script>try{var t=localStorage.getItem("tema");if(t)document.documentElement.setAttribute("data-theme",t)}catch(e){}</script>
+</head>
+<body>
+<div class="layout">
+<nav class="sidebar" id="sidebar" aria-label="Tópicos"></nav>
+<main class="main">
+<div class="content">
+
+<div class="pager"></div>
+
+<h1>Debian <span class="hl">Logs (journalctl)</span></h1>
+
+<p class="intro">Quando algo dá errado (um serviço que não sobe, um login suspeito, um disco com problema), a resposta quase sempre está nos <strong>logs</strong>: o "diário" em que o sistema anota tudo o que acontece. No Debian 13 esse diário é o <strong>journal</strong> do systemd, e você o lê com <code>journalctl</code>.</p>
+
+<div class="note">
+<strong>Você vai aprender</strong>
+<ul>
+  <li>Por que o Debian 13 não tem mais o <code>/var/log/syslog</code>.</li>
+  <li>Por que a usuária comum vê só uma parte dos logs, e como liberar o resto.</li>
+  <li>Filtrar por serviço, boot, gravidade, horário e palavra.</li>
+  <li>Investigar um serviço que não sobe, do <code>status</code> até a causa.</li>
+  <li>Ver e limitar o espaço que os logs ocupam.</li>
+</ul>
+</div>
+
+<hr>
+
+<h2>Antes do comando: onde estão os logs no Debian 13</h2>
+<p>Quem já usou Linux antigo procura o arquivo <code>/var/log/syslog</code>. No Debian 13 ele não existe:</p>
+
+<pre class="term">$ ls /var/log/syslog
+ls: não foi possível acessar '/var/log/syslog': Arquivo ou diretório inexistente
+$ ls /var/log
+alternatives.log  apt  btmp  dpkg.log  installer  journal  lastlog  private  README  runit  wtmp  wtmp.db</pre>
+
+<p>Desde o Debian 12, o pacote <code>rsyslog</code>, que escrevia os arquivos de texto, não é mais instalado por padrão. Tudo vai para o <strong>journal</strong>, guardado em formato próprio na pasta <code>/var/log/journal</code>. O próprio Debian deixou um bilhete explicando:</p>
+
+<pre class="term">$ cat /var/log/README
+You are looking for the traditional text log files in /var/log, and they are
+gone?
+
+Here's an explanation on what's going on:
+
+You are running a systemd-based OS where traditional syslog has been replaced
+with the Journal. The journal stores the same (and more) information as classic
+syslog. To make use of the journal and access the collected log data simply
+invoke "journalctl", which will output the logs in the identical text-based
+format the syslog files in /var/log used to be.</pre>
+
+<p>Como a pasta <code>/var/log/journal</code> existe, o journal é <strong>persistente</strong>: os logs sobrevivem quando a máquina reinicia. Outros arquivos continuam em <code>/var/log</code>, como o <code>dpkg.log</code> (o que foi instalado) e a pasta <code>apt</code>.</p>
+
+<div class="tip">
+<strong>Quero os arquivos de texto de volta</strong>
+<p>Se você precisa do <code>/var/log/syslog</code> (por exemplo, para uma ferramenta antiga que lê esse arquivo), instale o rsyslog como root: <code>apt install rsyslog</code>. Ele passa a escrever os arquivos de texto, e o journal continua funcionando.</p>
+</div>
+
+<hr>
+
+<h2>A forma mais simples: <code>journalctl</code></h2>
+
+<dl class="anatomy">
+  <dt>journalctl</dt><dd>De <em>journal control</em>. Sem opções, mostra todo o diário, do mais antigo ao mais novo, num paginador.</dd>
+</dl>
+
+<p>Cada linha tem sempre o mesmo formato:</p>
+<pre class="term">$ journalctl -n 1
+out 15 21:17:01 notebook CRON[11933]: (root) CMD (cd / &amp;&amp; run-parts --report /etc/cron.hourly)</pre>
+
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Pedaço</th><th>Significado</th></tr>
+<tr><td><code>out 15 21:17:01</code></td><td>Data e hora (mês traduzido)</td></tr>
+<tr><td><code>notebook</code></td><td>Nome da máquina</td></tr>
+<tr><td><code>CRON[11933]</code></td><td>Quem escreveu e o PID dele</td></tr>
+<tr><td>O resto</td><td>A mensagem, quase sempre em inglês</td></tr>
+</table>
+</div>
+
+<p>O paginador é o <code>less</code>: setas para rolar, <kbd>G</kbd> para ir ao fim, <kbd>/</kbd> para buscar, <kbd>Q</kbd> para sair.</p>
+
+<h3>A usuária comum vê só os próprios logs</h3>
+<p>Rode o <code>journalctl</code> como <code>ana</code> e repare no aviso:</p>
+
+<pre class="term">$ journalctl -n 3
+Hint: You are currently not seeing messages from other users and the system.
+      Users in groups 'adm', 'systemd-journal' can see all messages.
+      Pass -q to turn off this notice.
+out 15 21:10:01 notebook sshd-session[8220]: Disconnected from user ana 192.168.0.20 port 56534
+out 15 21:10:09 notebook sshd-session[8314]: Received disconnect from 192.168.0.20 port 40684:11: disconnected by user
+out 15 21:10:09 notebook sshd-session[8314]: Disconnected from user ana 192.168.0.20 port 40684</pre>
+
+<p>O aviso diz: "você não está vendo mensagens de outros usuários e do sistema; quem está nos grupos <code>adm</code> ou <code>systemd-journal</code> vê tudo". No Debian, a ana não está em nenhum dos dois:</p>
+
+<pre class="term">$ groups
+ana cdrom floppy audio dip video plugdev users netdev
+$ journalctl -u ssh
+Hint: You are currently not seeing messages from other users and the system.
+      Users in groups 'adm', 'systemd-journal' can see all messages.
+      Pass -q to turn off this notice.
+-- No entries --                       « os logs do SSH são do sistema: escondidos para a ana</pre>
+
+<p>Há duas saídas:</p>
+<ol>
+  <li>Ler os logs como root (<code>su -</code>, depois <code>journalctl</code>).</li>
+  <li>Colocar a ana no grupo <code>adm</code>, que é o grupo tradicional de quem lê logs. Como root:
+    <pre class="term">#> usermod -aG adm ana</pre>
+    A mudança vale no <strong>próximo login</strong> da ana (saia e entre de novo). Veja <a href="usuarios.html">Usuários e Grupos</a>.</li>
+</ol>
+
+<div class="warning">
+<strong>Cuidado com o <code>-a</code></strong>
+<p>Sem o <code>-a</code>, o <code>usermod -G adm ana</code> <strong>tira</strong> a ana de todos os outros grupos. Use sempre <code>-aG</code>.</p>
+</div>
+
+<p>Nos exemplos a seguir, os comandos rodam como root (prompt <code>#</code>) ou por alguém do grupo <code>adm</code>.</p>
+
+<hr>
+
+<h2>As últimas linhas: <code>-n</code> e <code>-f</code></h2>
+<p>Quase sempre você quer o <strong>fim</strong> do diário, onde está o que acabou de acontecer.</p>
+
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Opção</th><th>Origem</th><th>O que faz</th></tr>
+<tr><td><code>-n 20</code></td><td><em>lines</em></td><td>Só as últimas 20 linhas, sem paginador</td></tr>
+<tr><td><code>-f</code></td><td><em>follow</em></td><td>Fica mostrando as linhas novas ao vivo (sai com <kbd>Ctrl</kbd>+<kbd>C</kbd>)</td></tr>
+<tr><td><code>-r</code></td><td><em>reverse</em></td><td>Do mais novo para o mais antigo</td></tr>
+<tr><td><code>-e</code></td><td><em>end</em></td><td>Abre o paginador já no fim</td></tr>
+</table>
+</div>
+
+<p>O <code>-f</code> é ótimo para ver um problema acontecendo: deixe um terminal com <code>journalctl -f</code> e, em outro, reinicie o serviço.</p>
+
+<hr>
+
+<h2>Um serviço só: <code>-u</code></h2>
+
+<dl class="anatomy">
+  <dt>journalctl</dt><dd>O programa.</dd>
+  <dt>-u ssh</dt><dd>De <em>unit</em>: só as mensagens do serviço <code>ssh</code>.</dd>
+  <dt>-n 3</dt><dd>Só as 3 últimas.</dd>
+</dl>
+
+<pre class="term">#> journalctl -u ssh -n 3
+out 15 21:17:32 notebook sshd-session[12108]: pam_unix(sshd:session): session closed for user root
+out 15 21:17:32 notebook sshd-session[12118]: Accepted publickey for root from 192.168.0.20 port 54438 ssh2: ED25519 SHA256:ixgT4QXITUrqe0aI2mG5JqJnP118rAlE94kt7cqMC9E
+out 15 21:17:32 notebook sshd-session[12118]: pam_unix(sshd:session): session opened for user root(uid=0) by root(uid=0)</pre>
+
+<p>Aqui dá para ler quem entrou: <code>Accepted publickey for root from 192.168.0.20</code> = alguém entrou como root, de 192.168.0.20, usando chave SSH.</p>
+
+<hr>
+
+<h2>Por boot: <code>-b</code></h2>
+<pre class="term">#> journalctl --list-boots
+IDX BOOT ID                          FIRST ENTRY                 LAST ENTRY
+  0 d6d709bc5a41440cbcef012815c2bdbb Thu 2026-10-15 20:55:47 -03 Thu 2026-10-15 21:10:09 -03
+#> journalctl -b -1
+No journal boot entry found for the specified boot (-1).</pre>
+
+<p><code>-b</code> sozinho é o boot atual; <code>-b -1</code> é o anterior. Numa máquina que só ligou uma vez, como essa, não há boot anterior. É a ferramenta certa para "o computador travou e reiniciou: o que aconteceu antes?" (veja <a href="travamentos.html">Quando o Sistema Trava</a>).</p>
+
+<hr>
+
+<h2>Por gravidade: <code>-p</code></h2>
+<p>Cada mensagem tem uma prioridade, do mais grave ao mais leve:</p>
+
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Número</th><th>Nome</th><th>Significado</th></tr>
+<tr><td>0</td><td><code>emerg</code></td><td>O sistema está inutilizável</td></tr>
+<tr><td>1</td><td><code>alert</code></td><td>Ação imediata necessária</td></tr>
+<tr><td>2</td><td><code>crit</code></td><td>Crítico</td></tr>
+<tr><td>3</td><td><code>err</code></td><td>Erro</td></tr>
+<tr><td>4</td><td><code>warning</code></td><td>Aviso</td></tr>
+<tr><td>5</td><td><code>notice</code></td><td>Normal, mas digno de nota</td></tr>
+<tr><td>6</td><td><code>info</code></td><td>Informativo</td></tr>
+<tr><td>7</td><td><code>debug</code></td><td>Detalhes para depuração</td></tr>
+</table>
+</div>
+
+<p><code>-p err</code> mostra erros <strong>e tudo o que for mais grave</strong> (err, crit, alert, emerg):</p>
+<pre class="term">#> journalctl -b -p err -n 3
+out 15 21:09:54 notebook systemd-ssh-generator[8051]: Failed to query local AF_VSOCK CID: Cannot assign requested address
+out 15 21:09:55 notebook (e-gia.sh)[8060]: teste-guia.service: Failed at step EXEC spawning /usr/local/bin/teste-gia.sh: No such file or directory
+out 15 21:09:56 notebook systemd-ssh-generator[8111]: Failed to query local AF_VSOCK CID: Cannot assign requested address</pre>
+
+<p>Nem todo "erro" é problema: a mensagem do <code>systemd-ssh-generator</code> aparece em máquinas virtuais e pode ser ignorada. Já a do <code>teste-guia</code> é um serviço que não conseguiu rodar.</p>
+
+<hr>
+
+<h2>Por horário: <code>--since</code> e <code>--until</code></h2>
+<pre class="term">#> journalctl -u cron --since "15 min ago"
+#> journalctl --since today
+#> journalctl --since "2026-10-15 20:00" --until "2026-10-15 21:00"
+#> journalctl --since yesterday -p warning</pre>
+
+<p>As palavras precisam ser em inglês (<code>today</code>, <code>yesterday</code>, <code>ago</code>):</p>
+<pre class="term">#> journalctl --since hoje
+Failed to parse timestamp: hoje</pre>
+
+<hr>
+
+<h2>Por palavra: <code>-g</code></h2>
+<p>O <code>-g</code> (de <em>grep</em>) filtra pelo texto da mensagem, aceitando expressão regular:</p>
+<pre class="term">#> journalctl -u ssh -g "Failed password|Accepted" -n 2
+out 15 21:17:32 notebook sshd-session[12118]: Accepted publickey for root from 192.168.0.20 port 54438 ssh2: ED25519 SHA256:ixgT4QXITUrqe0aI2mG5JqJnP118rAlE94kt7cqMC9E
+out 15 21:17:32 notebook sshd-session[12108]: Accepted publickey for root from 192.168.0.20 port 54426 ssh2: ED25519 SHA256:ixgT4QXITUrqe0aI2mG5JqJnP118rAlE94kt7cqMC9E</pre>
+
+<p>Também dá para usar o <code>grep</code> de sempre num pipe: <code>journalctl -u ssh | grep "Failed password"</code> (veja <a href="grep.html">grep</a>).</p>
+
+<hr>
+
+<h2>Combinando filtros</h2>
+<p>Os filtros se somam. Leia o comando como uma frase:</p>
+
+<dl class="anatomy">
+  <dt>journalctl</dt><dd>Mostre o diário...</dd>
+  <dt>-u ssh</dt><dd>...do serviço SSH...</dd>
+  <dt>-b</dt><dd>...só deste boot...</dd>
+  <dt>-p warning</dt><dd>...só avisos ou pior...</dd>
+  <dt>--no-pager</dt><dd>...direto na tela, sem paginador.</dd>
+</dl>
+
+<p>E o kernel tem um atalho próprio: <code>-k</code> mostra só as mensagens do kernel (o mesmo que o <code>dmesg</code>, mas com data legível):</p>
+<pre class="term">#> journalctl -k -n 2
+out 15 21:16:44 notebook kernel: loop0: detected capacity change from 0 to 4194304
+out 15 21:16:45 notebook kernel:  loop0: p1 p2</pre>
+
+<hr>
+
+<h2>Cenário completo: o serviço não sobe</h2>
+<p>Um serviço chamado <code>teste-guia</code> não está funcionando. Siga o roteiro:</p>
+
+<ol class="passo">
+  <li><strong>O que o status diz?</strong>
+    <pre class="term">#> systemctl status teste-guia
+× teste-guia.service - Serviço de teste do Guia Debian
+     Loaded: loaded (/etc/systemd/system/teste-guia.service; static)
+     Active: failed (Result: exit-code) since Thu 2026-10-15 21:09:55 -03; 1s ago
+    Process: 8060 ExecStart=/usr/local/bin/teste-gia.sh (code=exited, status=203/EXEC)</pre>
+    <p>Falhou (<code>×</code>) com <code>203/EXEC</code>: não conseguiu executar o programa.</p></li>
+  <li><strong>O que o log diz?</strong>
+    <pre class="term">#> journalctl -u teste-guia -n 4
+out 15 21:09:55 notebook (e-gia.sh)[8060]: teste-guia.service: Unable to locate executable '/usr/local/bin/teste-gia.sh': No such file or directory
+out 15 21:09:55 notebook (e-gia.sh)[8060]: teste-guia.service: Failed at step EXEC spawning /usr/local/bin/teste-gia.sh: No such file or directory
+out 15 21:09:55 notebook systemd[1]: teste-guia.service: Main process exited, code=exited, status=203/EXEC
+out 15 21:09:55 notebook systemd[1]: teste-guia.service: Failed with result 'exit-code'.</pre>
+    <p>"Unable to locate executable" = o arquivo <code>/usr/local/bin/teste-gia.sh</code> não existe.</p></li>
+  <li><strong>Confirmar.</strong>
+    <pre class="term">#> ls /usr/local/bin/
+teste-guia.sh                « o nome certo tem um "u": teste-guia</pre></li>
+  <li><strong>Corrigir</strong> o <code>ExecStart</code> no arquivo do serviço, <code>systemctl daemon-reload</code> e <code>systemctl restart teste-guia</code>. O passo a passo de criar serviços está em <a href="criar-servico.html">Criar um Serviço</a>.</li>
+</ol>
+
+<hr>
+
+<h2>Espaço ocupado pelos logs</h2>
+<pre class="term">#> journalctl --disk-usage
+Archived and active journals take up 16M in the file system.
+#> journalctl --vacuum-time=30d
+Vacuuming done, freed 0B of archived journals from /var/log/journal/03c89c72dc504632b46ffa5cf5f2879b.
+Vacuuming done, freed 0B of archived journals from /var/log/journal.</pre>
+
+<p><code>--vacuum-time=30d</code> apaga os arquivos de log com mais de 30 dias; <code>--vacuum-size=500M</code> limita pelo tamanho. Numa máquina nova, como esta, não há nada antigo para apagar (<code>freed 0B</code>).</p>
+<p>Por padrão o journal usa no máximo 10% do disco (até 4 GB). Para um limite fixo, como root, crie <code>/etc/systemd/journald.conf.d/tamanho.conf</code> com:</p>
+<pre class="file" data-file="/etc/systemd/journald.conf.d/tamanho.conf">[Journal]
+SystemMaxUse=500M</pre>
+<p>e rode <code>systemctl restart systemd-journald</code>.</p>
+
+<div class="warning">
+<strong>Logs são provas</strong>
+<p>Não apague logs para "economizar espaço" sem pensar. Se a máquina for invadida ou um disco começar a falhar, é neles que você vai descobrir o que aconteceu.</p>
+</div>
+
+<hr>
+
+<h2>Formas diferentes de ver logs</h2>
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Forma</th><th>Quando usar</th></tr>
+<tr><td><code>systemctl status nome</code></td><td>Visão rápida: estado + últimas linhas do serviço</td></tr>
+<tr><td><code>journalctl -u nome -n 50</code></td><td>Investigar um serviço</td></tr>
+<tr><td><code>journalctl -f</code></td><td>Acompanhar ao vivo enquanto testa</td></tr>
+<tr><td><code>journalctl -b -1 -p err</code></td><td>O que deu errado antes do último reinício</td></tr>
+<tr><td><code>journalctl -k</code> ou <code>dmesg</code></td><td>Problemas de hardware e drivers</td></tr>
+<tr><td><code>less /var/log/dpkg.log</code></td><td>O que foi instalado e removido</td></tr>
+<tr><td><code>journalctl -o json-pretty</code></td><td>Ver todos os campos de uma mensagem</td></tr>
+</table>
+</div>
+
+<hr>
+
+<h2>Quando não funciona</h2>
+
+<div class="cenario">
+<strong>"Hint: You are currently not seeing messages from other users and the system."</strong>
+<p><strong>O que aconteceu:</strong> você não é root nem está nos grupos <code>adm</code>/<code>systemd-journal</code>, padrão no Debian.</p>
+<p><strong>Como resolver:</strong> leia como root ou, como root, <code>usermod -aG adm ana</code> e faça login de novo. Para só esconder o aviso, use <code>-q</code>.</p>
+</div>
+
+<div class="cenario">
+<strong>"-- No entries --"</strong>
+<p><strong>O que aconteceu:</strong> não há mensagens que combinem com os filtros. Pode ser o nome do serviço errado (o journalctl <strong>não</strong> avisa que a unit não existe), um horário fora do intervalo, ou o aviso acima (sem permissão para ver).</p>
+<p><strong>Como resolver:</strong> confira o nome com <code>systemctl list-units | grep nome</code> e tire os filtros um a um.</p>
+</div>
+
+<div class="cenario">
+<strong>"Failed to parse timestamp"</strong>
+<p><strong>O que aconteceu:</strong> o <code>--since</code> não entende palavras em português nem datas no formato dia/mês.</p>
+<p><strong>Como resolver:</strong> use <code>today</code>, <code>yesterday</code>, <code>"1 hour ago"</code> ou <code>"2026-10-15 20:00"</code>.</p>
+</div>
+
+<div class="cenario">
+<strong>"No journal boot entry found for the specified boot (-1)"</strong>
+<p><strong>O que aconteceu:</strong> não há boot anterior guardado (máquina recém-instalada) ou os logs antigos já foram apagados.</p>
+<p><strong>Como resolver:</strong> veja os boots disponíveis com <code>journalctl --list-boots</code>.</p>
+</div>
+
+<hr>
+
+<h2>Referência de opções</h2>
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Opção</th><th>O que faz</th><th>Exemplo</th></tr>
+<tr><td><code>-u</code></td><td>Só um serviço</td><td><code>journalctl -u ssh</code></td></tr>
+<tr><td><code>-n N</code></td><td>Últimas N linhas</td><td><code>journalctl -n 50</code></td></tr>
+<tr><td><code>-f</code></td><td>Ao vivo</td><td><code>journalctl -f -u nginx</code></td></tr>
+<tr><td><code>-b</code> / <code>-b -1</code></td><td>Boot atual / anterior</td><td><code>journalctl -b -1</code></td></tr>
+<tr><td><code>--list-boots</code></td><td>Lista os boots guardados</td><td>—</td></tr>
+<tr><td><code>-p</code></td><td>Gravidade (e as piores)</td><td><code>journalctl -p err</code></td></tr>
+<tr><td><code>--since</code> / <code>--until</code></td><td>Intervalo de tempo</td><td><code>--since "1 hour ago"</code></td></tr>
+<tr><td><code>-g</code></td><td>Busca no texto</td><td><code>journalctl -g "Failed"</code></td></tr>
+<tr><td><code>-k</code></td><td>Só o kernel</td><td><code>journalctl -k -b</code></td></tr>
+<tr><td><code>-r</code></td><td>Do mais novo ao mais antigo</td><td>—</td></tr>
+<tr><td><code>-q</code></td><td>Esconde avisos como o "Hint"</td><td>—</td></tr>
+<tr><td><code>-o</code></td><td>Formato: <code>short-iso</code>, <code>json-pretty</code>, <code>cat</code></td><td><code>-o short-iso</code></td></tr>
+<tr><td><code>--no-pager</code></td><td>Sem paginador</td><td>—</td></tr>
+<tr><td><code>--disk-usage</code></td><td>Espaço ocupado</td><td>—</td></tr>
+<tr><td><code>--vacuum-time</code> / <code>--vacuum-size</code></td><td>Apaga logs antigos</td><td><code>--vacuum-size=500M</code></td></tr>
+</table>
+</div>
+
+<hr>
+
+<h2>Exercícios</h2>
+
+<div class="exercise">
+<h3>1. Só o SSH</h3>
+<p>Complete para ver as 20 últimas linhas do serviço <code>ssh</code>:</p>
+<div class="ex-code">journalctl <input data-answer="-u ssh -n 20|-n 20 -u ssh|-u ssh -n20" aria-label="opções"></div>
+</div>
+
+<div class="exercise">
+<h3>2. Ao vivo</h3>
+<p>Qual opção mostra as linhas novas conforme aparecem?</p>
+<div class="ex-code">journalctl <input data-answer="-f|--follow" aria-label="opção"></div>
+</div>
+
+<div class="exercise">
+<h3>3. Liberar os logs para a ana</h3>
+<p>Complete o comando (como root) que coloca a ana no grupo que lê logs, sem tirá-la dos outros:</p>
+<div class="ex-code">usermod <input data-answer="-aG adm|-a -G adm|-aG systemd-journal" aria-label="opções"> ana</div>
+</div>
+
+<div class="mc" data-answer="2">
+<p class="mc-q">4. Num Debian 13 recém-instalado, por que <code>ls /var/log/syslog</code> dá "Arquivo ou diretório inexistente"?</p>
+<label><input type="radio" name="q4"> Os logs estão desligados.</label>
+<label><input type="radio" name="q4"> O rsyslog não vem mais instalado; os logs ficam no journal.</label>
+<label><input type="radio" name="q4"> Só o root enxerga esse arquivo.</label>
+<label><input type="radio" name="q4"> Ele foi renomeado para <code>/var/log/messages</code>.</label>
+</div>
+
+<div class="mc" data-answer="3">
+<p class="mc-q">5. O computador reiniciou sozinho. Qual comando mostra os erros de <strong>antes</strong> do reinício?</p>
+<label><input type="radio" name="q5"> <code>journalctl -f</code></label>
+<label><input type="radio" name="q5"> <code>journalctl -b -p err</code></label>
+<label><input type="radio" name="q5"> <code>journalctl -b -1 -p err</code></label>
+<label><input type="radio" name="q5"> <code>journalctl --disk-usage</code></label>
+</div>
+
+<hr>
+
+<h2>Resumo</h2>
+<ul>
+  <li>No Debian 13 não há <code>/var/log/syslog</code>: os logs ficam no journal (<code>/var/log/journal</code>), lidos com <code>journalctl</code>.</li>
+  <li>A ana vê só os próprios logs; root ou o grupo <code>adm</code> veem tudo.</li>
+  <li><code>-u</code> filtra o serviço, <code>-b</code> o boot, <code>-p</code> a gravidade, <code>--since</code> o horário, <code>-g</code> o texto.</li>
+  <li><code>-n 20</code> e <code>-f</code> são os mais usados no dia a dia.</li>
+  <li>Serviço com problema: <code>systemctl status</code> diz que falhou; <code>journalctl -u</code> diz por quê.</li>
+</ul>
+
+<div class="pager"></div>
+
+</div>
+</main>
+</div>
+<script src="assets/site.js"></script>
+</body>
+</html>

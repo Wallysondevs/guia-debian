@@ -1,0 +1,388 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Debian SSH — acesso remoto, chaves e erros comuns | Guia Debian</title>
+<meta name="description" content="SSH no Debian 13: instalar o servidor, a primeira conexão e a impressão digital, chaves ed25519 com ssh-copy-id, ~/.ssh/config, root só com chave, known_hosts com hash e os erros reais.">
+<link rel="stylesheet" href="assets/style.css">
+<script>try{var t=localStorage.getItem("tema");if(t)document.documentElement.setAttribute("data-theme",t)}catch(e){}</script>
+</head>
+<body>
+<div class="layout">
+<nav class="sidebar" id="sidebar" aria-label="Tópicos"></nav>
+<main class="main">
+<div class="content">
+
+<div class="pager"></div>
+
+<h1>Debian <span class="hl">SSH</span></h1>
+
+<p class="intro">O SSH (de <em>Secure Shell</em>, "terminal seguro") abre um terminal de outra máquina dentro do seu, com tudo criptografado. É assim que se administra quase todo servidor Debian do mundo: o servidor fica numa sala ou na nuvem, sem tela, e você digita os comandos de longe.</p>
+
+<div class="note">
+<strong>Você vai aprender</strong>
+<ul>
+  <li>Instalar e conferir o servidor SSH no Debian.</li>
+  <li>Fazer a primeira conexão e entender a pergunta sobre a "impressão digital".</li>
+  <li>Criar uma chave, copiá-la para o servidor e entrar sem senha.</li>
+  <li>Encurtar os comandos com o <code>~/.ssh/config</code>.</li>
+  <li>Por que o root do Debian não entra com senha, e como ler os erros mais comuns.</li>
+</ul>
+</div>
+
+<p>Nos exemplos, a Ana está no <strong>notebook</strong> e acessa a máquina <strong>servidor</strong> (<code>192.168.0.50</code>), onde também tem a conta <code>ana</code>. As saídas foram conferidas num Debian 13 real.</p>
+
+<hr>
+
+<h2>Cliente e servidor</h2>
+<p>Há dois programas, em dois pacotes:</p>
+
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Pacote</th><th>Programa</th><th>Papel</th><th>No Debian</th></tr>
+<tr><td><code>openssh-client</code></td><td><code>ssh</code>, <code>scp</code>, <code>sftp</code>, <code>ssh-keygen</code></td><td>Conecta <strong>em</strong> outras máquinas</td><td>Sempre instalado.</td></tr>
+<tr><td><code>openssh-server</code></td><td><code>sshd</code> (serviço <code>ssh</code>)</td><td>Aceita conexões <strong>nesta</strong> máquina</td><td>Só se você marcou "servidor SSH" na instalação.</td></tr>
+</table>
+</div>
+
+<p>Na tela "Seleção de software" do instalador do Debian existe a opção <strong>servidor SSH</strong>. Se ela ficou desmarcada, instale depois, como root:</p>
+
+<pre class="term" data-host="servidor">$ su -
+Senha:
+#> apt install openssh-server
+#> systemctl status ssh
+● ssh.service - OpenBSD Secure Shell server
+     Loaded: loaded (/usr/lib/systemd/system/ssh.service; enabled; preset: enabled)   « liga no boot
+     Active: active (running) since Thu 2026-10-15 20:55:53 -03; 10min ago             « rodando
+       Docs: man:sshd(8)
+             man:sshd_config(5)
+   Main PID: 778 (sshd)
+     CGroup: /system.slice/ssh.service
+             └─778 "sshd: /usr/sbin/sshd -D [listener] 0 of 10-100 startups"</pre>
+
+<p>No Debian, o serviço se chama <code>ssh</code> e roda o tempo todo, escutando na porta 22 (confira com <code>ss -tln</code>, veja <a href="ip.html">ip, ping, ss</a>). Para ver a versão:</p>
+
+<pre class="term">$ ssh -V
+OpenSSH_10.0p2 Debian-7+deb13u4, OpenSSL 3.5.7 9 Jun 2026</pre>
+
+<hr>
+
+<h2>A primeira conexão</h2>
+
+<dl class="anatomy">
+  <dt>ssh</dt><dd>O cliente SSH.</dd>
+  <dt>ana</dt><dd>O usuário <strong>no servidor</strong>.</dd>
+  <dt>@192.168.0.50</dt><dd>A máquina: IP ou nome.</dd>
+</dl>
+
+<pre class="term">$ ssh ana@192.168.0.50
+The authenticity of host '192.168.0.50 (192.168.0.50)' can't be established.
+ED25519 key fingerprint is SHA256:2cYtXRUqFptnhM0jv3iLXRqpdarrvAHhWD8DsuQKQ5k.    « a "impressão digital" do servidor
+This key is not known by any other names.
+Are you sure you want to continue connecting (yes/no/[fingerprint])? yes
+Warning: Permanently added '192.168.0.50' (ED25519) to the list of known hosts.
+ana@192.168.0.50's password:                                                       « a senha não aparece ao digitar
+Linux servidor 6.12.111+deb13-amd64 #1 SMP PREEMPT_DYNAMIC Debian 6.12.111-1 (2026-09-28) x86_64
+…
+ana@servidor:~$                                                                    « agora você está no servidor</pre>
+
+<p>Repare que o prompt mudou de <code>ana@notebook</code> para <code>ana@servidor</code>: todo comando agora roda lá. Para voltar, digite <code>exit</code> ou aperte <kbd>Ctrl</kbd>+<kbd>D</kbd>.</p>
+
+<h3>O que é a pergunta "Are you sure…?"</h3>
+<p>Cada servidor tem uma <strong>chave de máquina</strong>, e a impressão digital (<em>fingerprint</em>) é um resumo dela. Na primeira conexão, o seu computador ainda não conhece essa chave e pergunta se pode confiar. Respondendo <code>yes</code>, ela é guardada em <code>~/.ssh/known_hosts</code>. Nas próximas vezes, o SSH confere sozinho e só reclama se a chave mudar.</p>
+
+<p>Para ter certeza absoluta, compare com a impressão digital vista <strong>no próprio servidor</strong> (pelo console):</p>
+
+<pre class="term" data-host="servidor">$ ssh-keygen -lf /etc/ssh/ssh_host_ed25519_key.pub
+256 SHA256:2cYtXRUqFptnhM0jv3iLXRqpdarrvAHhWD8DsuQKQ5k root@servidor (ED25519)</pre>
+
+<div class="note">
+<strong>known_hosts embaralhado no Debian</strong>
+<p>O Debian liga a opção <code>HashKnownHosts yes</code> (em <code>/etc/ssh/ssh_config</code>). Por isso o <code>~/.ssh/known_hosts</code> não mostra os nomes das máquinas, só linhas como <code>|1|kM3…=|Xf9…= ssh-ed25519 AAAA…</code>. Assim, quem roubar o arquivo não descobre a quais servidores você se conecta. Para procurar uma máquina nele, use <code>ssh-keygen -F 192.168.0.50</code>; para apagar, <code>ssh-keygen -R 192.168.0.50</code>.</p>
+</div>
+
+<h3>Rodar um comando só</h3>
+<p>Coloque o comando depois do endereço: o SSH conecta, roda, mostra a saída e volta.</p>
+
+<pre class="term">$ ssh ana@192.168.0.50 'uptime; df -h / | tail -1'
+ 21:20:30 up 25 min,  1 user,  load average: 0,12, 0,10, 0,05
+/dev/sda1        24G  1,5G   21G   7% /</pre>
+
+<hr>
+
+<h2>Entrar sem senha: chaves</h2>
+<p>Senhas podem ser adivinhadas. Uma <strong>chave</strong> é um par de arquivos: a <strong>privada</strong> fica só com você; a <strong>pública</strong> vai para os servidores. Quem tem a privada entra. É mais seguro e mais prático.</p>
+
+<ol class="passo">
+<li><strong>Crie o par de chaves</strong> no notebook (uma vez só):
+
+<dl class="anatomy">
+  <dt>ssh-keygen</dt><dd>Gera chaves.</dd>
+  <dt>-t ed25519</dt><dd>O tipo: ed25519 é moderno, curto e recomendado.</dd>
+  <dt>-C "ana@notebook"</dt><dd>Um comentário para reconhecer a chave depois.</dd>
+</dl>
+
+<pre class="term">$ ssh-keygen -t ed25519 -C "ana@notebook"
+Generating public/private ed25519 key pair.
+Enter file in which to save the key (/home/ana/.ssh/id_ed25519):                              « Enter aceita o padrão
+Enter passphrase for "/home/ana/.ssh/id_ed25519" (empty for no passphrase):                  « uma frase que protege a chave
+Enter same passphrase again:
+Your identification has been saved in /home/ana/.ssh/id_ed25519                              « a privada: nunca compartilhe
+Your public key has been saved in /home/ana/.ssh/id_ed25519.pub                              « a pública: pode distribuir
+The key fingerprint is:
+SHA256:iy8XCBgnLtZXtSSjqJ5Cn/s1B+VSIdPlmdwFAz71e6Y ana@notebook
+The key's randomart image is:
++--[ED25519 256]--+
+|       =o+.o.+.. |
+|  o o ..*.* = +  |
+| ..* ..  + B . . |
+|..+...  +   .   .|
+|.+  .. +S.     .o|
+|o o . ..+.     o.|
+|.o o  .o.o    E  |
+|.   . o.+        |
+|   ... o.        |
++----[SHA256]-----+</pre>
+</li>
+
+<li><strong>Copie a pública para o servidor</strong> com o <code>ssh-copy-id</code>. Ele pede a senha uma última vez:
+<pre class="term">$ ssh-copy-id ana@192.168.0.50
+/usr/bin/ssh-copy-id: INFO: Source of key(s) to be installed: "/home/ana/.ssh/id_ed25519.pub"
+/usr/bin/ssh-copy-id: INFO: attempting to log in with the new key(s), to filter out any that are already installed
+/usr/bin/ssh-copy-id: INFO: 1 key(s) remain to be installed -- if you are prompted now it is to install the new keys
+ana@192.168.0.50's password:
+
+Number of key(s) added: 1                                       « deu certo
+
+Now try logging into the machine, with: "ssh 'ana@192.168.0.50'"
+and check to make sure that only the key(s) you wanted were added.</pre>
+</li>
+
+<li><strong>Teste</strong>: agora o SSH não pede a senha da conta (se você criou a chave com frase, pede a frase da chave).
+<pre class="term">$ ssh ana@192.168.0.50 hostname
+servidor</pre>
+</li>
+</ol>
+
+<p>No servidor, a chave foi parar em <code>~/.ssh/authorized_keys</code>, e o <code>ssh-copy-id</code> já deixou as permissões certas:</p>
+
+<pre class="term" data-host="servidor">$ ls -ld ~/.ssh ~/.ssh/authorized_keys
+drwx------ 2 ana ana 4096 out 15 21:18 /home/ana/.ssh                    « 700: só a dona entra
+-rw------- 1 ana ana   94 out 15 21:18 /home/ana/.ssh/authorized_keys    « 600: só a dona lê</pre>
+
+<p>E o log do servidor registra o login por chave (como root, veja <a href="journalctl.html">Logs</a>):</p>
+
+<pre class="term" data-host="servidor">#> journalctl -u ssh -n 2 --no-pager
+out 15 21:06:46 servidor sshd-session[2931]: Accepted publickey for ana from 192.168.0.15 port 44796 ssh2: ED25519 SHA256:iy8XCBgnLtZXtSSjqJ5Cn/s1B+VSIdPlmdwFAz71e6Y
+out 15 21:06:46 servidor sshd-session[2931]: pam_unix(sshd:session): session opened for user ana(uid=1000) by ana(uid=0)</pre>
+
+<div class="tip">
+<strong>Sem o ssh-copy-id</strong>
+<p>Em sistemas sem ele, copie o conteúdo de <code>~/.ssh/id_ed25519.pub</code> e cole numa linha nova de <code>~/.ssh/authorized_keys</code> no servidor. Um comando faz tudo: <code>cat ~/.ssh/id_ed25519.pub | ssh ana@192.168.0.50 'mkdir -p ~/.ssh &amp;&amp; chmod 700 ~/.ssh &amp;&amp; cat &gt;&gt; ~/.ssh/authorized_keys &amp;&amp; chmod 600 ~/.ssh/authorized_keys'</code>.</p>
+</div>
+
+<hr>
+
+<h2>Atalhos no ~/.ssh/config</h2>
+<p>Em vez de digitar usuário, IP, porta e chave toda vez, dê um apelido para cada servidor:</p>
+
+<pre class="file" data-file="~/.ssh/config">Host servidor
+    HostName 192.168.0.50
+    User ana
+    Port 22
+    IdentityFile ~/.ssh/id_ed25519
+
+Host nuvem
+    HostName 203.0.113.10
+    User admin
+    Port 2222</pre>
+
+<p>Agora <code>ssh servidor</code> e <code>ssh nuvem</code> funcionam, e os apelidos valem também no <code>scp</code> e no <code>rsync</code> (veja <a href="scp-rsync.html">scp e rsync</a>). O arquivo precisa ser só seu: <code>chmod 600 ~/.ssh/config</code>.</p>
+
+<hr>
+
+<h2>O root e o SSH no Debian</h2>
+<p>Abra a configuração efetiva do servidor (como root, o <code>sshd -T</code> mostra tudo o que está valendo):</p>
+
+<pre class="term" data-host="servidor">#> sshd -T | grep -E '^(permitrootlogin|passwordauthentication|pubkeyauthentication) '
+pubkeyauthentication yes
+passwordauthentication yes                « contas comuns podem entrar com senha
+permitrootlogin without-password          « o root só entra com chave</pre>
+
+<p><code>without-password</code> (o mesmo que <code>prohibit-password</code>) quer dizer que o <strong>root</strong> nunca entra por senha pelo SSH, mesmo digitando a senha certa:</p>
+
+<pre class="term">$ ssh root@192.168.0.50
+root@192.168.0.50's password:
+Permission denied, please try again.
+…
+root@192.168.0.50: Permission denied (publickey,password).</pre>
+
+<p>O jeito do Debian é entrar com a sua conta e então virar root com <code>su -</code> (veja <a href="root-su-sudo.html">root, su e sudo</a>):</p>
+
+<pre class="term">$ ssh ana@192.168.0.50
+ana@servidor:~$ su -
+Senha:
+root@servidor:~#</pre>
+
+<div class="warning">
+<strong>Mexer no sshd_config com cuidado</strong>
+<p>A configuração do servidor fica em <code>/etc/ssh/sshd_config</code>, e o Debian também lê os arquivos de <code>/etc/ssh/sshd_config.d/</code> (vazia por padrão). Antes de recarregar, teste com <code>sshd -t</code> (sem saída = sem erro) e mantenha uma sessão aberta até confirmar que consegue entrar de novo. Como desligar a senha e outras proteções está em <a href="seguranca.html">Segurança do Servidor</a>.</p>
+</div>
+
+<hr>
+
+<h2>Recursos que valem a pena</h2>
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Comando</th><th>Faz</th></tr>
+<tr><td><code>ssh -p 2222 ana@servidor</code></td><td>Conecta numa porta diferente da 22</td></tr>
+<tr><td><code>ssh -i ~/.ssh/outra ana@servidor</code></td><td>Usa uma chave específica</td></tr>
+<tr><td><code>ssh -v ana@servidor</code></td><td>Mostra cada passo da conexão (para investigar erros)</td></tr>
+<tr><td><code>ssh -L 8080:localhost:80 ana@servidor</code></td><td>Túnel: <code>localhost:8080</code> no notebook abre a porta 80 do servidor</td></tr>
+<tr><td><code>ssh-keygen -F servidor</code></td><td>Procura a máquina no known_hosts</td></tr>
+<tr><td><code>ssh-keygen -R servidor</code></td><td>Apaga a máquina do known_hosts</td></tr>
+<tr><td><code>ssh-add</code></td><td>Guarda a frase da chave na memória durante a sessão (ssh-agent)</td></tr>
+</table>
+</div>
+
+<hr>
+
+<h2>Formas diferentes de entrar no servidor</h2>
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Forma</th><th>Comando</th><th>Quando usar</th></tr>
+<tr><td>Senha</td><td><code>ssh ana@192.168.0.50</code></td><td>Primeiro acesso, antes de ter chave.</td></tr>
+<tr><td>Chave</td><td><code>ssh ana@192.168.0.50</code> (depois do ssh-copy-id)</td><td>Sempre que possível.</td></tr>
+<tr><td>Apelido</td><td><code>ssh servidor</code></td><td>Servidores que você usa com frequência.</td></tr>
+<tr><td>Arquivos pelo desktop</td><td>Endereço <code>sftp://ana@192.168.0.50/</code> no Arquivos</td><td>Para mexer em arquivos com o mouse.</td></tr>
+</table>
+</div>
+
+<hr>
+
+<h2>Quando não funciona</h2>
+
+<div class="cenario">
+<strong>Connection refused</strong>
+<pre class="term">$ ssh ana@192.168.0.50
+ssh: connect to host 192.168.0.50 port 22: Connection refused</pre>
+<p><strong>O que aconteceu:</strong> a máquina respondeu, mas ninguém escuta na porta 22. O <code>openssh-server</code> não está instalado, o serviço está parado ou o SSH usa outra porta.</p>
+<p><strong>Como resolver:</strong> no servidor, <code>systemctl status ssh</code>; se faltar, <code>apt install openssh-server</code>. Se a porta for outra, use <code>-p</code>.</p>
+</div>
+
+<div class="cenario">
+<strong>Connection timed out</strong>
+<pre class="term">$ ssh ana@192.168.0.50
+ssh: connect to host 192.168.0.50 port 22: Connection timed out</pre>
+<p><strong>O que aconteceu:</strong> nada respondeu. O IP está errado, a máquina está desligada ou um firewall descarta os pacotes.</p>
+<p><strong>Como confirmar:</strong> <code>ping -c 2 192.168.0.50</code> e, no servidor, as regras do firewall (veja <a href="nftables.html">nftables</a>).</p>
+</div>
+
+<div class="cenario">
+<strong>Could not resolve hostname</strong>
+<pre class="term">$ ssh ana@servidro
+ssh: Could not resolve hostname servidro: Name or service not known</pre>
+<p><strong>O que aconteceu:</strong> o nome não existe (aqui, um erro de digitação) e não há apelido com esse nome no <code>~/.ssh/config</code>.</p>
+</div>
+
+<div class="cenario">
+<strong>Permission denied (publickey,password)</strong>
+<pre class="term">$ ssh ana@192.168.0.50
+ana@192.168.0.50: Permission denied (publickey,password).</pre>
+<p><strong>O que aconteceu:</strong> o servidor recusou todas as formas de entrar que aceita (listadas entre parênteses). Senha errada, usuário errado, chave não instalada ou tentativa de entrar como root com senha.</p>
+<p><strong>Como investigar:</strong> <code>ssh -v ana@192.168.0.50</code> mostra quais chaves foram oferecidas. No servidor, confira as permissões de <code>~/.ssh</code> (700) e <code>authorized_keys</code> (600) e o log com <code>journalctl -u ssh</code>.</p>
+</div>
+
+<div class="cenario">
+<strong>REMOTE HOST IDENTIFICATION HAS CHANGED!</strong>
+<pre class="term">$ ssh ana@192.168.0.50
+@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
+@    WARNING: REMOTE HOST IDENTIFICATION HAS CHANGED!     @
+@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
+IT IS POSSIBLE THAT SOMEONE IS DOING SOMETHING NASTY!
+Someone could be eavesdropping on you right now (man-in-the-middle attack)!
+It is also possible that a host key has just been changed.
+The fingerprint for the ED25519 key sent by the remote host is
+SHA256:2cYtXRUqFptnhM0jv3iLXRqpdarrvAHhWD8DsuQKQ5k.
+Please contact your system administrator.
+Add correct host key in /home/ana/.ssh/known_hosts to get rid of this message.
+Offending ED25519 key in /home/ana/.ssh/known_hosts:3                       « linha 3 do arquivo
+  remove with:
+  ssh-keygen -f '/home/ana/.ssh/known_hosts' -R '192.168.0.50'           « o próprio comando para corrigir
+Host key for 192.168.0.50 has changed and you have requested strict checking.
+Host key verification failed.</pre>
+<p><strong>O que aconteceu:</strong> o servidor apresentou uma chave diferente da guardada. O motivo comum e inofensivo: o servidor foi reinstalado, ou outro aparelho ganhou aquele IP. O motivo perigoso: alguém no meio do caminho.</p>
+<p><strong>Como resolver:</strong> se você <strong>sabe</strong> que o servidor foi reinstalado, apague a chave antiga e conecte de novo, conferindo a nova impressão digital:</p>
+<pre class="term">$ ssh-keygen -R 192.168.0.50
+# Host 192.168.0.50 found: line 3
+/home/ana/.ssh/known_hosts updated.
+Original contents retained as /home/ana/.ssh/known_hosts.old</pre>
+<p>Se você <strong>não</strong> sabe por que mudou, não conecte e investigue.</p>
+</div>
+
+<div class="cenario">
+<strong>"ssh: comando não encontrado" no servidor? Não, "sshd"</strong>
+<pre class="term">$ sshd -T
+bash: sshd: comando não encontrado</pre>
+<p><strong>O que aconteceu:</strong> o <code>sshd</code> fica em <code>/usr/sbin</code>, fora do PATH da usuária comum no Debian. Rode como root (<code>su -</code>).</p>
+</div>
+
+<hr>
+
+<h2>Exercícios</h2>
+
+<div class="exercise">
+<h3>1. Criar a chave</h3>
+<p>Complete para criar uma chave do tipo recomendado:</p>
+<div class="ex-code">ssh-keygen -t <input data-answer="ed25519" aria-label="tipo"></div>
+</div>
+
+<div class="exercise">
+<h3>2. Instalar a chave no servidor</h3>
+<p>Complete com o comando que copia a chave pública para o servidor:</p>
+<div class="ex-code"><input data-answer="ssh-copy-id" aria-label="comando"> ana@192.168.0.50</div>
+</div>
+
+<div class="exercise">
+<h3>3. Porta diferente</h3>
+<p>Complete para conectar na porta 2222:</p>
+<div class="ex-code">ssh <input data-answer="-p 2222|-p2222" aria-label="opção"> ana@servidor</div>
+</div>
+
+<div class="mc" data-answer="3">
+<p class="mc-q">4. No Debian, por que <code>ssh root@servidor</code> com a senha certa dá "Permission denied"?</p>
+<label><input type="radio" name="q4"> O Debian não tem usuário root.</label>
+<label><input type="radio" name="q4"> Falta instalar o sudo.</label>
+<label><input type="radio" name="q4"> O padrão <code>PermitRootLogin prohibit-password</code> só deixa o root entrar com chave.</label>
+<label><input type="radio" name="q4"> A porta 22 está fechada.</label>
+</div>
+
+<div class="mc" data-answer="1">
+<p class="mc-q">5. A Ana procurou o servidor com <code>grep 192.168.0.50 ~/.ssh/known_hosts</code> e não achou nada, mas conecta sem a pergunta de primeira vez. Por quê?</p>
+<label><input type="radio" name="q5"> No Debian o known_hosts guarda os nomes embaralhados (HashKnownHosts); use <code>ssh-keygen -F</code>.</label>
+<label><input type="radio" name="q5"> O known_hosts fica em /etc.</label>
+<label><input type="radio" name="q5"> O SSH não usa o known_hosts.</label>
+<label><input type="radio" name="q5"> O grep não lê arquivos ocultos.</label>
+</div>
+
+<hr>
+
+<h2>Resumo</h2>
+<ul>
+  <li><code>ssh usuario@maquina</code> abre um terminal remoto; <code>exit</code> volta.</li>
+  <li>O servidor é o pacote <code>openssh-server</code>, serviço <code>ssh</code>; pode faltar se não foi marcado na instalação.</li>
+  <li>A primeira conexão pergunta pela impressão digital; confira com <code>ssh-keygen -lf</code> no servidor.</li>
+  <li>Chaves: <code>ssh-keygen -t ed25519</code> e <code>ssh-copy-id</code>; permissões 700 e 600.</li>
+  <li>No Debian o root só entra por chave; entre com a sua conta e use <code>su -</code>.</li>
+  <li>Chave de máquina mudou? <code>ssh-keygen -R</code>, mas só se você souber o motivo.</li>
+</ul>
+
+<div class="pager"></div>
+
+</div>
+</main>
+</div>
+<script src="assets/site.js"></script>
+</body>
+</html>

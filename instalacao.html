@@ -1,0 +1,364 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Debian Instalação — da ISO ao primeiro boot | Guia Debian</title>
+<meta name="description" content="Como instalar o Debian 13: escolher a ISO (netinst, DVD ou live), conferir o download, gravar o pendrive ou criar uma VM, o instalador passo a passo, a pergunta da senha de root e o que fazer no primeiro boot.">
+<link rel="stylesheet" href="assets/style.css">
+<script>try{var t=localStorage.getItem("tema");if(t)document.documentElement.setAttribute("data-theme",t)}catch(e){}</script>
+</head>
+<body>
+<div class="layout">
+<nav class="sidebar" id="sidebar" aria-label="Tópicos"></nav>
+<main class="main">
+<div class="content">
+
+<div class="pager"></div>
+
+<h1>Debian <span class="hl">Instalação</span></h1>
+
+<p class="intro">Instalar o Debian é responder a umas quinze perguntas do instalador. A maioria tem uma resposta óbvia, mas uma delas muda como você vai usar o sistema para sempre: a <strong>senha do root</strong>. Nesta aula você escolhe a imagem certa, confere se o download veio inteiro, prepara um pendrive ou uma máquina virtual e passa por cada tela do instalador sabendo o que está respondendo.</p>
+
+<div class="note">
+<strong>Você vai aprender</strong>
+<ul>
+  <li>A diferença entre as imagens netinst, DVD e live.</li>
+  <li>Como conferir se a ISO baixada não está corrompida.</li>
+  <li>Como instalar numa máquina virtual (o jeito mais seguro de aprender) ou num pendrive.</li>
+  <li>O que significa cada tela do instalador, com os textos exatos em português.</li>
+  <li>A consequência de definir ou não a senha do root.</li>
+  <li>O que fazer no primeiro boot.</li>
+</ul>
+</div>
+
+<hr>
+
+<h2>Passo 1: escolher a imagem (ISO)</h2>
+<p>Uma <strong>ISO</strong> é um arquivo com o conteúdo inteiro de um disco de instalação. O Debian oferece várias, todas no site <a href="https://www.debian.org/distrib/">debian.org/distrib</a>:</p>
+
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Imagem</th><th>Tamanho (13.5)</th><th>Como funciona</th><th>Indicada para</th></tr>
+<tr><td><strong>netinst</strong></td><td>~790 MB</td><td>Traz o básico; baixa o resto da internet durante a instalação.</td><td>A maioria das pessoas. É a recomendada.</td></tr>
+<tr><td><strong>live</strong> (GNOME, KDE, Xfce…)</td><td>3,8 a 4,2 GB</td><td>Liga um Debian completo direto do pendrive, sem instalar. Tem um botão para instalar.</td><td>Testar antes de instalar.</td></tr>
+<tr><td><strong>DVD</strong></td><td>Vários GB</td><td>Traz muitos pacotes, instala sem internet.</td><td>Computadores sem rede.</td></tr>
+</table>
+</div>
+
+<p>Os tamanhos acima são das imagens oficiais do Debian 13.5: <code>debian-13.5.0-amd64-netinst.iso</code> tem 791.674.880 bytes, a live GNOME tem 3,8 GB e a live KDE, 4,2 GB.</p>
+
+<div class="tip">
+<strong>E os drivers de Wi-Fi e vídeo?</strong>
+<p>Desde o Debian 12, as imagens oficiais já incluem o <strong>firmware não livre</strong> (<code>non-free-firmware</code>). Antes era preciso baixar uma imagem "com firmware" separada. Hoje a netinst comum já reconhece a maioria das placas de Wi-Fi.</p>
+</div>
+
+<p>O nome do arquivo diz tudo:</p>
+<dl class="anatomy">
+  <dt>debian</dt><dd>A distribuição.</dd>
+  <dt>13.5.0</dt><dd>A versão: Debian 13, atualização pontual 5.</dd>
+  <dt>amd64</dt><dd>A arquitetura: PCs de 64 bits (Intel ou AMD). É a certa para quase todo computador atual.</dd>
+  <dt>netinst</dt><dd>O tipo de imagem.</dd>
+</dl>
+
+<hr>
+
+<h2>Passo 2: conferir o download</h2>
+<p>Um download interrompido gera um instalador que trava no meio. Para evitar isso, o Debian publica a "impressão digital" (<em>hash</em>) de cada ISO no arquivo <code>SHA256SUMS</code>, na mesma pasta do download. Você calcula a impressão digital do seu arquivo e compara.</p>
+
+<dl class="anatomy">
+  <dt>sha256sum</dt><dd>Calcula o hash SHA-256 de um arquivo: 64 caracteres que mudam completamente se um único byte for diferente.</dd>
+  <dt>debian-13.5.0-amd64-netinst.iso</dt><dd>O arquivo baixado.</dd>
+</dl>
+
+<pre class="term" data-cwd="~/Downloads">$ sha256sum debian-13.5.0-amd64-netinst.iso
+95838884f5ea6c82421dfe6baaa5a639dbbe6756c1e380f9fe7a7cb0c1949d2a  debian-13.5.0-amd64-netinst.iso
+$ grep netinst SHA256SUMS
+95838884f5ea6c82421dfe6baaa5a639dbbe6756c1e380f9fe7a7cb0c1949d2a  debian-13.5.0-amd64-netinst.iso    « igual: o arquivo está perfeito
+cc8565fbd9e05328eab8f7d06301a97f878164c1df1ea21a55ac94540cdf7295  debian-edu-13.5.0-amd64-netinst.iso
+70cdcfaa4e7a277616dde236e8b31f0f357fa7ea694b05c498db1e2ccee5e76d  debian-mac-13.5.0-amd64-netinst.iso</pre>
+
+<p>Existe uma forma que compara sozinha. A opção <code>-c</code> (de <em>check</em>) lê o <code>SHA256SUMS</code> e confere cada arquivo que existir na pasta:</p>
+
+<pre class="term" data-cwd="~/Downloads">$ sha256sum -c SHA256SUMS --ignore-missing
+debian-13.5.0-amd64-netinst.iso: SUCESSO</pre>
+
+<p>No Windows, o equivalente é <code>certutil -hashfile arquivo.iso SHA256</code> no Prompt de Comando.</p>
+
+<hr>
+
+<h2>Passo 3: onde instalar</h2>
+
+<h3>Opção A (recomendada para aprender): máquina virtual</h3>
+<p>Uma <strong>máquina virtual</strong> (VM) é um computador simulado dentro do seu. Se der errado, você apaga e começa de novo. A VM usada para conferir este guia foi criada assim no VirtualBox:</p>
+<ol class="passo">
+  <li><strong>Nova máquina:</strong> nome <code>debian-guia</code>, tipo Linux, versão "Debian (64-bit)", e a ISO netinst no campo de imagem.</li>
+  <li><strong>Desmarque a instalação automática</strong> ("Skip Unattended Installation" / "Pular instalação desassistida"). Assim você vê o instalador de verdade e decide cada resposta.</li>
+  <li><strong>Hardware:</strong> 2 processadores e 4096 MB de memória. Com área de trabalho, 4 GB é o mínimo confortável.</li>
+  <li><strong>Disco:</strong> 25 GB, alocado dinamicamente (só ocupa espaço real conforme é usado).</li>
+  <li><strong>Iniciar</strong> e seguir o Passo 4.</li>
+</ol>
+
+<h3>Opção B: pendrive para um computador de verdade</h3>
+<p>Você grava a ISO num pendrive de pelo menos 1 GB (8 GB para as imagens live). <strong>Tudo o que estiver no pendrive será apagado.</strong></p>
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Você está no…</th><th>Use</th></tr>
+<tr><td>Windows</td><td>Rufus ou balenaEtcher (modo "imagem DD" no Rufus).</td></tr>
+<tr><td>macOS</td><td>balenaEtcher.</td></tr>
+<tr><td>Linux com GNOME</td><td>App Discos → menu do pendrive → "Restaurar imagem de disco".</td></tr>
+<tr><td>Linux, pelo terminal</td><td><code>dd</code>, com muito cuidado (veja abaixo).</td></tr>
+</table>
+</div>
+
+<div class="warning">
+<strong>Cuidado com o dd</strong>
+<p>O <code>dd</code> grava por cima de qualquer disco que você indicar, sem perguntar. Errar uma letra (<code>sda</code> em vez de <code>sdb</code>) apaga o disco do sistema. Confira o nome do pendrive com <code>lsblk</code> antes e depois de conectá-lo.</p>
+</div>
+
+<p>No terminal, o processo é feito como root (depois de <code>su -</code>). O exemplo vem de um computador com um SSD e um pendrive conectado; os nomes e modelos variam:</p>
+
+<pre class="term" data-user="root" data-cwd="~">#> lsblk -d -o NAME,SIZE,MODEL
+NAME   SIZE MODEL
+sda  465,8G Samsung SSD 870               « o disco do computador: NÃO é este
+sdb   14,6G SanDisk Ultra                 « o pendrive
+#> dd if=/home/ana/Downloads/debian-13.5.0-amd64-netinst.iso of=/dev/sdb bs=4M status=progress conv=fsync</pre>
+
+<p>Depois, ligue o computador pelo pendrive. A tecla que abre o menu de boot varia: costuma ser <kbd>F12</kbd>, <kbd>F11</kbd>, <kbd>F8</kbd> ou <kbd>Esc</kbd>.</p>
+
+<hr>
+
+<h2>Passo 4: o instalador, tela por tela</h2>
+<p>A primeira tela oferece <strong>Graphical install</strong> (com mouse) e <strong>Install</strong> (só teclado, em modo texto). As perguntas são exatamente as mesmas; escolha a gráfica se estiver em dúvida. Os textos abaixo são os que o instalador mostra em português do Brasil.</p>
+
+<ol class="passo">
+  <li><strong>Idioma, localização e teclado.</strong> Escolha "Portuguese (Brazil) - Português do Brasil", depois Brasil, e no teclado "Português Brasileiro" (ABNT2). O idioma define as mensagens do sistema; o teclado precisa bater com o seu de verdade, senão o <kbd>ç</kbd> e os acentos saem errados.</li>
+  <li><strong>"Nome de máquina:"</strong> um nome para o computador na rede, como <code>notebook</code>. Uma palavra, sem espaços nem acentos.</li>
+  <li><strong>"Nome de domínio:"</strong> numa rede de casa, pode deixar em branco. Em empresas, pergunte ao administrador da rede.</li>
+  <li><strong>"Senha do root:"</strong> a pergunta mais importante. Veja a seção logo abaixo.</li>
+  <li><strong>"Nome completo para o novo usuário:"</strong> seu nome, como <code>Ana</code>.</li>
+  <li><strong>"Nome de usuário para sua conta:"</strong> o login, em minúsculas: <code>ana</code>.</li>
+  <li><strong>"Escolha uma senha para o novo usuário:"</strong> a senha que você vai digitar no dia a dia.</li>
+  <li><strong>Relógio.</strong> O fuso horário (por exemplo, São Paulo).</li>
+  <li><strong>"Método de particionamento:"</strong> para um disco só seu, escolha <strong>"Assistido - usar o disco inteiro"</strong>. Também existem "…e configurar LVM", "…usar disco todo e LVM criptografado" (pede uma senha a cada boot; boa ideia para notebooks) e "Manual" (para dual boot com Windows).</li>
+  <li><strong>"Esquema de particionamento:"</strong> para começar, <strong>"Todos os arquivos em uma partição (para iniciantes)"</strong>. As outras opções são "Partição /home separada" e "Partições /home, /var e /tmp separadas".</li>
+  <li><strong>"Escrever as mudanças nos discos?"</strong> É o ponto sem volta: o disco escolhido será apagado. Confira e responda "Sim".</li>
+  <li><strong>Gerenciador de pacotes.</strong> Escolha o país "Brasil" e o espelho <code>deb.debian.org</code>. Proxy em branco, a não ser que sua rede exija.</li>
+  <li><strong>Pesquisa de popularidade de pacotes.</strong> Opcional: envia anonimamente quais pacotes você usa, para ajudar o Debian a priorizar.</li>
+  <li><strong>Seleção de software.</strong> Veja a seção "Escolhendo o que instalar".</li>
+  <li><strong>"Instalar o carregador de inicialização GRUB no seu disco primário?"</strong> Sim, e escolha o disco onde o Debian foi instalado (normalmente <code>/dev/sda</code> ou <code>/dev/nvme0n1</code>).</li>
+  <li><strong>Fim.</strong> Remova o pendrive (ou a ISO da VM) e reinicie.</li>
+</ol>
+
+<hr>
+
+<h2>A pergunta da senha do root</h2>
+<p>O <strong>root</strong> é o administrador do sistema: a conta que pode tudo. O instalador explica, nesta tela, que você tem duas escolhas:</p>
+
+<blockquote class="note"><p>"Para permitir acesso direto baseado em senha via conta "root", você pode definir a senha para essa conta aqui.</p><p>Alternativamente, você pode bloquear a senha da conta "root" ao deixar essa configuração em branco, e usar a conta de usuário inicial do sistema (que será definida no próximo passo) para ganhar privilégios administrativos. Isso será habilitado para você adicionando esse usuário inicial ao grupo "sudo"."</p></blockquote>
+
+<p>Em outras palavras:</p>
+
+<div class="table-wrap">
+<table class="ref">
+<tr><th></th><th>Se você <strong>definir</strong> a senha do root</th><th>Se deixar <strong>em branco</strong></th></tr>
+<tr><td>Conta root</td><td>Ativa, com senha própria</td><td>Bloqueada (ninguém entra como root com senha)</td></tr>
+<tr><td>Pacote <code>sudo</code></td><td><strong>Não é instalado</strong></td><td>Instalado</td></tr>
+<tr><td>Seu usuário</td><td>Comum, fora do grupo <code>sudo</code></td><td>No grupo <code>sudo</code></td></tr>
+<tr><td>Como administrar</td><td><code>su -</code> e a <strong>senha do root</strong></td><td><code>sudo comando</code> e a <strong>sua</strong> senha</td></tr>
+<tr><td>Parecido com</td><td>O Debian tradicional, servidores</td><td>O Ubuntu</td></tr>
+</table>
+</div>
+
+<p>A máquina deste guia foi instalada <strong>com</strong> senha de root. Veja como fica a usuária <code>ana</code> logo depois da instalação:</p>
+
+<pre class="term">$ id
+uid=1000(ana) gid=1000(ana) grupos=1000(ana),24(cdrom),25(floppy),29(audio),30(dip),44(video),46(plugdev),100(users),101(netdev)   « não há "sudo" na lista
+$ sudo ls
+bash: sudo: comando não encontrado                    « nem o programa existe
+$ su -
+Senha:                                                « a senha do ROOT; nada aparece enquanto digita
+root@notebook:~#</pre>
+
+<div class="tip">
+<strong>Escolhi errado. E agora?</strong>
+<p>Nada está perdido: dá para instalar o <code>sudo</code> e se colocar no grupo depois, ou definir uma senha para o root mais tarde. O passo a passo está em <a href="root-su-sudo.html">root, su e sudo</a>.</p>
+</div>
+
+<hr>
+
+<h2>Escolhendo o que instalar (tasksel)</h2>
+<p>Na tela de seleção de software, cada item marcado instala um conjunto de pacotes (uma <strong>tarefa</strong>, ou <em>task</em>). As opções do Debian 13 são:</p>
+
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Opção</th><th>O que instala</th></tr>
+<tr><td>ambiente de área de trabalho no Debian</td><td>A base gráfica. Marque junto com uma das áreas de trabalho abaixo.</td></tr>
+<tr><td>GNOME</td><td>A área de trabalho padrão (veja <a href="desktop.html">O Desktop</a>).</td></tr>
+<tr><td>Xfce, MATE, LXDE, LXQt</td><td>Áreas de trabalho mais leves, boas para computadores antigos.</td></tr>
+<tr><td>KDE Plasma, Cinnamon, GNOME Flashback</td><td>Outras áreas de trabalho completas.</td></tr>
+<tr><td>servidor web</td><td>O servidor Apache.</td></tr>
+<tr><td>servidor SSH</td><td>Permite acessar a máquina pela rede (veja <a href="ssh.html">SSH</a>).</td></tr>
+<tr><td>utilitários de sistema padrão</td><td>Ferramentas básicas do terminal. Deixe sempre marcado.</td></tr>
+</table>
+</div>
+
+<p>Para um servidor, desmarque a área de trabalho e marque "servidor SSH". Para um computador de uso pessoal, escolha uma área de trabalho. A máquina de laboratório deste guia foi instalada só com "utilitários de sistema padrão" e "servidor SSH".</p>
+
+<p>Depois de instalado, o mesmo menu pode ser aberto de novo pelo root com <code>tasksel</code>. Para ver as tarefas e quais estão instaladas (<code>i</code>) ou não (<code>u</code>):</p>
+
+<pre class="term" data-user="root" data-cwd="~">#> tasksel --list-tasks
+u desktop	ambiente de área de trabalho no Debian
+u gnome-desktop	GNOME
+u xfce-desktop	Xfce
+u gnome-flashback-desktop	GNOME Flashback
+u kde-desktop	KDE Plasma
+u cinnamon-desktop	Cinnamon
+u mate-desktop	MATE
+u lxde-desktop	LXDE
+u lxqt-desktop	LXQt
+u web-server	servidor web
+i ssh-server	servidor SSH                    « instalada
+u laptop	laptop
+u blendsel	Choose a Debian Blend for installation</pre>
+
+<hr>
+
+<h2>Passo 5: o primeiro boot</h2>
+<p>Depois de reiniciar, aparece o menu do <strong>GRUB</strong> por 5 segundos e o sistema liga. Sem área de trabalho, você cai numa tela de texto:</p>
+
+<pre class="term" data-title="tty1">Debian GNU/Linux 13 notebook tty1
+
+notebook login: ana
+Senha:
+Linux notebook 6.12.111+deb13-amd64 #1 SMP PREEMPT_DYNAMIC Debian 6.12.111-1 (2026-09-28) x86_64
+
+The programs included with the Debian GNU/Linux system are free software;
+the exact distribution terms for each program are described in the
+individual files in /usr/share/doc/*/copyright.
+
+Debian GNU/Linux comes with ABSOLUTELY NO WARRANTY, to the extent
+permitted by applicable law.
+$ </pre>
+
+<p>O texto em inglês é a <strong>mensagem do dia</strong> (<code>/etc/motd</code>), igual em toda instalação: lembra que os programas são livres e que não há garantia. Com área de trabalho, a tela de login é gráfica.</p>
+
+<h3>Primeira tarefa: atualizar</h3>
+<p>A ISO tem a data em que foi gerada; desde então, saíram correções. Atualize logo no primeiro dia. Como a máquina foi instalada com senha de root, a Ana vira root com <code>su -</code>:</p>
+
+<dl class="anatomy">
+  <dt>su -</dt><dd>Vira root (<em>substitute user</em>, "trocar de usuário"); o <code>-</code> carrega o ambiente completo do root.</dd>
+  <dt>apt update</dt><dd>Baixa a lista atualizada de pacotes.</dd>
+  <dt>apt upgrade</dt><dd>Instala as versões novas dos pacotes que você já tem.</dd>
+</dl>
+
+<pre class="term">$ su -
+Senha:</pre>
+<pre class="term" data-user="root" data-cwd="~">#> apt update
+Atingido:1 http://deb.debian.org/debian trixie InRelease
+Atingido:2 http://security.debian.org/debian-security trixie-security InRelease
+Atingido:3 http://deb.debian.org/debian trixie-updates InRelease
+Todos os pacotes estão atualizados.                « o instalador já tinha baixado as correções
+#> apt upgrade
+#> exit</pre>
+<pre class="term">$ </pre>
+
+<p>No apt do Debian 13, as linhas de progresso ("Lendo listas de pacotes…") aparecem e somem enquanto ele trabalha; no fim, só ficam os repositórios consultados e o resumo. "Atingido" quer dizer que a lista daquele repositório não mudou desde a última vez.</p>
+
+<p>Na máquina do guia, nada havia para atualizar: o instalador netinst já baixa as versões mais novas durante a instalação. Por isso ela foi instalada com a ISO 13.5 e saiu do instalador já na 13.7.</p>
+
+<h3>Checklist do primeiro dia</h3>
+<ol class="passo">
+  <li>Atualize: <code>apt update</code> e <code>apt upgrade</code> como root.</li>
+  <li>Decida como vai administrar: <code>su -</code> ou <code>sudo</code> (<a href="root-su-sudo.html">root, su e sudo</a>).</li>
+  <li>Confira se Wi-Fi, som e vídeo funcionam.</li>
+  <li>Instale seus programas: <a href="apt.html">apt</a> e <a href="flatpak.html">Flatpak</a>.</li>
+  <li>Configure o backup (<a href="backup.html">Backup</a>).</li>
+</ol>
+
+<hr>
+
+<h2>Quando não funciona</h2>
+
+<div class="cenario">
+<strong>O computador não liga pelo pendrive</strong>
+<p><strong>O que aconteceu:</strong> o computador está configurado para ligar pelo disco interno, ou o pendrive foi gravado como um arquivo comum (copiar e colar a ISO não funciona).</p>
+<p><strong>Como resolver:</strong> use o menu de boot (<kbd>F12</kbd>, <kbd>F11</kbd> ou <kbd>Esc</kbd>) e grave o pendrive com uma das ferramentas da tabela do Passo 3.</p>
+</div>
+
+<div class="cenario">
+<strong>"sha256sum" mostra outro número</strong>
+<pre class="term" data-cwd="~/Downloads">$ sha256sum -c SHA256SUMS --ignore-missing
+debian-13.5.0-amd64-netinst.iso: FALHOU
+sha256sum: AVISO: checksum 1 calculado NÃO corresponde</pre>
+<p><strong>O que aconteceu:</strong> o download veio incompleto ou corrompido.</p>
+<p><strong>Como resolver:</strong> apague a ISO e baixe de novo.</p>
+</div>
+
+<div class="cenario">
+<strong>Instalei e não tenho sudo</strong>
+<pre class="term">$ sudo apt update
+bash: sudo: comando não encontrado</pre>
+<p><strong>O que aconteceu:</strong> você definiu a senha do root na instalação. É o comportamento esperado.</p>
+<p><strong>Como resolver:</strong> use <code>su -</code>, ou instale e configure o <code>sudo</code> como em <a href="root-su-sudo.html">root, su e sudo</a>.</p>
+</div>
+
+<div class="cenario">
+<strong>Os acentos e o ç saem errados</strong>
+<p><strong>O que aconteceu:</strong> o layout de teclado escolhido não é o do seu teclado (por exemplo, "Inglês Americano" num teclado ABNT2).</p>
+<p><strong>Como resolver:</strong> como root, rode <code>dpkg-reconfigure keyboard-configuration</code> e escolha o modelo certo. Na área de trabalho, ajuste em Configurações → Teclado.</p>
+</div>
+
+<hr>
+
+<h2>Exercícios</h2>
+
+<div class="mc" data-answer="1">
+<p class="mc-q">1. Qual imagem é a recomendada para a maioria das instalações com internet?</p>
+<label><input type="radio" name="q1"> netinst</label>
+<label><input type="radio" name="q1"> DVD</label>
+<label><input type="radio" name="q1"> live KDE</label>
+<label><input type="radio" name="q1"> Qualquer arquivo .zip</label>
+</div>
+
+<div class="mc" data-answer="3">
+<p class="mc-q">2. Você definiu a senha do root no instalador. O que acontece com o <code>sudo</code>?</p>
+<label><input type="radio" name="q2"> Funciona com a sua senha.</label>
+<label><input type="radio" name="q2"> Funciona com a senha do root.</label>
+<label><input type="radio" name="q2"> Não vem instalado; você administra com <code>su -</code>.</label>
+<label><input type="radio" name="q2"> O instalador cancela a instalação.</label>
+</div>
+
+<div class="exercise">
+<h3>3. Conferir a ISO</h3>
+<p>Complete o comando que calcula a impressão digital SHA-256 da ISO:</p>
+<div class="ex-code"><input data-answer="sha256sum" aria-label="comando"> debian-13.5.0-amd64-netinst.iso</div>
+</div>
+
+<div class="mc" data-answer="2">
+<p class="mc-q">4. Qual esquema de particionamento é indicado para quem está começando?</p>
+<label><input type="radio" name="q4"> Partições /home, /var e /tmp separadas</label>
+<label><input type="radio" name="q4"> Todos os arquivos em uma partição (para iniciantes)</label>
+<label><input type="radio" name="q4"> Manual</label>
+<label><input type="radio" name="q4"> Esquema para disco pequeno</label>
+</div>
+
+<hr>
+
+<h2>Resumo</h2>
+<ul>
+  <li>Baixe a netinst <code>amd64</code> e confira com <code>sha256sum -c SHA256SUMS --ignore-missing</code>.</li>
+  <li>Para aprender, instale numa máquina virtual; para um computador real, grave a ISO num pendrive.</li>
+  <li>Com senha de root: sem <code>sudo</code>, administração com <code>su -</code>. Sem senha de root: <code>sudo</code> com a sua senha.</li>
+  <li>Na seleção de software, escolha uma área de trabalho para uso pessoal, ou só "servidor SSH" para servidores.</li>
+  <li>No primeiro boot: atualize com <code>apt update</code> e <code>apt upgrade</code> como root.</li>
+</ul>
+
+<div class="pager"></div>
+
+</div>
+</main>
+</div>
+<script src="assets/site.js"></script>
+</body>
+</html>

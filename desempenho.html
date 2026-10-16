@@ -1,0 +1,348 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Debian Desempenho e Monitoramento — "o sistema está lento" | Guia Debian</title>
+<meta name="description" content="Diagnostique lentidão no Debian 13: load average, top, free, vmstat, iostat (sysstat), iotop-c e systemd-analyze, com saídas reais explicadas linha por linha e um roteiro do que olhar primeiro.">
+<link rel="stylesheet" href="assets/style.css">
+<script>try{var t=localStorage.getItem("tema");if(t)document.documentElement.setAttribute("data-theme",t)}catch(e){}</script>
+</head>
+<body>
+<div class="layout">
+<nav class="sidebar" id="sidebar" aria-label="Tópicos"></nav>
+<main class="main">
+<div class="content">
+
+<div class="pager"></div>
+
+<h1>Debian <span class="hl">Desempenho e Monitoramento</span></h1>
+
+<p class="intro">"O servidor está lento." Antes de reiniciar ou comprar mais memória, descubra <strong>o quê</strong> está faltando: processador, memória ou disco. Cada um deixa uma pista diferente nos comandos desta aula. As saídas foram capturadas num Debian 13 real, justamente num momento de lentidão: vários <code>apt install</code> rodando ao mesmo tempo.</p>
+
+<div class="note">
+<strong>Você vai aprender</strong>
+<ul>
+  <li>Os quatro recursos que deixam um sistema lento.</li>
+  <li>Ler o <em>load average</em> do <code>uptime</code>.</li>
+  <li>Achar o culpado com <code>top</code>, <code>free</code> e <code>vmstat</code>.</li>
+  <li>Medir o disco com <code>iostat</code> e <code>iotop-c</code> (que não vêm instalados).</li>
+  <li>Descobrir o que atrasa o boot com <code>systemd-analyze</code>.</li>
+</ul>
+</div>
+
+<hr>
+
+<h2>Antes do comando: os quatro recursos</h2>
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Recurso</th><th>Sintoma típico</th><th>Comando que mostra</th></tr>
+<tr><td>Processador (CPU)</td><td>Tudo lento, ventilador alto</td><td><code>top</code> (coluna <code>%CPU</code>)</td></tr>
+<tr><td>Memória (RAM)</td><td>Lento e piorando; programas fechando sozinhos</td><td><code>free -h</code>, <code>vmstat</code> (colunas <code>si</code>/<code>so</code>)</td></tr>
+<tr><td>Disco</td><td>Comandos simples demoram; luz do disco acesa</td><td><code>top</code> (<code>wa</code>), <code>iostat</code>, <code>iotop-c</code></td></tr>
+<tr><td>Rede</td><td>Só o que é remoto fica lento</td><td><code>ping</code>, <code>ss</code> (veja <a href="ip.html">ip, ping, ss</a>)</td></tr>
+</table>
+</div>
+
+<h3>Roteiro rápido: "está lento"</h3>
+<ol class="passo">
+  <li><code>uptime</code>: a carga está alta?</li>
+  <li><code>top</code>: quem está no topo? O <code>wa</code> está alto?</li>
+  <li><code>free -h</code>: ainda há memória <strong>disponível</strong>?</li>
+  <li><code>vmstat 1 5</code>: está usando swap? Processos esperando disco?</li>
+  <li><code>iostat -x</code> e <code>iotop-c</code>: qual disco e qual processo?</li>
+  <li><code>df -h</code> e <code>journalctl -p err -b</code>: disco cheio? Erros?</li>
+</ol>
+
+<hr>
+
+<h2>1. Carga geral: uptime e o load average</h2>
+<pre class="term" data-host="servidor">$ uptime
+ 21:10:11 up 14 min, 12 users,  load average: 2,59, 1,38, 0,72</pre>
+
+<dl class="anatomy">
+  <dt>21:10:11</dt><dd>Hora atual.</dd>
+  <dt>up 14 min</dt><dd>Há quanto tempo a máquina está ligada.</dd>
+  <dt>12 users</dt><dd>Sessões abertas (cada janela de SSH conta).</dd>
+  <dt>load average: 2,59, 1,38, 0,72</dt><dd>A carga média do último 1 minuto, dos últimos 5 e dos últimos 15.</dd>
+</dl>
+
+<p>A <strong>carga</strong> é quantos processos, em média, estavam rodando <em>ou esperando</em> (processador ou disco). Compare com o número de núcleos:</p>
+
+<pre class="term" data-host="servidor">$ nproc
+2</pre>
+
+<ul>
+  <li>Carga menor que o número de núcleos: folga.</li>
+  <li>Carga igual: no limite.</li>
+  <li>Carga maior: tem fila. Aqui, <code>2,59</code> com 2 núcleos = fila pequena.</li>
+</ul>
+<p>Os três números juntos mostram a tendência: <code>2,59 &gt; 1,38 &gt; 0,72</code> quer dizer que a carga está <strong>subindo</strong>. O <code>uptime</code> não é traduzido, mas usa vírgula decimal por causa do idioma do sistema.</p>
+
+<hr>
+
+<h2>2. Quem está pesando: top</h2>
+<p>O <code>top</code> mostra os processos ao vivo, atualizando a cada 3 segundos. Esta é a parte de cima da tela real, no momento da lentidão:</p>
+
+<pre class="term" data-host="servidor">$ top
+top - 21:10:13 up 14 min, 12 users,  load average: 2,70, 1,43, 0,74
+Tarefas: 229 total,   1 em exec., 228 dormindo,   0 parado,   0 zumbi
+%CPU(s):  0,0 us,  0,0 sy,  0,0 ni, 17,4 id, 82,6 wa,  0,0 hi,  0,0 si,  0,0 st   « 82,6 wa: esperando o disco!
+MB mem :   3921,9 total,   3074,6 free,    453,3 used,    637,3 buff/cache
+MB swap:   1359,0 total,   1359,0 free,      0,0 used.   3468,6 avail mem
+
+    PID USUARIO   PR  NI    VIRT    RES    SHR S  %CPU  %MEM    TEMPO+ COMANDO
+   8393 ana       20   0   10468   5480   3404 R  27,3   0,1   0:00.03 top
+   8373 root      20   0   10432   4408   3920 D   9,1   0,1   0:00.01 useradd        « D: travado esperando disco
+      1 root      20   0   24076  15080  10660 S   0,0   0,4   0:11.16 systemd</pre>
+
+<p>A linha <code>%CPU(s)</code> é a mais reveladora:</p>
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Sigla</th><th>Significa</th><th>Alto quer dizer</th></tr>
+<tr><td><code>us</code></td><td><em>user</em>: programas</td><td>Algum programa calculando muito</td></tr>
+<tr><td><code>sy</code></td><td><em>system</em>: o kernel</td><td>Muita entrada/saída ou rede</td></tr>
+<tr><td><code>id</code></td><td><em>idle</em>: ocioso</td><td>Sobra processador (bom)</td></tr>
+<tr><td><code>wa</code></td><td><em>wait</em>: esperando disco</td><td><strong>O disco é o gargalo</strong></td></tr>
+<tr><td><code>st</code></td><td><em>steal</em>: roubado pelo hipervisor</td><td>A VM está disputando o computador físico</td></tr>
+</table>
+</div>
+
+<p>Nesta captura, <code>id</code> está baixo, mas o <code>us</code> está em zero e o <code>wa</code> em 82,6%. O processador não estava ocupado: estava <strong>esperando o disco</strong>, que tentava atender vários <code>apt install</code> ao mesmo tempo. O <code>useradd</code> no estado <code>D</code> confirma: estado D é "esperando entrada/saída".</p>
+
+<p>Dentro do <code>top</code>: <kbd>M</kbd> ordena por memória, <kbd>P</kbd> por processador, <kbd>1</kbd> mostra cada núcleo, <kbd>k</kbd> encerra um processo e <kbd>q</kbd> sai. O <code>htop</code>, mais amigável, existe no pacote <code>htop</code>. Veja <a href="processos.html">ps, pgrep, top</a>.</p>
+
+<hr>
+
+<h2>3. Memória: free -h</h2>
+<pre class="term" data-host="servidor">$ free -h
+               total       usada       livre    compart.  buff/cache  disponível
+Mem.:          3,8Gi       475Mi       3,0Gi       9,1Mi       631Mi       3,4Gi
+Swap:          1,3Gi          0B       1,3Gi</pre>
+
+<ul>
+  <li><strong>disponível</strong> é o número que importa: 3,4 GiB ainda cabem para programas.</li>
+  <li><strong>buff/cache</strong> é memória emprestada para guardar pedaços do disco. O sistema devolve quando alguém precisa. Memória "livre" baixa com cache alto é normal e bom.</li>
+  <li><strong>Swap usada</strong> perto de zero: a memória está sobrando. Swap subindo sem parar é sinal de falta de RAM.</li>
+</ul>
+
+<hr>
+
+<h2>4. Troca e espera: vmstat</h2>
+<p>O <code>vmstat</code> mostra uma linha por intervalo. <code>vmstat 1 3</code> = de 1 em 1 segundo, 3 vezes:</p>
+
+<pre class="term" data-host="servidor">$ vmstat 1 3
+procs -----------memory---------- ---swap-- -----io---- -system-- -------cpu-------
+ r  b   swpd  livre   buff  cache   si   so    bi    bo   in   cs us sy id wa st gu
+ 4  1      0 3156276  41444 611008    0    0   437   683  283    1  3  3 81 14  0  0
+ 1  3      0 3152108  41480 611060    0    0     0   968  370  341  0  2  0 98  0  0
+ 0  2      0 3150104  41536 611084    0    0     0  1060  540  364 12  3 12 73  0  0</pre>
+
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Coluna</th><th>O que é</th><th>Nesta saída</th></tr>
+<tr><td><code>r</code></td><td>Processos prontos esperando processador</td><td>Até 4: fila curta</td></tr>
+<tr><td><code>b</code></td><td>Processos <strong>bloqueados</strong> esperando disco</td><td>1 a 3: o disco está atrasando</td></tr>
+<tr><td><code>si</code> / <code>so</code></td><td>Memória entrando/saindo da swap</td><td>0: sem falta de RAM</td></tr>
+<tr><td><code>bi</code> / <code>bo</code></td><td>Blocos lidos/escritos no disco por segundo</td><td>~1000 escritos: muita gravação</td></tr>
+<tr><td><code>wa</code></td><td>% do tempo esperando disco</td><td>98% no segundo 2</td></tr>
+</table>
+</div>
+
+<p>A <strong>primeira linha</strong> é uma média desde o boot; as seguintes são o momento. Note a coluna <code>livre</code>: só ela foi traduzida no cabeçalho.</p>
+
+<hr>
+
+<h2>5. Disco: iostat e iotop-c</h2>
+<p>Nenhum dos dois vem instalado no Debian. O <code>iostat</code> está no pacote <code>sysstat</code>; o <code>iotop-c</code> no pacote de mesmo nome. Como root:</p>
+
+<pre class="term" data-host="servidor" data-user="root">#> apt install sysstat iotop-c</pre>
+
+<h3>iostat: qual disco está ocupado</h3>
+<pre class="term" data-host="servidor">$ iostat
+Linux 6.12.111+deb13-amd64 (servidor) 	15/10/2026 	_x86_64_	(2 CPU)
+
+avg-cpu:  %user   %nice %system %iowait  %steal   %idle
+           4,10    0,00    5,21   31,03    0,00   59,67
+
+Device             tps    kB_read/s    kB_wrtn/s    kB_dscd/s    kB_read    kB_wrtn    kB_dscd
+sda              33,20       163,39      1347,63         0,00     496975    4099076          0</pre>
+
+<p>Sem parâmetros, o <code>iostat</code> mostra médias desde o boot. Para ver o momento, peça a versão estendida com intervalo: <code>iostat -x 1 2</code>. A coluna mais útil fica na ponta direita:</p>
+
+<pre class="term" data-host="servidor">$ iostat -xh 1 2
+…
+     f/s f_await  aqu-sz  %util Device
+   15,38   65,62    2,02 101,5% sda         « %util perto de 100%: o disco está saturado</pre>
+
+<p><code>%util</code> mostra quanto do tempo o disco ficou ocupado. Perto de 100% num HD comum é gargalo. (Em SSDs e discos virtuais esse número exagera; olhe também o <code>w_await</code>, o tempo médio de cada gravação em milissegundos.)</p>
+
+<h3>iotop-c: qual processo está usando o disco</h3>
+<p>O <code>iotop-c</code> é o <code>top</code> do disco. Ele precisa de root:</p>
+
+<pre class="term" data-host="servidor">$ /usr/sbin/iotop-c
+The Linux kernel interfaces that iotop relies on now require root privileges
+or the NET_ADMIN capability. This change occurred because a security issue
+(CVE-2011-2494) was found that allows leakage of sensitive data across user</pre>
+
+<pre class="term" data-host="servidor" data-user="root">#> iotop-c -b -o -n 2 -d 2
+Warning: task_delayacct is 0, enable by: echo 1 &gt; /proc/sys/kernel/task_delayacct
+…
+  Total DISK READ:    0,00 B/s |   Total DISK WRITE:  234,37 K/s
+Current DISK READ:    0,00 B/s | Current DISK WRITE:  238,31 K/s
+   TID PRIO     USER   DISK READ  DISK WRITE SWAPIN     IO COMMAND
+   326 be/3 root          0,00 B/s   39,39 K/s 0,00 % 0,00 % jbd2/sda1-8        « o "diário" do ext4
+   367 be/4 root          0,00 B/s  171,34 K/s 0,00 % 0,00 % systemd-journald
+111321 be/4 root          0,00 B/s   19,69 K/s 0,00 % 0,00 % dpkg</pre>
+
+<dl class="anatomy">
+  <dt>-b</dt><dd><em>batch</em>: imprime em texto, sem tela interativa (bom para salvar num arquivo).</dd>
+  <dt>-o</dt><dd><em>only</em>: só processos que estão de fato lendo ou gravando.</dd>
+  <dt>-n 2 -d 2</dt><dd>Duas amostras, com 2 segundos de intervalo.</dd>
+</dl>
+
+<p>O aviso <code>task_delayacct is 0</code> só significa que a coluna <code>IO</code> (porcentagem) fica zerada; as colunas de leitura e escrita funcionam. Use o <code>iotop-c</code> interativo (sem <code>-b</code>) para olhar ao vivo e <kbd>q</kbd> para sair.</p>
+
+<hr>
+
+<h2>6. Espaço e erros</h2>
+<p>Disco cheio também deixa tudo lento (e quebra serviços):</p>
+<pre class="term" data-host="servidor">$ df -h /
+Sist. Arq.      Tam. Usado Disp. Uso% Montado em
+/dev/sda1        24G  1,3G   21G   6% /</pre>
+<p>E erros de hardware ou de serviços aparecem no journal: <code>journalctl -p err -b</code> (veja <a href="journalctl.html">Logs</a> e <a href="discos.html">lsblk, df, du</a>).</p>
+
+<hr>
+
+<h2>Boot lento: systemd-analyze</h2>
+<pre class="term" data-host="servidor">$ systemd-analyze
+Startup finished in 23.386s (kernel) + 9.122s (userspace) = 32.508s
+graphical.target reached after 9.121s in userspace.
+$ systemd-analyze blame | head -5
+2.585s dev-sda1.device
+2.245s e2scrub_reap.service
+2.025s wtmpdb-update-boot.service
+1.659s apparmor.service
+ 895ms ssh.service</pre>
+
+<p>Os serviços sobem em paralelo, então somar o <code>blame</code> não dá o tempo total. O <code>critical-chain</code> mostra a sequência que realmente segurou o boot:</p>
+
+<pre class="term" data-host="servidor">$ systemd-analyze critical-chain
+…
+graphical.target @9.121s
+└─multi-user.target @9.120s
+  └─ssh.service @7.073s +895ms                « @: quando começou; +: quanto levou
+    └─network.target @7.038s
+      └─networking.service @6.833s +203ms
+        └─apparmor.service @5.165s +1.659s</pre>
+
+<p>Esses tempos são de uma máquina virtual com o disco ocupado; num computador com SSD o boot do Debian costuma levar poucos segundos. Mais em <a href="boot-grub.html">Boot, GRUB e Kernel</a>.</p>
+
+<hr>
+
+<h2>Formas diferentes de fazer</h2>
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Pergunta</th><th>Rápido</th><th>Detalhado</th><th>Histórico</th></tr>
+<tr><td>CPU</td><td><code>uptime</code></td><td><code>top</code>, <code>htop</code></td><td><code>sar -u</code> (sysstat)</td></tr>
+<tr><td>Memória</td><td><code>free -h</code></td><td><code>vmstat 1</code>, <code>top</code> com <kbd>M</kbd></td><td><code>sar -r</code></td></tr>
+<tr><td>Disco</td><td><code>top</code> (<code>wa</code>)</td><td><code>iostat -x 1</code>, <code>iotop-c</code></td><td><code>sar -d</code></td></tr>
+<tr><td>Processo</td><td><code>ps aux --sort=-%cpu | head</code></td><td><code>top -p PID</code></td><td>—</td></tr>
+</table>
+</div>
+
+<p>O <code>sar</code> mostra o histórico, mas no Debian a coleta vem <strong>desligada</strong> (<code>ENABLED="false"</code> em <code>/etc/default/sysstat</code>). Sem ela, o <code>sar</code> reclama:</p>
+
+<pre class="term" data-host="servidor">$ sar
+Não é possível abrir /var/log/sysstat/sa15: Arquivo ou diretório inexistente
+Por favor, verifique se a coleta de dados está habilitado</pre>
+
+<p>Para ligar, como root: mude para <code>ENABLED="true"</code> em <code>/etc/default/sysstat</code> (ou rode <code>dpkg-reconfigure sysstat</code>) e depois <code>systemctl enable --now sysstat</code>. A partir daí, o timer <code>sysstat-collect.timer</code> grava uma amostra a cada 10 minutos, e no dia seguinte o <code>sar</code> já tem o que mostrar.</p>
+
+<hr>
+
+<h2>Quando não funciona</h2>
+
+<div class="cenario">
+<strong>"iostat: comando não encontrado" / "iotop-c: comando não encontrado"</strong>
+<p><strong>O que aconteceu:</strong> os pacotes <code>sysstat</code> e <code>iotop-c</code> não vêm na instalação. E o <code>iotop-c</code> fica em <code>/usr/sbin</code>, fora do PATH da ana: rode como root.</p>
+</div>
+
+<div class="cenario">
+<strong>A carga está em 8, mas o processador está ocioso</strong>
+<p><strong>O que aconteceu:</strong> a carga conta também processos esperando disco (estado D). Olhe o <code>wa</code> do <code>top</code> e a coluna <code>b</code> do <code>vmstat</code>: o problema é o disco, não o processador.</p>
+</div>
+
+<div class="cenario">
+<strong>"Memória quase toda usada" no top</strong>
+<p><strong>O que aconteceu:</strong> provavelmente é cache. Olhe a coluna <strong>disponível</strong> do <code>free -h</code> (ou <code>avail mem</code> no <code>top</code>). Se ela estiver alta, está tudo bem.</p>
+</div>
+
+<hr>
+
+<h2>Referência</h2>
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Comando</th><th>Mostra</th><th>Pacote</th></tr>
+<tr><td><code>uptime</code></td><td>Carga média</td><td>procps (instalado)</td></tr>
+<tr><td><code>top</code></td><td>Processos ao vivo</td><td>procps (instalado)</td></tr>
+<tr><td><code>free -h</code></td><td>Memória</td><td>procps (instalado)</td></tr>
+<tr><td><code>vmstat 1 5</code></td><td>CPU, memória, swap e disco por segundo</td><td>procps (instalado)</td></tr>
+<tr><td><code>iostat -x 1</code></td><td>Uso de cada disco</td><td>sysstat</td></tr>
+<tr><td><code>iotop-c</code></td><td>Disco por processo (root)</td><td>iotop-c</td></tr>
+<tr><td><code>sar</code></td><td>Histórico</td><td>sysstat</td></tr>
+<tr><td><code>systemd-analyze blame</code></td><td>Tempo de cada serviço no boot</td><td>systemd (instalado)</td></tr>
+</table>
+</div>
+
+<hr>
+
+<h2>Exercícios</h2>
+
+<div class="exercise">
+<h3>1. Média de memória</h3>
+<p>Complete para ver CPU, memória e disco a cada segundo, 5 vezes:</p>
+<div class="ex-code">vmstat <input data-answer="1 5" aria-label="intervalo e contagem"></div>
+</div>
+
+<div class="exercise">
+<h3>2. O pacote do iostat</h3>
+<p>Qual pacote instala o <code>iostat</code>?</p>
+<div class="ex-code">apt install <input data-answer="sysstat" aria-label="pacote"></div>
+</div>
+
+<div class="mc" data-answer="3">
+<p class="mc-q">3. No <code>top</code>, você vê <code>5,0 us, 2,0 sy, 10,0 id, 83,0 wa</code>. Onde está o problema?</p>
+<label><input type="radio" name="q3"> No processador: falta CPU.</label>
+<label><input type="radio" name="q3"> Na rede.</label>
+<label><input type="radio" name="q3"> No disco: o sistema passa a maior parte do tempo esperando por ele.</label>
+<label><input type="radio" name="q3"> Não há problema nenhum.</label>
+</div>
+
+<div class="mc" data-answer="1">
+<p class="mc-q">4. Uma máquina com 4 núcleos mostra <code>load average: 0,80, 0,75, 0,60</code>. O que isso quer dizer?</p>
+<label><input type="radio" name="q4"> Está com folga: a carga é bem menor que o número de núcleos.</label>
+<label><input type="radio" name="q4"> Está sobrecarregada.</label>
+<label><input type="radio" name="q4"> 80% da memória está usada.</label>
+<label><input type="radio" name="q4"> Tem 80 processos rodando.</label>
+</div>
+
+<hr>
+
+<h2>Resumo</h2>
+<ul>
+  <li>Compare o <em>load average</em> com <code>nproc</code>; os três números mostram a tendência.</li>
+  <li>No <code>top</code>, <code>wa</code> alto = disco; <code>us</code> alto = programa calculando.</li>
+  <li>Em memória, olhe a coluna <strong>disponível</strong>; swap crescendo = falta RAM.</li>
+  <li><code>iostat</code> (sysstat) e <code>iotop-c</code> não vêm instalados; o <code>iotop-c</code> exige root.</li>
+  <li><code>systemd-analyze blame</code> e <code>critical-chain</code> mostram o que atrasa o boot.</li>
+</ul>
+
+<div class="pager"></div>
+
+</div>
+</main>
+</div>
+<script src="assets/site.js"></script>
+</body>
+</html>

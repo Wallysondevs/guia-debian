@@ -1,0 +1,407 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Debian Git — controle de versões passo a passo | Guia Debian</title>
+<meta name="description" content="Git no Debian 13: instalar, configurar, init, status explicado, add, commit, log, diff, branches, merge e conflito resolvido passo a passo, .gitignore, GitHub com SSH e por que o Git aparece em inglês (ou em português de Portugal).">
+<link rel="stylesheet" href="assets/style.css">
+<script>try{var t=localStorage.getItem("tema");if(t)document.documentElement.setAttribute("data-theme",t)}catch(e){}</script>
+</head>
+<body>
+<div class="layout">
+<nav class="sidebar" id="sidebar" aria-label="Tópicos"></nav>
+<main class="main">
+<div class="content">
+
+<div class="pager"></div>
+
+<h1>Debian <span class="hl">Git</span></h1>
+
+<p class="intro">O <strong>Git</strong> guarda o histórico de uma pasta: cada versão salva (um <strong>commit</strong>) fica registrada com data, autor e uma mensagem. Você volta no tempo, compara versões, testa ideias num "ramo" separado e junta o trabalho de várias pessoas. Serve para código, mas também para configurações de servidor, documentos e até receitas.</p>
+
+<div class="note">
+<strong>Você vai aprender</strong>
+<ul>
+  <li>Instalar e configurar o Git no Debian.</li>
+  <li>O ciclo básico: <code>status</code>, <code>add</code>, <code>commit</code>, <code>log</code>, <code>diff</code>.</li>
+  <li>Ramos (<em>branches</em>), <code>merge</code> e como resolver um conflito.</li>
+  <li>Ignorar arquivos com <code>.gitignore</code> e enviar para o GitHub com SSH.</li>
+  <li>Por que o Git do Debian aparece em inglês, ou em português de Portugal.</li>
+</ul>
+</div>
+
+<p>Tudo nesta página foi rodado no Debian 13 de laboratório, com Git 2.47.3, pela usuária <code>ana</code>, num projeto de exemplo chamado <code>receitas</code>.</p>
+
+<hr>
+
+<h2>Conceito: três lugares</h2>
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Lugar</th><th>O que é</th><th>Comando que leva para lá</th></tr>
+<tr><td><strong>Pasta de trabalho</strong></td><td>Os arquivos como estão agora, que você edita</td><td>(você edita)</td></tr>
+<tr><td><strong>Área de preparação</strong> (<em>staging</em>, <em>index</em>)</td><td>O que vai entrar no próximo commit</td><td><code>git add</code></td></tr>
+<tr><td><strong>Repositório</strong></td><td>O histórico de commits, na pasta oculta <code>.git</code></td><td><code>git commit</code></td></tr>
+</table>
+</div>
+<p>Pense numa mudança de casa: você mexe nas coisas (pasta de trabalho), coloca o que vai levar numa caixa (preparação) e fecha a caixa com uma etiqueta (commit).</p>
+
+<hr>
+
+<h2>Instalar e configurar</h2>
+<p>O Git não vem no Debian mínimo. Instale como root (veja <a href="root-su-sudo.html">root, su e sudo</a>):</p>
+
+<pre class="term">$ git status
+bash: git: comando não encontrado
+$ su -
+Senha:</pre>
+<pre class="term" data-user="root" data-cwd="/root">#> apt install git
+#> exit</pre>
+
+<pre class="term">$ git --version
+git version 2.47.3</pre>
+
+<p>Antes do primeiro commit, diga quem você é. Isso vai em cada commit:</p>
+
+<dl class="anatomy">
+  <dt>git config</dt><dd>Lê e grava configurações do Git.</dd>
+  <dt>--global</dt><dd>Para todos os seus projetos (fica em <code>~/.gitconfig</code>).</dd>
+  <dt>user.name "Ana"</dt><dd>A opção e o valor.</dd>
+</dl>
+
+<pre class="term">$ git config --global user.name "Ana"
+$ git config --global user.email "ana@example.com"
+$ git config --global init.defaultBranch main</pre>
+
+<p>A última linha define o nome do ramo principal dos projetos novos. Sem ela, o Git do Debian usa <code>master</code> e mostra um aviso longo a cada <code>git init</code>.</p>
+
+<hr>
+
+<h2>Começar um projeto: <code>git init</code></h2>
+<pre class="term">$ mkdir ~/receitas
+$ cd ~/receitas
+$ git status
+fatal: not a git repository (or any of the parent directories): .git      « ainda não é um projeto Git
+$ git init
+Initialized empty Git repository in /home/ana/receitas/.git/</pre>
+
+<p>O <code>git init</code> criou a pasta oculta <code>.git</code>, onde fica todo o histórico. Apagar essa pasta apaga o histórico (mas não os seus arquivos).</p>
+
+<hr>
+
+<h2>O ciclo: status → add → commit</h2>
+
+<h3>1. <code>git status</code>: o que mudou?</h3>
+<pre class="term" data-cwd="~/receitas">$ echo "# Receitas" &gt; README.md
+$ echo "bolo de cenoura" &gt; bolo.txt
+$ git status
+On branch main                                      « você está no ramo main
+
+No commits yet
+
+Untracked files:                                    « arquivos que o Git ainda não acompanha
+  (use "git add &lt;file&gt;..." to include in what will be committed)
+	README.md
+	bolo.txt
+
+nothing added to commit but untracked files present (use "git add" to track)</pre>
+
+<h3>2. <code>git add</code>: preparar</h3>
+<pre class="term" data-cwd="~/receitas">$ git add README.md bolo.txt
+$ git status
+On branch main
+
+No commits yet
+
+Changes to be committed:                            « estão na "caixa"
+  (use "git rm --cached &lt;file&gt;..." to unstage)
+	new file:   README.md
+	new file:   bolo.txt</pre>
+
+<h3>3. <code>git commit</code>: salvar a versão</h3>
+<dl class="anatomy">
+  <dt>git commit</dt><dd>Grava tudo o que está preparado como uma versão nova.</dd>
+  <dt>-m "…"</dt><dd>A mensagem. Sem <code>-m</code>, o Git abre um editor (no Debian, o <code>nano</code> por padrão) para você escrever.</dd>
+</dl>
+
+<pre class="term" data-cwd="~/receitas">$ git commit -m "Primeira versão das receitas"
+[main (root-commit) b7f4d29] Primeira versão das receitas
+ 2 files changed, 2 insertions(+)
+ create mode 100644 README.md
+ create mode 100644 bolo.txt</pre>
+
+<p><code>b7f4d29</code> é o começo do <strong>identificador</strong> do commit. Você usa ele para se referir a essa versão.</p>
+
+<hr>
+
+<h2>Ver o histórico e as diferenças</h2>
+<pre class="term" data-cwd="~/receitas">$ echo "2 xícaras de farinha" &gt;&gt; bolo.txt
+$ git diff
+diff --git a/bolo.txt b/bolo.txt
+index 50d486e..7973c97 100644
+--- a/bolo.txt
++++ b/bolo.txt
+@@ -1 +1,2 @@
+ bolo de cenoura
++2 xícaras de farinha                       « + = linha acrescentada (- seria removida)
+$ git commit -am "Ingredientes do bolo"
+[main 52f0996] Ingredientes do bolo
+ 1 file changed, 1 insertion(+)
+$ git log --oneline
+52f0996 Ingredientes do bolo                « o mais novo em cima
+b7f4d29 Primeira versão das receitas</pre>
+
+<dl class="anatomy">
+  <dt>-a</dt><dd>Faz o <code>add</code> automático de arquivos que o Git <strong>já</strong> acompanha. Arquivos novos ainda precisam de <code>git add</code>.</dd>
+  <dt>-m</dt><dd>A mensagem.</dd>
+</dl>
+
+<hr>
+
+<h2>Ramos: testar sem medo</h2>
+<p>Um <strong>ramo</strong> (<em>branch</em>) é uma linha paralela de commits. Você cria um, experimenta, e só junta no principal se der certo.</p>
+
+<pre class="term" data-cwd="~/receitas">$ git switch -c cobertura
+Switched to a new branch 'cobertura'
+$ echo "cobertura de chocolate" &gt;&gt; bolo.txt
+$ git commit -qam "Cobertura"
+$ git switch main
+Switched to branch 'main'
+$ echo "forno 180 graus" &gt;&gt; bolo.txt
+$ git commit -qam "Forno"</pre>
+
+<dl class="anatomy">
+  <dt>git switch</dt><dd>Muda de ramo.</dd>
+  <dt>-c cobertura</dt><dd><em>create</em>: cria o ramo <code>cobertura</code> e já muda para ele.</dd>
+  <dt>-q</dt><dd><em>quiet</em>: sem mensagens.</dd>
+</dl>
+
+<h3>Juntar: <code>git merge</code> e o conflito</h3>
+<p>Os dois ramos mudaram a <strong>mesma linha</strong> (a última do <code>bolo.txt</code>). O Git não sabe qual escolher e pede ajuda:</p>
+
+<pre class="term" data-cwd="~/receitas">$ git merge cobertura
+Auto-merging bolo.txt
+CONFLICT (content): Merge conflict in bolo.txt
+Automatic merge failed; fix conflicts and then commit the result.
+$ git status
+On branch main
+You have unmerged paths.
+  (fix conflicts and run "git commit")
+  (use "git merge --abort" to abort the merge)
+
+Unmerged paths:
+  (use "git add &lt;file&gt;..." to mark resolution)
+	both modified:   bolo.txt               « os dois lados mexeram aqui
+$ cat bolo.txt
+bolo de cenoura
+2 xícaras de farinha
+&lt;&lt;&lt;&lt;&lt;&lt;&lt; HEAD                                « início da versão do ramo atual (main)
+forno 180 graus
+=======                                     « separador
+cobertura de chocolate
+&gt;&gt;&gt;&gt;&gt;&gt;&gt; cobertura                           « fim da versão do outro ramo</pre>
+
+<ol class="passo">
+  <li><strong>Abra o arquivo</strong> no editor (<code>nano bolo.txt</code>).</li>
+  <li><strong>Decida</strong> o resultado final. Aqui queremos as duas linhas.</li>
+  <li><strong>Apague as marcas</strong> <code>&lt;&lt;&lt;&lt;&lt;&lt;&lt;</code>, <code>=======</code> e <code>&gt;&gt;&gt;&gt;&gt;&gt;&gt;</code>.</li>
+  <li><strong>Marque como resolvido</strong> com <code>git add</code> e termine com <code>git commit</code>.</li>
+</ol>
+
+<pre class="file" data-file="bolo.txt (resolvido)">bolo de cenoura
+2 xícaras de farinha
+forno 180 graus
+cobertura de chocolate</pre>
+
+<pre class="term" data-cwd="~/receitas">$ git add bolo.txt
+$ git commit -m "Junta forno e cobertura"
+[main a0f6b5e] Junta forno e cobertura
+$ git log --oneline --graph --all
+*   a0f6b5e Junta forno e cobertura          « o commit de merge tem dois "pais"
+|\
+| * 094da9c Cobertura
+* | c24cd6e Forno
+|/
+* 52f0996 Ingredientes do bolo
+* b7f4d29 Primeira versão das receitas
+$ git branch -d cobertura
+Deleted branch cobertura (was 094da9c).</pre>
+
+<div class="tip">
+<strong>Desistir do merge</strong>
+<p>No meio de um conflito, <code>git merge --abort</code> volta tudo para antes do merge.</p>
+</div>
+
+<hr>
+
+<h2>Ignorar arquivos: <code>.gitignore</code></h2>
+<p>Senhas, arquivos temporários e pastas geradas não devem ir para o histórico. Liste-os no arquivo <code>.gitignore</code>:</p>
+
+<pre class="term" data-cwd="~/receitas">$ echo "senha=123" &gt; .env
+$ echo ".env" &gt; .gitignore
+$ git status --short
+?? .gitignore                    « o .env nem aparece: está ignorado</pre>
+
+<div class="warning">
+<strong>Atenção: o .gitignore não apaga o passado</strong>
+<p>Se uma senha já entrou num commit, ela continua no histórico mesmo depois de ignorada. Troque a senha.</p>
+</div>
+
+<hr>
+
+<h2>GitHub (ou outro servidor) com SSH</h2>
+<ol class="passo">
+  <li>Crie uma chave SSH, se ainda não tiver: <code>ssh-keygen -t ed25519</code> (veja <a href="ssh.html">SSH</a>).</li>
+  <li>Copie a chave pública (<code>cat ~/.ssh/id_ed25519.pub</code>) para o site, em <em>Settings → SSH keys</em>.</li>
+  <li>Crie o repositório vazio no site e ligue o seu projeto a ele.</li>
+</ol>
+
+<dl class="anatomy">
+  <dt>git remote add</dt><dd>Cadastra um servidor remoto.</dd>
+  <dt>origin</dt><dd>O apelido do remoto (por convenção, <code>origin</code>).</dd>
+  <dt>git@github.com:ana/receitas.git</dt><dd>O endereço SSH do repositório.</dd>
+</dl>
+
+<pre class="term" data-cwd="~/receitas">$ git remote add origin git@github.com:ana/receitas.git
+$ git push -u origin main
+$ git pull                     « traz as mudanças feitas por outras pessoas</pre>
+
+<p>O <code>-u</code> do primeiro <code>push</code> liga o ramo local ao remoto; depois disso, basta <code>git push</code> e <code>git pull</code>.</p>
+
+<hr>
+
+<h2>Por que o Git está em inglês?</h2>
+<p>Quase tudo no Debian em pt-BR aparece em português, mas o Git não. O pacote do Debian só traz a tradução de <strong>Portugal</strong> (<code>pt_PT</code>), não a do Brasil:</p>
+
+<pre class="term">$ ls /usr/share/locale/pt_BR/LC_MESSAGES/git.mo
+ls: não foi possível acessar '/usr/share/locale/pt_BR/LC_MESSAGES/git.mo': Arquivo ou diretório inexistente
+$ ls /usr/share/locale/pt_PT/LC_MESSAGES/git.mo
+/usr/share/locale/pt_PT/LC_MESSAGES/git.mo
+$ LANGUAGE=pt_PT git status
+Em ramo main
+nada a memorizar, árvore-trabalho limpa              « o português de Portugal do Git</pre>
+
+<p>Como os tutoriais e as respostas na internet usam o Git em inglês, a recomendação é deixá-lo assim. Se o seu sistema estiver em pt-BR e você quiser garantir o inglês, crie o apelido <code>alias git='LANGUAGE=en git'</code> no <a href="bashrc.html">.bashrc</a>.</p>
+
+<hr>
+
+<h2>Formas diferentes de usar o Git</h2>
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Forma</th><th>Exemplo</th><th>Melhor quando…</th></tr>
+<tr><td>Linha de comando</td><td><code>git commit -am "…"</code></td><td>Servidores, scripts, aprender de verdade</td></tr>
+<tr><td>Interface no terminal</td><td><code>tig</code> (pacote do Debian)</td><td>Navegar no histórico com o teclado</td></tr>
+<tr><td>Interface gráfica</td><td><code>gitk</code>, <code>git gui</code></td><td>Ver ramos e diferenças com o mouse</td></tr>
+<tr><td>Editor</td><td>VS Code, o próprio Vim (<code>vim-fugitive</code>)</td><td>Programar e versionar no mesmo lugar</td></tr>
+<tr><td>etckeeper</td><td><code>apt install etckeeper</code></td><td>Versionar o <code>/etc</code> do servidor automaticamente a cada <code>apt install</code></td></tr>
+</table>
+</div>
+
+<hr>
+
+<h2>Quando não funciona</h2>
+
+<div class="cenario">
+<strong>"Author identity unknown"</strong>
+<p><strong>O que aconteceu:</strong> faltou configurar nome e e-mail. <strong>Como resolver:</strong> <code>git config --global user.name "…"</code> e <code>user.email</code>.</p>
+</div>
+
+<div class="cenario">
+<strong>"fatal: No configured push destination."</strong>
+<pre class="term" data-cwd="~/receitas">$ git push
+fatal: No configured push destination.
+Either specify the URL from the command-line or configure a remote repository using
+
+    git remote add &lt;name&gt; &lt;url&gt;</pre>
+<p><strong>O que aconteceu:</strong> o projeto não tem remoto. <strong>Como resolver:</strong> <code>git remote add origin …</code> e <code>git push -u origin main</code>.</p>
+</div>
+
+<div class="cenario">
+<strong>"Host key verification failed" / "Permission denied (publickey)"</strong>
+<pre class="term" data-cwd="~/receitas">$ git push -u origin main
+Host key verification failed.
+fatal: Could not read from remote repository.
+
+Please make sure you have the correct access rights
+and the repository exists.</pre>
+<p><strong>O que aconteceu:</strong> o primeiro contato SSH com o servidor não foi confirmado, ou a sua chave não está cadastrada no site. <strong>Como resolver:</strong> rode <code>ssh -T git@github.com</code> uma vez e confirme a impressão digital; confira se a chave pública está no site. Veja <a href="ssh.html">SSH</a>.</p>
+</div>
+
+<div class="cenario">
+<strong>Commitei no ramo errado</strong>
+<p><strong>Como resolver:</strong> se ainda não fez <code>push</code>, crie o ramo certo ali mesmo (<code>git branch ramo-certo</code>) e volte o ramo atual um commit: <code>git reset --hard HEAD~1</code>.</p>
+<div class="warning"><strong>Cuidado</strong><p><code>reset --hard</code> descarta alterações não salvas. Confira com <code>git status</code> antes.</p></div>
+</div>
+
+<hr>
+
+<h2>Referência</h2>
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Comando</th><th>O que faz</th></tr>
+<tr><td><code>git init</code></td><td>Começa um repositório na pasta</td></tr>
+<tr><td><code>git clone URL</code></td><td>Copia um repositório remoto</td></tr>
+<tr><td><code>git status</code> / <code>--short</code></td><td>O que mudou</td></tr>
+<tr><td><code>git add arquivo</code> / <code>git add .</code></td><td>Prepara para o commit</td></tr>
+<tr><td><code>git commit -m "msg"</code> / <code>-am</code></td><td>Grava uma versão</td></tr>
+<tr><td><code>git log --oneline --graph --all</code></td><td>Histórico resumido com ramos</td></tr>
+<tr><td><code>git diff</code> / <code>git diff --staged</code></td><td>Diferenças não preparadas / preparadas</td></tr>
+<tr><td><code>git switch -c ramo</code> / <code>git switch ramo</code></td><td>Cria / muda de ramo</td></tr>
+<tr><td><code>git merge ramo</code> / <code>--abort</code></td><td>Junta / desiste</td></tr>
+<tr><td><code>git restore arquivo</code></td><td>Descarta mudanças não preparadas</td></tr>
+<tr><td><code>git remote add origin URL</code></td><td>Cadastra o servidor</td></tr>
+<tr><td><code>git push</code> / <code>git pull</code></td><td>Envia / traz</td></tr>
+</table>
+</div>
+
+<hr>
+
+<h2>Exercícios</h2>
+
+<div class="exercise">
+<h3>1. Preparar tudo</h3>
+<p>Complete para preparar todos os arquivos da pasta atual:</p>
+<div class="ex-code">git add <input data-answer="." aria-label="argumento"></div>
+</div>
+
+<div class="exercise">
+<h3>2. Novo ramo</h3>
+<p>Complete para criar o ramo <code>teste</code> e mudar para ele:</p>
+<div class="ex-code">git switch <input data-answer="-c teste|--create teste" aria-label="opções"></div>
+</div>
+
+<div class="mc" data-answer="3">
+<p class="mc-q">3. No meio de um conflito, o que significam as linhas entre <code>&lt;&lt;&lt;&lt;&lt;&lt;&lt; HEAD</code> e <code>=======</code>?</p>
+<label><input type="radio" name="q3"> A versão do outro ramo.</label>
+<label><input type="radio" name="q3"> Linhas que o Git apagou.</label>
+<label><input type="radio" name="q3"> A versão do ramo em que você está.</label>
+<label><input type="radio" name="q3"> Um erro no arquivo.</label>
+</div>
+
+<div class="mc" data-answer="1">
+<p class="mc-q">4. Por que o Git do Debian aparece em inglês num sistema em pt-BR?</p>
+<label><input type="radio" name="q4"> O pacote só traz a tradução de Portugal (pt_PT).</label>
+<label><input type="radio" name="q4"> Falta instalar o pacote <code>git-pt-br</code>.</label>
+<label><input type="radio" name="q4"> O Git nunca foi traduzido.</label>
+<label><input type="radio" name="q4"> O locale pt_BR está quebrado.</label>
+</div>
+
+<hr>
+
+<h2>Resumo</h2>
+<ul>
+  <li>Ciclo: editar → <code>git add</code> → <code>git commit -m</code>; confira sempre com <code>git status</code>.</li>
+  <li><code>git log --oneline --graph</code> mostra o histórico; <code>git diff</code>, o que mudou.</li>
+  <li>Ramos (<code>git switch -c</code>) isolam experimentos; <code>git merge</code> junta.</li>
+  <li>Conflito: edite, apague as marcas, <code>git add</code>, <code>git commit</code>.</li>
+  <li>No Debian, o Git fica em inglês (só há tradução pt_PT), e é assim que os tutoriais o mostram.</li>
+</ul>
+
+<div class="pager"></div>
+
+</div>
+</main>
+</div>
+<script src="assets/site.js"></script>
+</body>
+</html>

@@ -1,0 +1,304 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Debian Manutenção — a rotina que mantém o sistema saudável | Guia Debian</title>
+<meta name="description" content="Rotina de manutenção do Debian 13: o que já é automático (timers), atualizar com apt, apt-listchanges, needrestart, limpar o cache e o journal, serviços com falha, debsums e backup do dpkg, com saídas reais.">
+<link rel="stylesheet" href="assets/style.css">
+<script>try{var t=localStorage.getItem("tema");if(t)document.documentElement.setAttribute("data-theme",t)}catch(e){}</script>
+</head>
+<body>
+<div class="layout">
+<nav class="sidebar" id="sidebar" aria-label="Tópicos"></nav>
+<main class="main">
+<div class="content">
+
+<div class="pager"></div>
+
+<h1>Debian <span class="hl">Manutenção</span></h1>
+
+<p class="intro">O Debian estável é famoso por "funcionar sozinho por anos". Mas ele funciona sozinho porque alguém faz uma manutenção pequena e regular: atualizar, reiniciar o que precisa, limpar o que sobra e olhar se algo falhou. Nesta aula você monta essa rotina e descobre o que o Debian já faz por você.</p>
+
+<div class="note">
+<strong>Você vai aprender</strong>
+<ul>
+  <li>Quais tarefas o Debian 13 já roda sozinho (os <em>timers</em> do systemd).</li>
+  <li>Atualizar com <code>apt</code> e ler as notícias do <code>apt-listchanges</code>.</li>
+  <li>Saber o que precisa reiniciar com o <code>needrestart</code>.</li>
+  <li>Limpar o cache do apt, pacotes órfãos e o journal.</li>
+  <li>Encontrar serviços com falha e arquivos de pacote alterados.</li>
+</ul>
+</div>
+
+<p>Os comandos de manutenção rodam como root (<code>su -</code>). As saídas são de um Debian 13 real.</p>
+
+<hr>
+
+<h2>Antes do comando: o que já é automático</h2>
+<p>O systemd tem <em>timers</em>, um "agendador" parecido com o <a href="cron.html">cron</a>. O Debian 13 vem com estes ligados:</p>
+
+<pre class="term" data-host="servidor" data-user="root">#> systemctl list-timers --no-pager
+NEXT                            LEFT LAST PASSED UNIT                         ACTIVATES
+Fri 2026-10-16 00:00:00 -03 2h 47min -    -      dpkg-db-backup.timer         dpkg-db-backup.service
+Fri 2026-10-16 00:50:22 -03 3h 38min -    -      logrotate.timer              logrotate.service
+Fri 2026-10-16 06:55:17 -03       9h -    -      apt-daily-upgrade.timer      apt-daily-upgrade.service
+Fri 2026-10-16 10:43:43 -03      13h -    -      apt-daily.timer              apt-daily.service
+Fri 2026-10-16 10:56:37 -03      13h -    -      man-db.timer                 man-db.service
+Sun 2026-10-18 03:10:25 -03   2 days -    -      e2scrub_all.timer            e2scrub_all.service
+Mon 2026-10-19 01:15:05 -03   3 days -    -      fstrim.timer                 fstrim.service</pre>
+
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Timer</th><th>O que faz</th></tr>
+<tr><td><code>dpkg-db-backup</code></td><td>Copia o banco de dados de pacotes para <code>/var/backups</code> todo dia</td></tr>
+<tr><td><code>logrotate</code></td><td>"Gira" e compacta arquivos de log antigos</td></tr>
+<tr><td><code>apt-daily</code> / <code>apt-daily-upgrade</code></td><td>Atualizam a lista e instalam atualizações, <strong>só se</strong> o <code>unattended-upgrades</code> estiver instalado e ativado (veja <a href="seguranca.html">Segurança do Servidor</a>)</td></tr>
+<tr><td><code>man-db</code></td><td>Atualiza o índice das páginas de manual</td></tr>
+<tr><td><code>e2scrub_all</code></td><td>Verifica sistemas ext4 sobre LVM, sem desmontar</td></tr>
+<tr><td><code>fstrim</code></td><td>Avisa o SSD sobre blocos livres (deixa o SSD rápido)</td></tr>
+</table>
+</div>
+
+<p>O que <strong>não</strong> é automático numa instalação padrão: instalar as atualizações (sem <code>unattended-upgrades</code>), reiniciar serviços, limpar o cache do apt e conferir backups.</p>
+
+<h3>A rotina em uma tabela</h3>
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Quando</th><th>Tarefa</th><th>Comando</th></tr>
+<tr><td>Semanal (ou automática)</td><td>Atualizar</td><td><code>apt update &amp;&amp; apt upgrade</code></td></tr>
+<tr><td>Depois de atualizar</td><td>Reiniciar o que precisa</td><td><code>needrestart</code></td></tr>
+<tr><td>Mensal</td><td>Remover órfãos e limpar cache</td><td><code>apt autoremove</code>, <code>apt clean</code></td></tr>
+<tr><td>Mensal</td><td>Ver serviços com falha e erros</td><td><code>systemctl --failed</code>, <code>journalctl -p err -b</code></td></tr>
+<tr><td>Mensal</td><td>Espaço em disco</td><td><code>df -h</code>, <code>du -sh /var/*</code></td></tr>
+<tr><td>Mensal</td><td>Testar um backup</td><td>Restaurar um arquivo (veja <a href="backup.html">Backup</a>)</td></tr>
+</table>
+</div>
+
+<hr>
+
+<h2>1. Atualizar o sistema</h2>
+<pre class="term" data-host="servidor" data-user="root">#> apt update
+Atingido:1 http://deb.debian.org/debian trixie InRelease
+Atingido:2 http://security.debian.org/debian-security trixie-security InRelease
+Atingido:3 http://deb.debian.org/debian trixie-updates InRelease
+Lendo listas de pacotes...
+Construindo árvore de dependências...
+Lendo informação de estado...
+Todos os pacotes estão atualizados.                 « nada para atualizar</pre>
+
+<p>Quando há atualizações, a última linha diz quantas, e <code>apt list --upgradable</code> mostra quais. Para instalar:</p>
+
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Comando</th><th>O que faz</th><th>Quando usar</th></tr>
+<tr><td><code>apt upgrade</code></td><td>Atualiza, mas nunca remove pacotes</td><td>A rotina do dia a dia</td></tr>
+<tr><td><code>apt full-upgrade</code></td><td>Atualiza e pode remover/trocar pacotes</td><td>Kernels novos, revisões (13.7 → 13.8), quando o <code>upgrade</code> diz que "segurou" pacotes</td></tr>
+</table>
+</div>
+
+<p>No Debian estável os dois quase sempre fazem o mesmo, porque as atualizações só corrigem falhas. Veja <a href="apt.html">apt</a> e, para trocar de versão (13 → 14), <a href="upgrade-versao.html">Atualizar a Versão do Debian</a>.</p>
+
+<h3>apt-listchanges: as notícias antes de instalar</h3>
+<p>O Debian vem com o <code>apt-listchanges</code>. Quando um pacote traz uma mudança importante (arquivo <code>NEWS</code>), ele mostra o texto <strong>antes</strong> de instalar, num leitor de páginas. Leia e aperte <kbd>q</kbd> para continuar. A configuração real do Debian 13:</p>
+
+<pre class="file" data-file="/etc/apt/listchanges.conf">[apt]
+frontend=pager        # mostra num leitor de páginas (como o less)
+which=news            # só as notícias importantes, não todo o changelog
+email_address=root
+email_format=text
+confirm=false         # não pergunta se quer continuar
+headers=false
+reverse=false
+save_seen=/var/lib/apt/listchanges</pre>
+
+<hr>
+
+<h2>2. Precisa reiniciar?</h2>
+<p>Uma atualização troca os arquivos no disco, mas os programas que já estavam rodando continuam com a versão antiga na memória. O kernel novo só vale depois de reiniciar a máquina. O <code>needrestart</code> descobre isso. Ele não vem instalado:</p>
+
+<pre class="term" data-host="servidor" data-user="root">#> apt install needrestart
+#> needrestart -r l
+…
+Running kernel seems to be up-to-date.                 « o kernel em uso é o mais novo
+
+No services need to be restarted.                      « nenhum serviço com biblioteca antiga
+
+No containers need to be restarted.
+
+No user sessions are running outdated binaries.
+
+No VM guests are running outdated hypervisor (qemu) binaries on this host.</pre>
+
+<dl class="anatomy">
+  <dt>needrestart</dt><dd>O programa.</dd>
+  <dt>-r l</dt><dd><em>restart mode list</em>: só lista o que precisa reiniciar, sem reiniciar nada.</dd>
+</dl>
+
+<p>Depois de instalado, o <code>needrestart</code> roda sozinho no fim de cada <code>apt upgrade</code> e oferece reiniciar os serviços afetados. Para scripts e monitoramento há o formato curto <code>needrestart -b</code>:</p>
+
+<pre class="term" data-host="servidor" data-user="root">#> needrestart -b
+NEEDRESTART-VER: 3.11
+NEEDRESTART-KCUR: 6.12.111+deb13-amd64      « kernel em uso
+NEEDRESTART-KEXP: 6.12.111+deb13-amd64      « kernel esperado (o mais novo instalado)
+NEEDRESTART-KSTA: 1                         « 1 = em dia; 3 = precisa reiniciar a máquina</pre>
+
+<p>O <code>needrestart</code> é em inglês. No Ubuntu é comum olhar o arquivo <code>/var/run/reboot-required</code>; no Debian ele só aparece em alguns casos: quando o <code>unattended-upgrades</code> está instalado e chega um kernel novo (ele traz o gancho <code>/etc/kernel/postinst.d/unattended-upgrades</code>), ou quando o <code>dbus</code> é atualizado. Numa instalação mínima, um kernel novo não cria esse arquivo, por isso o <code>needrestart</code> é a resposta mais confiável.</p>
+
+<hr>
+
+<h2>3. Limpar o que sobrou</h2>
+<h3>Pacotes órfãos</h3>
+<p>Dependências que nenhum pacote usa mais (e kernels antigos) saem com:</p>
+<pre class="term" data-host="servidor" data-user="root">#> apt autoremove
+…
+0 pacotes atualizados, 0 pacotes novos instalados, 0 a serem removidos e 0 não atualizados.</pre>
+
+<h3>Cache do apt</h3>
+<p>Todo pacote baixado fica guardado em <code>/var/cache/apt/archives</code>. Com o tempo isso cresce:</p>
+<pre class="term" data-host="servidor" data-user="root">#> du -sh /var/cache/apt/archives
+392M	/var/cache/apt/archives
+#> apt clean                         « apaga todos os pacotes baixados
+#> du -sh /var/cache/apt/archives
+36K	/var/cache/apt/archives</pre>
+
+<p>O <code>apt autoclean</code> é mais suave: apaga só os pacotes que nem estão mais disponíveis nos repositórios. (O tamanho depois do <code>clean</code> é o típico: sobram só as pastas vazias.)</p>
+
+<h3>O journal</h3>
+<pre class="term" data-host="servidor" data-user="root">#> journalctl --disk-usage
+Archived and active journals take up 16M in the file system.
+#> journalctl --vacuum-time=4weeks
+Vacuuming done, freed 0B of archived journals from /run/log/journal.
+Vacuuming done, freed 0B of archived journals from /var/log/journal/03c89c72dc504632b46ffa5cf5f2879b.
+Vacuuming done, freed 0B of archived journals from /var/log/journal.</pre>
+<p>O journal já se limita sozinho (no máximo 10% do sistema de arquivos, por padrão). O <code>--vacuum-time</code> apaga registros mais velhos que o tempo dado; aqui não havia nada tão antigo. Veja <a href="journalctl.html">Logs (journalctl)</a>.</p>
+
+<hr>
+
+<h2>4. O que está enchendo o disco?</h2>
+<pre class="term" data-host="servidor" data-user="root">#> df -h /
+Sist. Arq.      Tam. Usado Disp. Uso% Montado em
+/dev/sda1        24G  1,3G   21G   6% /
+#> du -xh / --max-depth=1 2&gt;/dev/null | sort -h | tail -4</pre>
+<p>Os culpados mais comuns são <code>/var/cache/apt</code>, <code>/var/log</code>, imagens de containers (<code>/var/lib/docker</code>) e a pasta pessoal. Mais em <a href="discos.html">lsblk, df, du</a>.</p>
+
+<hr>
+
+<h2>5. Serviços com falha e erros</h2>
+<pre class="term" data-host="servidor" data-user="root">#> systemctl --failed
+  UNIT LOAD ACTIVE SUB DESCRIPTION
+
+0 loaded units listed.                                 « nenhum serviço falhou
+#> journalctl -p err -b --no-pager | tail</pre>
+<p>Se algum serviço aparecer, investigue com <code>systemctl status nome</code> e <code>journalctl -u nome</code> (veja <a href="systemctl.html">systemctl</a>).</p>
+
+<h3>debsums: algum arquivo de pacote foi alterado?</h3>
+<p>O pacote <code>debsums</code> compara cada arquivo instalado com a "impressão digital" (checksum) registrada no pacote. Serve para achar arquivos corrompidos ou modificados:</p>
+<pre class="term" data-host="servidor" data-user="root">#> apt install debsums
+#> debsums -s                       « -s: só mostra problemas; silêncio = tudo íntegro</pre>
+<p>Ele não substitui um sistema de detecção de invasão (um invasor pode alterar os registros também), mas acha disco com defeito e arquivos editados por engano.</p>
+
+<hr>
+
+<h2>6. Backups</h2>
+<p>O Debian guarda sozinho uma cópia da lista de pacotes em <code>/var/backups</code> (timer <code>dpkg-db-backup</code>). Mas os <strong>seus</strong> dados você precisa copiar: veja <a href="backup.html">Backup</a> e o <a href="projeto-backup.html">projeto Backup Automático</a>. Pelo menos uma vez por mês, restaure um arquivo para provar que o backup funciona.</p>
+
+<hr>
+
+<h2>Automatizando: relatório de saúde</h2>
+<p>Um script curto junta tudo e pode rodar pelo <a href="cron.html">cron</a> toda segunda-feira:</p>
+
+<pre class="file" data-file="/usr/local/sbin/saude.sh">#!/usr/bin/env bash
+# Relatório de saúde do servidor
+echo "== $(hostname) — $(date '+%F %H:%M')"
+echo "== Carga:";        uptime
+echo "== Disco:";        df -h / | tail -1
+echo "== Atualizações:"; apt list --upgradable 2&gt;/dev/null | tail -n +2 | wc -l
+echo "== Reiniciar?";    needrestart -b | grep KSTA
+echo "== Serviços com falha:"; systemctl --failed --no-legend | wc -l</pre>
+
+<hr>
+
+<h2>Formas diferentes de fazer</h2>
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Tarefa</th><th>Manual</th><th>Automático</th></tr>
+<tr><td>Atualizar</td><td><code>apt upgrade</code></td><td><code>unattended-upgrades</code></td></tr>
+<tr><td>Reiniciar serviços</td><td><code>systemctl restart</code></td><td><code>needrestart</code> após cada upgrade</td></tr>
+<tr><td>Limpar cache</td><td><code>apt clean</code></td><td>Opção <code>APT::Periodic::AutocleanInterval</code></td></tr>
+<tr><td>Logs</td><td><code>journalctl --vacuum-time</code></td><td><code>SystemMaxUse=</code> em <code>/etc/systemd/journald.conf</code></td></tr>
+</table>
+</div>
+
+<hr>
+
+<h2>Quando não funciona</h2>
+
+<div class="cenario">
+<strong>"Não foi possível obter a trava /var/lib/dpkg/lock-frontend"</strong>
+<pre class="term" data-host="servidor" data-user="root">#> apt upgrade
+Aguardando por trava de cache: Não foi possível obter a trava /var/lib/dpkg/lock-frontend. Ela está sendo mantida pelo processo 9748 (apt-get)...</pre>
+<p><strong>O que aconteceu:</strong> outro <code>apt</code> está rodando (seu, ou o automático). Espere: ele continua sozinho quando a trava for liberada. Não apague os arquivos de trava.</p>
+</div>
+
+<div class="cenario">
+<strong>"needrestart: comando não encontrado"</strong>
+<p><strong>O que aconteceu:</strong> ele não vem no Debian. <code>apt install needrestart</code>.</p>
+</div>
+
+<div class="cenario">
+<strong>"Os seguintes pacotes foram mantidos"</strong>
+<p><strong>O que aconteceu:</strong> a atualização precisa instalar ou remover outro pacote, e o <code>apt upgrade</code> não faz isso. Rode <code>apt full-upgrade</code> e leia com atenção o que ele vai remover antes de confirmar.</p>
+</div>
+
+<hr>
+
+<h2>Exercícios</h2>
+
+<div class="exercise">
+<h3>1. Só listar</h3>
+<p>Complete para o <code>needrestart</code> só listar, sem reiniciar nada:</p>
+<div class="ex-code">needrestart -r <input data-answer="l" aria-label="modo"></div>
+</div>
+
+<div class="exercise">
+<h3>2. Limpar o cache</h3>
+<p>Qual comando apaga todos os pacotes baixados em <code>/var/cache/apt/archives</code>?</p>
+<div class="ex-code">apt <input data-answer="clean" aria-label="subcomando"></div>
+</div>
+
+<div class="mc" data-answer="2">
+<p class="mc-q">3. Num Debian recém-instalado sem <code>unattended-upgrades</code>, o timer <code>apt-daily-upgrade</code> instala atualizações?</p>
+<label><input type="radio" name="q3"> Sim, todo dia às 6h.</label>
+<label><input type="radio" name="q3"> Não: sem o unattended-upgrades instalado e ativado, ele não instala nada.</label>
+<label><input type="radio" name="q3"> Sim, mas só as de segurança.</label>
+<label><input type="radio" name="q3"> Esse timer não existe no Debian.</label>
+</div>
+
+<div class="mc" data-answer="4">
+<p class="mc-q">4. O <code>needrestart -b</code> mostra <code>NEEDRESTART-KSTA: 3</code>. O que fazer?</p>
+<label><input type="radio" name="q4"> Nada: está tudo em dia.</label>
+<label><input type="radio" name="q4"> Rodar <code>apt clean</code>.</label>
+<label><input type="radio" name="q4"> Reinstalar o needrestart.</label>
+<label><input type="radio" name="q4"> Reiniciar a máquina, porque há um kernel novo instalado que ainda não está em uso.</label>
+</div>
+
+<hr>
+
+<h2>Resumo</h2>
+<ul>
+  <li>Timers do Debian já fazem logrotate, fstrim, backup do dpkg e índice do man.</li>
+  <li>Atualizar: <code>apt update &amp;&amp; apt upgrade</code>; o <code>apt-listchanges</code> mostra as notícias importantes.</li>
+  <li><code>needrestart</code> (instale) diz o que precisa reiniciar; o <code>reboot-required</code> nem sempre é criado no Debian.</li>
+  <li>Limpeza: <code>apt autoremove</code>, <code>apt clean</code>, <code>journalctl --vacuum-time</code>.</li>
+  <li>Saúde: <code>systemctl --failed</code>, <code>journalctl -p err -b</code>, <code>debsums -s</code>.</li>
+</ul>
+
+<div class="pager"></div>
+
+</div>
+</main>
+</div>
+<script src="assets/site.js"></script>
+</body>
+</html>

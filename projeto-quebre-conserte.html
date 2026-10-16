@@ -1,0 +1,454 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Debian Projeto: Quebre e Conserte | Guia Debian</title>
+<meta name="description" content="Seis desafios no Debian 13: quebre o sistema de propósito numa VM e conserte. fstab errado e modo de emergência, senha de root esquecida, sem sudo e sem root, disco cheio, serviço que não sobe e rede derrubada.">
+<link rel="stylesheet" href="assets/style.css">
+<script>try{var t=localStorage.getItem("tema");if(t)document.documentElement.setAttribute("data-theme",t)}catch(e){}</script>
+</head>
+<body>
+<div class="layout">
+<nav class="sidebar" id="sidebar" aria-label="Tópicos"></nav>
+<main class="main">
+<div class="content">
+
+<div class="pager"></div>
+
+<h1>Projeto <span class="hl">Quebre e Conserte</span></h1>
+
+<p class="intro">Cedo ou tarde um servidor não liga, uma senha some ou o disco enche. Quem já consertou isso uma vez num laboratório resolve em minutos na vida real. Neste projeto você estraga um Debian 13 de propósito, seis vezes, e aprende a trazê-lo de volta.</p>
+
+<div class="tip">
+<strong>Ao terminar você terá</strong>
+<ul>
+  <li>Saído do <strong>modo de emergência</strong> causado por um <code>/etc/fstab</code> errado.</li>
+  <li>Trocado a senha do root sem saber a antiga, pelo GRUB.</li>
+  <li>Recuperado o acesso de administrador quando não há <code>sudo</code> nem senha de root.</li>
+  <li>Achado e limpado o que encheu o disco.</li>
+  <li>Descoberto por que o Apache não sobe, lendo a mensagem certa.</li>
+  <li>Consertado a rede pelo console, sem SSH.</li>
+</ul>
+</div>
+
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Item</th><th>Detalhe</th></tr>
+<tr><td>Tempo estimado</td><td>2h (cerca de 20 min por desafio)</td></tr>
+<tr><td>Pré-requisitos</td><td><a href="projetos.html">Como Usar os Projetos</a>, <a href="montar.html">mount e fstab</a>, <a href="boot-grub.html">Boot, GRUB e Kernel</a>, <a href="recuperacao.html">Recuperar um Sistema</a>, <a href="root-su-sudo.html">root, su e sudo</a>, <a href="journalctl.html">Logs (journalctl)</a></td></tr>
+<tr><td>Onde roda</td><td>A <strong>sua</strong> VM <code>lab</code> (prompts <code>ana@lab</code> e <code>root@lab</code>), com acesso à janela do VirtualBox</td></tr>
+</table>
+</div>
+
+<div class="warning">
+<strong>Só numa VM sua, com snapshot</strong>
+<p>Estes desafios deixam o sistema sem iniciar, sem rede ou sem administrador. Faça na sua VM de laboratório e tire um snapshot antes de cada um:</p>
+<pre class="term" data-host="notebook">$ VBoxManage snapshot lab take antes-do-desafio</pre>
+<p>Se você se perder, desligue a VM e restaure: <code>VBoxManage snapshot lab restore antes-do-desafio</code> (veja <a href="projetos.html">Como Usar os Projetos</a>). Vários desafios exigem a <strong>janela da VM</strong> (o console), porque o SSH para de funcionar.</p>
+</div>
+
+<div class="note">
+<strong>Sobre as saídas desta página</strong>
+<p>As telas de boot e de erro abaixo são as típicas do Debian 13. Números de tempo, UUIDs e nomes de interface mudam de máquina para máquina. Algumas mensagens de boot aparecem em inglês mesmo com o sistema em português, porque não têm tradução.</p>
+</div>
+
+<hr>
+
+<h2>Desafio 1: o fstab errado e o modo de emergência</h2>
+
+<ol class="passo">
+<li>
+<h3>Quebre</h3>
+<p>Vamos pedir ao sistema que monte um disco que não existe. Primeiro, a cópia de segurança. Depois, a linha errada no fim do <code>/etc/fstab</code>:</p>
+<pre class="term" data-host="lab">$ su -
+Senha:
+#> cp /etc/fstab /etc/fstab.bak
+#> echo 'UUID=0000-errado  /dados  ext4  defaults  0  2' &gt;&gt; /etc/fstab
+#> mkdir /dados
+#> systemctl reboot</pre>
+</li>
+<li>
+<h3>Sintoma</h3>
+<p>Na janela da VM, o boot fica parado 1min30 esperando o disco e depois cai no modo de emergência:</p>
+<pre class="term" data-title="console da VM lab">[ ***  ] A start job is running for /dev/disk/by-uuid/0000-errado (1min 12s / 1min 30s)
+[ TIME ] Timed out waiting for device dev-disk-by\x2duuid-0000\x2derrado.device - /dev/disk/by-uuid/0000-errado.
+[DEPEND] Dependency failed for dados.mount - /dados.
+[DEPEND] Dependency failed for local-fs.target - Local File Systems.
+You are in emergency mode. After logging in, type "journalctl -xb" to view
+system logs, "systemctl reboot" to reboot, or "exit"
+to continue bootup.
+Give root password for maintenance
+(ou pressione Contrl-D para continuar):          « o "Contrl" errado está na tradução original</pre>
+<p>Repare: o sistema não quebrou. Ele <strong>parou de propósito</strong> porque uma montagem marcada como necessária falhou, e está pedindo a senha do root para você consertar.</p>
+</li>
+<li>
+<h3>Diagnóstico</h3>
+<p>Digite a senha do root (nada aparece enquanto digita). Você cai num shell de root. Pergunte ao sistema o que falhou:</p>
+<pre class="term" data-host="lab" data-user="root">#> systemctl --failed
+  UNIT       LOAD   ACTIVE SUB    DESCRIPTION
+● dados.mount loaded failed failed /dados
+
+#> findmnt --verify
+/media/cdrom0
+   [W] não foi possível detectar o tipo de sistema de arquivos em disco (Mídia não encontrada)
+/dados
+   [E] fonte não alcançável na inicialização: UUID=0000-errado     « o culpado
+0 erro de análise, 1 erro, 1 aviso</pre>
+<p>O <code>findmnt --verify</code> lê o <code>/etc/fstab</code> e aponta a linha com problema sem precisar montar nada. Os <code>[E]</code> são erros; os <code>[W]</code>, avisos. O aviso do <code>/media/cdrom0</code> é inofensivo: o instalador do Debian deixa essa linha para o leitor de CD, que numa VM normalmente está vazio.</p>
+</li>
+<li>
+<h3>Conserte</h3>
+<p>Volte à cópia de segurança (ou apague a linha com o <code>nano</code>) e confira de novo antes de reiniciar:</p>
+<pre class="term" data-host="lab" data-user="root">#> cp /etc/fstab.bak /etc/fstab
+#> findmnt --verify
+/media/cdrom0
+   [W] não foi possível detectar o tipo de sistema de arquivos em disco (Mídia não encontrada)
+
+0 erro de análise, 0 erro, 1 aviso     « sem erros: pode reiniciar
+#> systemctl daemon-reload
+#> systemctl reboot</pre>
+<p><strong>Confira se deu certo:</strong> o boot volta ao normal e <code>systemctl --failed</code> mostra <code>0 loaded units listed</code>.</p>
+<div class="cenario">
+<strong>Se deu errado: "Read-only file system" ao editar</strong>
+<p>Em alguns casos a raiz está montada só para leitura. Remonte com escrita e tente de novo: <code>mount -o remount,rw /</code>.</p>
+</div>
+</li>
+<li>
+<h3>Lição</h3>
+<ul>
+  <li>Para discos que não são essenciais (HD externo, disco de backup), use a opção <code>nofail</code> no fstab. Sem o disco, o boot continua. O <code>findmnt --verify</code> continua avisando que a fonte não foi encontrada, mas o boot não para mais.</li>
+  <li>Antes de reiniciar depois de editar o fstab, rode <strong>sempre</strong> <code>findmnt --verify</code> e <code>mount -a</code>.</li>
+</ul>
+</li>
+</ol>
+
+<hr>
+
+<h2>Desafio 2: esqueci a senha do root</h2>
+
+<ol class="passo">
+<li>
+<h3>Quebre</h3>
+<p>Troque a senha do root por uma que você "não lembra":</p>
+<pre class="term" data-host="lab" data-user="root">#> passwd
+Nova senha:
+Redigite a nova senha:
+passwd: senha atualizada com sucesso</pre>
+<p>Digite qualquer coisa aleatória duas vezes, não anote, saia e tente <code>su -</code>:</p>
+<pre class="term" data-host="lab">$ su -
+Senha:
+su: Falha de autenticação</pre>
+</li>
+<li>
+<h3>Conserte pelo GRUB: <code>init=/bin/bash</code></h3>
+<p>A ideia: pedir ao kernel que, em vez de iniciar o sistema normal (o systemd), abra direto um shell de root. Sem login, sem senha.</p>
+<ol>
+  <li>Reinicie a VM pela janela do VirtualBox. No menu do GRUB, com <strong>Debian GNU/Linux</strong> selecionado, aperte <kbd>e</kbd> (editar).</li>
+  <li>Desça até a linha que começa com <code>linux</code>. Vá até o fim dela e acrescente <code>init=/bin/bash</code>.</li>
+  <li>Aperte <kbd>Ctrl</kbd>+<kbd>X</kbd> (ou <kbd>F10</kbd>) para iniciar.</li>
+</ol>
+<pre class="term" data-title="GRUB: editando a entrada">linux   /boot/vmlinuz-6.12.111+deb13-amd64 root=UUID=5c1f…  ro  quiet init=/bin/bash
+                                                                  « acrescente no fim da linha</pre>
+<p>Você cai num shell de root mínimo. A raiz está montada só para leitura, então primeiro libere a escrita:</p>
+<dl class="anatomy">
+  <dt>mount -o remount,rw /</dt><dd>Remonta a raiz (<code>/</code>) com permissão de escrita (<em>read-write</em>).</dd>
+  <dt>passwd</dt><dd>Troca a senha do usuário atual, o root.</dd>
+  <dt>sync</dt><dd>Força a gravação de tudo no disco, porque não haverá um desligamento normal.</dd>
+</dl>
+<pre class="term" data-title="console da VM lab" data-user="root">#> mount -o remount,rw /
+#> passwd
+New password:                    « sem o systemd, o idioma não foi carregado: as mensagens vêm em inglês
+Retype new password:
+passwd: password updated successfully
+#> sync
+#> exec /sbin/reboot -f</pre>
+<p><strong>Confira se deu certo:</strong> depois do boot normal, <code>su -</code> aceita a senha nova.</p>
+<div class="cenario">
+<strong>Se deu errado: "Authentication token manipulation error"</strong>
+<p>Você esqueceu o <code>mount -o remount,rw /</code>, e o <code>passwd</code> não conseguiu gravar em <code>/etc/shadow</code>. Remonte e repita.</p>
+</div>
+</li>
+<li>
+<h3>Lição</h3>
+<p>Quem tem acesso ao console (físico ou da VM) consegue virar root. Em servidores de verdade, proteja com <strong>senha no GRUB</strong> e <strong>criptografia de disco</strong> (LUKS, oferecida pelo instalador do Debian).</p>
+</li>
+</ol>
+
+<hr>
+
+<h2>Desafio 3: sem sudo e sem senha de root</h2>
+<p>Este desafio vale para a instalação "estilo Ubuntu": no instalador do Debian você deixou a <strong>senha do root em branco</strong>. Aí o root fica bloqueado e o primeiro usuário entra no grupo <code>sudo</code>. Para fazer o desafio, crie uma segunda VM assim, ou use a do <a href="projeto-servidor-web.html">Servidor Web</a>, onde a <code>ana</code> ganhou sudo.</p>
+
+<ol class="passo">
+<li>
+<h3>Quebre</h3>
+<p>A <code>ana</code> tira a si mesma do grupo <code>sudo</code>. Ninguém mais administra a máquina:</p>
+<pre class="term" data-host="lab">$ sudo gpasswd -d ana sudo
+Removendo usuário ana do grupo sudo
+$ exit</pre>
+<p>Entre de novo (a mudança de grupo só vale num login novo) e tente:</p>
+<pre class="term" data-host="lab">$ sudo ls /root
+[sudo] senha para ana:
+ana is not in the sudoers file.
+This incident has been reported to the administrator.</pre>
+<p>O pedido de senha sai em português e a recusa em inglês: é assim mesmo no sudo do Debian 13.</p>
+</li>
+<li>
+<h3>Por que o modo de recuperação não ajuda</h3>
+<p>No GRUB, <strong>Advanced options for Debian GNU/Linux</strong> &gt; <strong>(recovery mode)</strong> pede a senha do root. Com o root bloqueado, ele avisa e não deixa entrar:</p>
+<pre class="term" data-title="console da VM lab">Cannot open access to console, the root account is locked.
+See sulogin(8) man page for more details.
+
+Press Enter to continue.</pre>
+</li>
+<li>
+<h3>Conserte com <code>init=/bin/bash</code></h3>
+<p>Mesmo caminho do desafio 2: <kbd>e</kbd> no GRUB, <code>init=/bin/bash</code> no fim da linha <code>linux</code>, <kbd>Ctrl</kbd>+<kbd>X</kbd>. No shell:</p>
+<pre class="term" data-title="console da VM lab" data-user="root">#> mount -o remount,rw /
+#> usermod -aG sudo ana
+#> grep '^sudo:' /etc/group
+sudo:x:27:ana
+#> sync
+#> exec /sbin/reboot -f</pre>
+<p><strong>Confira se deu certo:</strong> depois de entrar, <code>groups</code> mostra <code>sudo</code> na lista e <code>sudo -v</code> pede a senha da ana e aceita.</p>
+</li>
+<li>
+<h3>Lição</h3>
+<ul>
+  <li>Nunca use <code>usermod -G</code> sem o <code>-a</code>: ele <strong>substitui</strong> todos os grupos, e você perde o <code>sudo</code> sem perceber.</li>
+  <li>Antes de mexer nos próprios grupos ou no <code>/etc/sudoers</code>, deixe outro terminal com <code>sudo -i</code> aberto.</li>
+  <li>Para editar regras do sudo, use sempre <code>visudo</code>, que confere a sintaxe antes de salvar.</li>
+</ul>
+</li>
+</ol>
+
+<hr>
+
+<h2>Desafio 4: disco cheio</h2>
+
+<ol class="passo">
+<li>
+<h3>Quebre</h3>
+<p>O <code>fallocate</code> cria um arquivo grande instantaneamente. Vamos criar um que ocupa todo o espaço livre:</p>
+<dl class="anatomy">
+  <dt>fallocate -l</dt><dd>Reserva espaço para um arquivo, do tamanho (<em>length</em>) indicado.</dd>
+  <dt>$(df --output=avail -B1 / | tail -1)</dt><dd>O espaço livre da raiz, em bytes, calculado pelo <code>df</code>.</dd>
+  <dt>/var/tmp/enchedor</dt><dd>Um nome qualquer, num lugar onde ninguém procura.</dd>
+</dl>
+<pre class="term" data-host="lab" data-user="root">#> fallocate -l $(df --output=avail -B1 / | tail -1) /var/tmp/enchedor</pre>
+</li>
+<li>
+<h3>Sintoma</h3>
+<p>Coisas estranhas começam a falhar, e para um usuário comum a mensagem é sempre a mesma:</p>
+<pre class="term" data-host="lab">$ cp /etc/services ~/teste
+cp: erro de escrita de '/home/ana/teste': Não há espaço disponível no dispositivo
+$ df -h /
+Sist. Arq.      Tam. Usado Disp. Uso% Montado em
+/dev/sda1        19G   18G     0 100% /</pre>
+<div class="note">
+<strong>Por que o root ainda consegue gravar?</strong>
+<p>O ext4 reserva 5% do disco para o root, justamente para o sistema não travar de vez. Por isso serviços que rodam como root às vezes continuam funcionando um pouco mais.</p>
+</div>
+</li>
+<li>
+<h3>Diagnóstico</h3>
+<p>Do geral para o detalhe: primeiro qual pasta de nível 1 é grande, depois dentro dela.</p>
+<dl class="anatomy">
+  <dt>du</dt><dd>Mede o espaço usado (<em>disk usage</em>).</dd>
+  <dt>-x</dt><dd>Fica no mesmo sistema de arquivos (não conta <code>/proc</code>, <code>/sys</code>…).</dd>
+  <dt>-h</dt><dd>Tamanhos legíveis.</dd>
+  <dt>-d 1 /</dt><dd>Só um nível abaixo da raiz.</dd>
+  <dt>| sort -h</dt><dd>Ordena pelos tamanhos legíveis, maior por último.</dd>
+</dl>
+<pre class="term" data-host="lab" data-user="root">#> du -xh -d 1 / 2&gt;/dev/null | sort -h | tail -4
+212M	/var/cache                « não, esse fica em /var
+1,3G	/usr
+16G	/var                      « o culpado está aqui dentro
+18G	/
+#> du -xh -d 1 /var | sort -h | tail -3
+212M	/var/cache
+16G	/var/tmp
+16G	/var
+#> ls -lh /var/tmp
+total 16G
+-rw-r--r-- 1 root root 16G out 15 21:40 enchedor</pre>
+</li>
+<li>
+<h3>Conserte</h3>
+<pre class="term" data-host="lab" data-user="root">#> rm /var/tmp/enchedor
+#> apt clean
+#> journalctl --vacuum-size=100M
+Vacuuming done, freed 0B of archived journals from /var/log/journal.
+#> df -h /
+Sist. Arq.      Tam. Usado Disp. Uso% Montado em
+/dev/sda1        19G  1,6G   17G   9% /</pre>
+<p><strong>Confira se deu certo:</strong> <code>df -h /</code> volta a mostrar espaço livre e o <code>cp</code> funciona.</p>
+<div class="cenario">
+<strong>Se deu errado: apaguei um arquivo grande e o espaço não voltou</strong>
+<p>Algum programa ainda está com o arquivo aberto (um log que um serviço continua escrevendo). O espaço só volta quando ele fecha. Ache com <code>lsof +L1</code> (pacote <code>lsof</code>) e reinicie o serviço dono do arquivo.</p>
+</div>
+</li>
+<li>
+<h3>Lição</h3>
+<p>Os vilões de sempre num Debian: <code>/var/log</code> e o journal, <code>/var/cache/apt</code> (limpe com <code>apt clean</code>), kernels antigos (<code>apt autoremove</code>), imagens de container (<code>/var/lib/docker</code>) e arquivos esquecidos em <code>/var/tmp</code>. Veja <a href="discos.html">lsblk, df, du</a>.</p>
+</li>
+</ol>
+
+<hr>
+
+<h2>Desafio 5: o serviço que não sobe</h2>
+<p>Precisa do Apache instalado (feito no <a href="projeto-servidor-web.html">Servidor Web do Zero</a>).</p>
+
+<ol class="passo">
+<li>
+<h3>Quebre</h3>
+<p>Um erro de digitação, como acontece de verdade: <code>DocumentRoot</code> vira <code>DocumentRot</code>.</p>
+<pre class="term" data-host="lab">$ sudo sed -i 's/DocumentRoot/DocumentRot/' /etc/apache2/sites-available/000-default.conf
+$ sudo systemctl restart apache2
+Job for apache2.service failed because the control process exited with error code.
+See "systemctl status apache2.service" and "journalctl -xeu apache2.service" for details.</pre>
+</li>
+<li>
+<h3>Diagnóstico</h3>
+<p>A própria mensagem diz onde olhar. Mas o caminho mais rápido é pedir ao Apache para conferir a configuração:</p>
+<pre class="term" data-host="lab">$ sudo apache2ctl configtest
+AH00526: Syntax error on line 12 of /etc/apache2/sites-enabled/000-default.conf:
+Invalid command 'DocumentRot', perhaps misspelled or defined by a module not included in the server configuration</pre>
+<p>Tudo o que você precisa: o arquivo, a linha (12) e a palavra errada. O <code>journalctl</code> mostra a mesma coisa, com data:</p>
+<pre class="term" data-host="lab">$ sudo journalctl -u apache2 -n 5 --no-pager</pre>
+</li>
+<li>
+<h3>Conserte</h3>
+<pre class="term" data-host="lab">$ sudo sed -i 's/DocumentRot /DocumentRoot /' /etc/apache2/sites-available/000-default.conf
+$ sudo apache2ctl configtest
+Syntax OK
+$ sudo systemctl restart apache2
+$ systemctl is-active apache2
+active</pre>
+</li>
+<li>
+<h3>Lição</h3>
+<p>Antes de reiniciar um serviço depois de editar a configuração, teste-a: <code>apache2ctl configtest</code>, <code>nginx -t</code>, <code>sshd -t</code>, <code>visudo -c</code>, <code>nft -c -f</code>. Um teste de dois segundos evita derrubar o site.</p>
+</li>
+</ol>
+
+<hr>
+
+<h2>Desafio 6: a rede caiu e o SSH junto</h2>
+
+<ol class="passo">
+<li>
+<h3>Quebre</h3>
+<p>Troque o nome da interface no <code>/etc/network/interfaces</code> por um que não existe e reinicie a rede. A sessão SSH vai congelar: é o esperado. Faça pela janela da VM ou aceite perder o SSH.</p>
+<pre class="term" data-host="lab" data-user="root">#> cp /etc/network/interfaces /etc/network/interfaces.bak
+#> sed -i 's/enp0s3/enp9s9/g' /etc/network/interfaces
+#> systemctl restart networking</pre>
+</li>
+<li>
+<h3>Sintoma</h3>
+<p>O SSH para de responder. Do seu computador:</p>
+<pre class="term" data-host="notebook">$ ssh -p 2222 ana@127.0.0.1
+kex_exchange_identification: read: Connection reset by peer</pre>
+</li>
+<li>
+<h3>Diagnóstico, pelo console da VM</h3>
+<p>Entre como root na janela do VirtualBox e compare o nome real da interface com o do arquivo:</p>
+<pre class="term" data-title="console da VM lab" data-user="root">#> ip -br a
+lo               UNKNOWN        127.0.0.1/8 ::1/128
+enp0s3           DOWN                                     « a placa existe, mas está sem IP
+#> grep -n enp /etc/network/interfaces
+11:allow-hotplug enp9s9
+12:iface enp9s9 inet dhcp</pre>
+</li>
+<li>
+<h3>Conserte</h3>
+<pre class="term" data-title="console da VM lab" data-user="root">#> cp /etc/network/interfaces.bak /etc/network/interfaces
+#> ifup enp0s3
+#> ip -br a show enp0s3
+enp0s3           UP             10.0.2.15/24 fe80::a00:27ff:fe4e:66a1/64</pre>
+<p><strong>Confira se deu certo:</strong> o <code>ssh -p 2222 ana@127.0.0.1</code> volta a funcionar.</p>
+</li>
+<li>
+<h3>Lição</h3>
+<ul>
+  <li>Mexer na rede de um servidor remoto sem acesso ao console é pedir para viajar até ele. Em servidores na nuvem, descubra antes onde fica o "console serial" do provedor.</li>
+  <li>Os nomes das placas no Debian são previsíveis (<code>enp0s3</code>, <code>ens18</code>…) e aparecem em <code>ip -br a</code>. Copie de lá, não digite de memória.</li>
+  <li>Tenha sempre uma cópia <code>.bak</code> antes de editar um arquivo de configuração.</li>
+</ul>
+</li>
+</ol>
+
+<hr>
+
+<h2>Checklist do que você aprendeu</h2>
+<ul>
+  <li><code>findmnt --verify</code> e <code>nofail</code> evitam o modo de emergência por causa do fstab.</li>
+  <li><code>init=/bin/bash</code> no GRUB abre um shell de root sem senha; depois, <code>mount -o remount,rw /</code>.</li>
+  <li>Com o root bloqueado, o modo de recuperação não abre; o <code>init=/bin/bash</code> continua funcionando.</li>
+  <li>Disco cheio: <code>df -h</code> para ver, <code>du -xh -d 1 | sort -h</code> para achar.</li>
+  <li>Serviço que não sobe: teste a configuração (<code>apache2ctl configtest</code>) e leia o <code>journalctl -u</code>.</li>
+  <li>Rede caída: console da VM, <code>ip -br a</code>, compare com <code>/etc/network/interfaces</code>, <code>ifup</code>.</li>
+</ul>
+
+<h2>Desafios extras</h2>
+<ul>
+  <li>Proteja o GRUB com senha (<code>grub-mkpasswd-pbkdf2</code>) e veja o desafio 2 deixar de funcionar.</li>
+  <li>Apague o kernel em uso por engano (numa VM com snapshot!) e recupere com um pendrive live e <code>chroot</code>. Veja <a href="recuperacao.html">Recuperar um Sistema</a>.</li>
+  <li>Deixe um processo usando 100% de CPU (<code>yes &gt; /dev/null &amp;</code>), ache com <code>top</code> e encerre com <code>kill</code>.</li>
+</ul>
+
+<h2>Limpeza</h2>
+<p>O jeito mais rápido é restaurar o snapshot tirado no começo:</p>
+<pre class="term" data-host="notebook">$ VBoxManage controlvm lab poweroff
+$ VBoxManage snapshot lab restore antes-do-desafio</pre>
+
+<hr>
+
+<h2>Exercícios</h2>
+
+<div class="mc" data-answer="2">
+<p class="mc-q">1. O boot parou em "You are in emergency mode" logo depois de você adicionar um HD de backup no fstab. Qual a primeira coisa a fazer?</p>
+<label><input type="radio" name="q1"> Reinstalar o Debian.</label>
+<label><input type="radio" name="q1"> Entrar com a senha do root e rodar <code>findmnt --verify</code>.</label>
+<label><input type="radio" name="q1"> Apertar <kbd>Ctrl</kbd>+<kbd>Alt</kbd>+<kbd>Del</kbd> até funcionar.</label>
+<label><input type="radio" name="q1"> Apagar o <code>/etc/fstab</code>.</label>
+</div>
+
+<div class="exercise">
+<h3>2. A opção que salva o boot</h3>
+<p>Complete a linha do fstab para um HD externo que nem sempre está ligado:</p>
+<div class="ex-code">UUID=1234-ABCD  /backup  ext4  defaults,<input data-answer="nofail" aria-label="opção">  0  2</div>
+</div>
+
+<div class="exercise">
+<h3>3. Shell de root pelo GRUB</h3>
+<p>O que acrescentar no fim da linha <code>linux</code> do GRUB?</p>
+<div class="ex-code"><input data-answer="init=/bin/bash" aria-label="parâmetro do kernel"></div>
+</div>
+
+<div class="mc" data-answer="4">
+<p class="mc-q">4. No shell do <code>init=/bin/bash</code>, o <code>passwd</code> diz "Authentication token manipulation error". O que faltou?</p>
+<label><input type="radio" name="q4"> Rodar como root.</label>
+<label><input type="radio" name="q4"> Instalar o sudo.</label>
+<label><input type="radio" name="q4"> Reiniciar a rede.</label>
+<label><input type="radio" name="q4"> <code>mount -o remount,rw /</code>.</label>
+</div>
+
+<hr>
+
+<h2>Resumo</h2>
+<ul>
+  <li>Quebrar de propósito num laboratório com snapshot é o melhor treino para emergências reais.</li>
+  <li>Quase todo problema de boot se resolve com o console, a senha do root (ou <code>init=/bin/bash</code>) e a leitura da mensagem de erro.</li>
+  <li>Teste antes de aplicar: <code>findmnt --verify</code>, <code>apache2ctl configtest</code>, <code>visudo -c</code>, <code>nft -c</code>.</li>
+</ul>
+
+<div class="pager"></div>
+
+</div>
+</main>
+</div>
+<script src="assets/site.js"></script>
+</body>
+</html>

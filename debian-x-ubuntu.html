@@ -1,0 +1,187 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Debian x Ubuntu — o que muda para quem vem do Ubuntu | Guia Debian</title>
+<meta name="description" content="Comparativo conferido entre Debian 13 e Ubuntu 26.04: sudo e su, PATH, mensagens, ls, snap e flatpak, rede, repositórios, firewall, logs, SysRq e os comandos que mudam, com exemplos lado a lado.">
+<link rel="stylesheet" href="assets/style.css">
+<script>try{var t=localStorage.getItem("tema");if(t)document.documentElement.setAttribute("data-theme",t)}catch(e){}</script>
+</head>
+<body>
+<div class="layout">
+<nav class="sidebar" id="sidebar" aria-label="Tópicos"></nav>
+<main class="main">
+<div class="content">
+
+<div class="pager"></div>
+
+<h1>Debian <span class="hl">x Ubuntu</span></h1>
+
+<p class="intro">O Ubuntu é feito a partir do Debian, então quase tudo o que você sabe continua valendo: o terminal, o <code>apt</code>, o <code>systemctl</code>, as permissões. Mas há diferenças que pegam de surpresa no primeiro dia, a começar pelo <code>sudo</code>, que pode nem existir. Esta página reúne todas elas, conferidas num Debian 13.7 e num Ubuntu 26.04 de verdade.</p>
+
+<div class="note">
+<strong>Você vai aprender</strong>
+<ul>
+  <li>As diferenças que mais confundem quem vem do Ubuntu, numa tabela só.</li>
+  <li>Por que o mesmo comando dá mensagens diferentes nos dois sistemas.</li>
+  <li>O equivalente Debian de cada hábito do Ubuntu: snap, netplan, ufw, <code>/var/log/syslog</code>.</li>
+  <li>Onde, neste guia, está a aula completa de cada assunto.</li>
+</ul>
+</div>
+
+<p>Se você ainda não conhece o Ubuntu, pode pular esta página. Se conhece, ela economiza horas. O guia irmão está em <a href="https://wallysondevs.github.io/guia-ubuntu/">Guia Ubuntu</a>.</p>
+
+<hr>
+
+<h2>A tabela das diferenças</h2>
+<p>Comparação entre um <strong>Debian 13 "trixie"</strong> instalado com senha de root (o caminho que o instalador sugere) e um <strong>Ubuntu 26.04 LTS</strong> desktop.</p>
+
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Assunto</th><th>Ubuntu 26.04</th><th>Debian 13</th><th>Aula</th></tr>
+<tr><td>Virar administrador</td><td><code>sudo</code> (sudo-rs) já instalado; o primeiro usuário está no grupo <code>sudo</code></td><td>Se você definiu senha de root na instalação, o <code>sudo</code> <strong>não vem instalado</strong> e a <code>ana</code> fica fora do grupo; usa-se <code>su -</code></td><td><a href="root-su-sudo.html">root, su e sudo</a></td></tr>
+<tr><td>Pedido de senha</td><td><code>[sudo: authenticate] Senha:</code> (senha da <code>ana</code>)</td><td><code>Senha:</code> do <code>su</code> (senha do <strong>root</strong>)</td><td><a href="root-su-sudo.html">root, su e sudo</a></td></tr>
+<tr><td>PATH do usuário comum</td><td>Inclui <code>/usr/sbin</code> e <code>/sbin</code></td><td><code>/usr/local/bin:/usr/bin:/bin:/usr/local/games:/usr/games</code>: <code>reboot</code>, <code>adduser</code> e <code>blkid</code> dão "comando não encontrado"</td><td><a href="bashrc.html">.bashrc, alias, PATH</a></td></tr>
+<tr><td>Comandos básicos</td><td>Reescritos em Rust (rust-coreutils): mensagens metade em inglês</td><td>GNU coreutils 9.7: mensagens quase todas em português</td><td><a href="criar.html">touch e mkdir</a></td></tr>
+<tr><td><code>ls -l</code></td><td>Mês em inglês (<code>Oct 15</code>)</td><td>Mês em português (<code>out 15</code>)</td><td><a href="ls.html">ls</a></td></tr>
+<tr><td>Ordem do <code>ls</code></td><td>Por código de caractere: maiúsculas primeiro, acentos no fim</td><td>Pelo idioma: maiúsculas e minúsculas misturadas, acentos ignorados</td><td><a href="ls.html">ls</a></td></tr>
+<tr><td>Atalho <code>ll</code></td><td>Existe (<code>ls -alF</code>)</td><td>Vem <strong>comentado</strong> no <code>~/.bashrc</code> (<code>#alias ll='ls -l'</code>)</td><td><a href="bashrc.html">.bashrc, alias, PATH</a></td></tr>
+<tr><td>Pasta pessoal</td><td><code>drwxr-x---</code> (750)</td><td><code>drwx------</code> (700)</td><td><a href="permissoes.html">Entendendo Permissões</a></td></tr>
+<tr><td>Programas fora do apt</td><td>Snap (o Firefox e o Chromium são snaps)</td><td>Sem snap; o padrão é Flatpak (Flathub)</td><td><a href="flatpak.html">Flatpak</a></td></tr>
+<tr><td>Navegador</td><td>Firefox em snap</td><td>Firefox ESR em .deb (processo <code>firefox-esr</code>)</td><td><a href="desktop.html">O Desktop</a></td></tr>
+<tr><td>GNOME</td><td>Com a "Ubuntu Dock" fixa na lateral</td><td>GNOME original, sem dock fixa (extensão <code>dashtodock</code> opcional)</td><td><a href="desktop.html">O Desktop</a></td></tr>
+<tr><td>Repositórios</td><td><code>/etc/apt/sources.list.d/ubuntu.sources</code> (formato deb822)</td><td><code>/etc/apt/sources.list</code> no formato de uma linha; <code>apt modernize-sources</code> converte</td><td><a href="repositorios.html">Repositórios</a></td></tr>
+<tr><td>PPA / <code>add-apt-repository</code></td><td>Existem</td><td>Não existem; repositórios de terceiros usam <code>signed-by</code></td><td><a href="repositorios.html">Repositórios</a></td></tr>
+<tr><td>Rede do servidor</td><td>Netplan (<code>/etc/netplan/*.yaml</code>)</td><td>ifupdown (<code>/etc/network/interfaces</code>) + dhcpcd</td><td><a href="configurar-rede.html">Configurar a Rede</a></td></tr>
+<tr><td>Firewall</td><td><code>ufw</code> instalado (desligado)</td><td>Nada instalado além do <code>nft</code>; o serviço <code>nftables</code> vem desligado</td><td><a href="nftables.html">nftables</a></td></tr>
+<tr><td>Logs em texto</td><td><code>/var/log/syslog</code> (rsyslog)</td><td><strong>Não existe</strong> <code>/var/log/syslog</code>: use <code>journalctl</code></td><td><a href="journalctl.html">Logs (journalctl)</a></td></tr>
+<tr><td>Comando inexistente</td><td>Sugere o pacote (command-not-found)</td><td>Só <code>bash: x: comando não encontrado</code></td><td><a href="problemas.html">Solução de Problemas</a></td></tr>
+<tr><td>Vêm instalados?</td><td><code>curl</code>, <code>rsync</code>, <code>killall</code>, <code>ufw</code></td><td>Nenhum desses (<code>wget</code>, <code>dig</code> e <code>nano</code> sim)</td><td><a href="curl-wget.html">curl, wget, dig</a></td></tr>
+<tr><td>SysRq (teclas mágicas)</td><td><code>176</code>: só S, U e B</td><td><code>438</code>: R, S, U e B (E e I continuam bloqueadas)</td><td><a href="travamentos.html">Quando o Sistema Trava</a></td></tr>
+<tr><td>Versões</td><td>LTS a cada 2 anos, 5 anos de suporte (mais com Ubuntu Pro)</td><td>stable a cada ~2 anos, ~3 anos de suporte + LTS até ~5 anos</td><td><a href="versoes.html">Versões do Debian</a></td></tr>
+<tr><td>Ritmo dos pacotes</td><td>Mais novos; versões intermediárias a cada 6 meses</td><td>Congelados na stable; programas novos via <a href="backports.html">backports</a> ou testing</td><td><a href="versoes.html">Versões do Debian</a></td></tr>
+<tr><td>Sair do shell de root</td><td colspan="2">Igual nos dois: depois de um shell de login (<code>su -</code>, <code>sudo -i</code>) aparece <code>sair</code>; depois de um shell comum (<code>su</code>), <code>exit</code></td><td><a href="root-su-sudo.html">root, su e sudo</a></td></tr>
+</table>
+</div>
+
+<div class="tip">
+<strong>E se eu deixar a senha de root em branco na instalação?</strong>
+<p>Aí o Debian se comporta como o Ubuntu: instala o <code>sudo</code>, coloca o primeiro usuário no grupo <code>sudo</code> e bloqueia o login direto do root. A aula <a href="instalacao.html">Instalação</a> mostra essa escolha.</p>
+</div>
+
+<hr>
+
+<h2>Comandos que mudam</h2>
+<p>Abaixo, o mesmo comando nos dois sistemas. As máquinas são a <code>ana@notebook</code> do Debian e a do Ubuntu, com o título da janela dizendo qual é qual.</p>
+
+<h3>Instalar um programa</h3>
+<pre class="term" data-title="Ubuntu 26.04">$ sudo apt install htop
+[sudo: authenticate] Senha:</pre>
+<pre class="term" data-title="Debian 13">$ sudo apt install htop
+bash: sudo: comando não encontrado
+$ su -c "apt install htop"
+Senha:</pre>
+<p>No Debian, <code>su -c</code> roda um comando como root e volta. Para um shell inteiro de root, <code>su -</code> e, no fim, <code>exit</code>.</p>
+
+<h3>Reiniciar a máquina</h3>
+<pre class="term" data-title="Ubuntu 26.04">$ reboot</pre>
+<pre class="term" data-title="Debian 13">$ reboot
+bash: reboot: comando não encontrado     « fora do PATH da ana
+$ su -c reboot</pre>
+
+<h3>Criar uma pasta que já existe</h3>
+<pre class="term" data-title="Ubuntu 26.04">$ mkdir fotos
+mkdir: fotos: Arquivo existe</pre>
+<pre class="term" data-title="Debian 13">$ mkdir fotos
+mkdir: cannot create directory ‘fotos’: Arquivo existe</pre>
+<p>Mesmo erro, textos diferentes: o Ubuntu usa o mkdir em Rust e o Debian, o do GNU (que deixa o começo da frase sem traduzir).</p>
+
+<h3>Ver o log do sistema</h3>
+<pre class="term" data-title="Ubuntu 26.04">$ tail -n 2 /var/log/syslog</pre>
+<pre class="term" data-title="Debian 13">$ tail -n 2 /var/log/syslog
+tail: não foi possível abrir '/var/log/syslog' para leitura: Arquivo ou diretório inexistente
+$ journalctl -n 2
+Hint: You are currently not seeing messages from other users and the system.
+      Users in groups 'adm', 'systemd-journal' can see all messages.
+      Pass -q to turn off this notice.</pre>
+<p>Para ver os logs de tudo, rode o <code>journalctl</code> como root ou coloque a <code>ana</code> no grupo <code>adm</code>.</p>
+
+<h3>Listar arquivos</h3>
+<pre class="term" data-title="Ubuntu 26.04">$ ls -l frutas.txt
+-rw-rw-r-- 1 ana ana 47 Oct 14 16:05 frutas.txt</pre>
+<pre class="term" data-title="Debian 13">$ ls -l frutas.txt
+-rw-rw-r-- 1 ana ana 47 out 14 16:05 frutas.txt
+$ ll
+bash: ll: comando não encontrado</pre>
+
+<h3>Abrir o firewall para o SSH</h3>
+<pre class="term" data-title="Ubuntu 26.04">#> ufw allow ssh</pre>
+<pre class="term" data-title="Debian 13">#> ufw allow ssh
+bash: ufw: comando não encontrado</pre>
+<p>No Debian, o caminho nativo é o <a href="nftables.html">nftables</a>: você escreve as regras em <code>/etc/nftables.conf</code> e liga o serviço, que vem desligado. O <a href="ufw.html">ufw</a> pode ser instalado se você preferir o jeito do Ubuntu.</p>
+
+<hr>
+
+<h2>O que continua igual</h2>
+<ul>
+  <li><code>apt</code>, <code>dpkg</code> e os pacotes <code>.deb</code> (o Ubuntu herdou tudo do Debian).</li>
+  <li><code>systemctl</code>, <code>journalctl</code> e o systemd.</li>
+  <li>Bash, permissões, <code>grep</code>, <code>find</code>, pipes e redirecionamento.</li>
+  <li>SSH, <code>ip</code>, <code>ping</code>, cron.</li>
+  <li>Os atalhos do GNOME e o terminal de emergência (<kbd>Ctrl</kbd>+<kbd>Alt</kbd>+<kbd>F3</kbd>).</li>
+</ul>
+
+<hr>
+
+<h2>Exercícios</h2>
+
+<div class="mc" data-answer="3">
+<p class="mc-q">1. Você instalou o Debian definindo senha de root. Qual comando funciona para atualizar a lista de pacotes?</p>
+<label><input type="radio" name="q1"> <code>sudo apt update</code></label>
+<label><input type="radio" name="q1"> <code>apt update</code> como ana</label>
+<label><input type="radio" name="q1"> <code>su -c "apt update"</code></label>
+<label><input type="radio" name="q1"> <code>root apt update</code></label>
+</div>
+
+<div class="mc" data-answer="2">
+<p class="mc-q">2. Onde você procura o log do sistema num Debian 13 recém-instalado?</p>
+<label><input type="radio" name="q2"> <code>/var/log/syslog</code></label>
+<label><input type="radio" name="q2"> <code>journalctl</code></label>
+<label><input type="radio" name="q2"> <code>/var/log/messages</code></label>
+<label><input type="radio" name="q2"> <code>dmesg</code> é o único jeito</label>
+</div>
+
+<div class="mc" data-answer="4">
+<p class="mc-q">3. A <code>ana</code> digita <code>reboot</code> e recebe "comando não encontrado". Por quê?</p>
+<label><input type="radio" name="q3"> O Debian não tem o comando reboot.</label>
+<label><input type="radio" name="q3"> Falta instalar o pacote reboot.</label>
+<label><input type="radio" name="q3"> O sistema está travado.</label>
+<label><input type="radio" name="q3"> O <code>reboot</code> fica em <code>/usr/sbin</code>, fora do PATH do usuário comum.</label>
+</div>
+
+<div class="exercise">
+<h3>4. Formato do repositório</h3>
+<p>Complete o caminho do arquivo de repositórios de um Debian 13 recém-instalado:</p>
+<div class="ex-code">/etc/apt/<input data-answer="sources.list" aria-label="arquivo"></div>
+</div>
+
+<hr>
+
+<h2>Resumo</h2>
+<ul>
+  <li>Com senha de root, o Debian não tem <code>sudo</code>: use <code>su -</code> ou <code>su -c "comando"</code>.</li>
+  <li>O PATH da <code>ana</code> não tem <code>/sbin</code>, por isso <code>reboot</code> e <code>adduser</code> não são encontrados.</li>
+  <li>Sem snap, sem netplan, sem ufw, sem <code>/var/log/syslog</code>: use Flatpak, ifupdown, nftables e <code>journalctl</code>.</li>
+  <li>As mensagens dos comandos básicos vêm do GNU, em português, e o <code>ls</code> segue o idioma.</li>
+  <li>O resto (apt, systemd, bash) é o mesmo que você já conhece.</li>
+</ul>
+
+<div class="pager"></div>
+
+</div>
+</main>
+</div>
+<script src="assets/site.js"></script>
+</body>
+</html>

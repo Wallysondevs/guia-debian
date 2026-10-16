@@ -1,0 +1,324 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Debian Incus — containers de sistema (e o LXD) | Guia Debian</title>
+<meta name="description" content="Incus no Debian 13: o que é um container de sistema, incus-base x incus, incus admin init, launch images:debian/13, exec, snapshots, uso por usuário comum e o conflito com o Docker no firewall. Inclui a situação do LXD no Debian.">
+<link rel="stylesheet" href="assets/style.css">
+<script>try{var t=localStorage.getItem("tema");if(t)document.documentElement.setAttribute("data-theme",t)}catch(e){}</script>
+</head>
+<body>
+<div class="layout">
+<nav class="sidebar" id="sidebar" aria-label="Tópicos"></nav>
+<main class="main">
+<div class="content">
+
+<div class="pager"></div>
+
+<h1>Debian <span class="hl">Incus (containers de sistema)</span></h1>
+
+<p class="intro">O <a href="docker.html">Docker</a> e o <a href="podman.html">Podman</a> empacotam <strong>um programa</strong> por container. O <strong>Incus</strong> roda <strong>um sistema inteiro</strong> por container: um Debian, um Ubuntu ou um Alpine com systemd, usuários, SSH e <code>apt</code>, que sobe em segundos e gasta quase nada. É como ter dezenas de VMs leves para testar, estudar ou separar serviços.</p>
+
+<div class="note">
+<strong>Você vai aprender</strong>
+<ul>
+  <li>A diferença entre container de aplicação e container de sistema.</li>
+  <li>Incus, LXD e LXC: quem é quem, e o que o Debian 13 oferece.</li>
+  <li>Instalar, inicializar e lançar um Debian 13 dentro do seu Debian.</li>
+  <li>Entrar, tirar <em>snapshots</em> e voltar no tempo.</li>
+  <li>Usar como usuário comum e resolver o conflito com o Docker.</li>
+</ul>
+</div>
+
+<p>Testado no Debian 13 de laboratório, com Incus 6.0.4. A VM de laboratório já tinha o Docker instalado, e isso rendeu o cenário mais importante desta aula.</p>
+
+<hr>
+
+<h2>Conceito: aplicação x sistema</h2>
+<div class="table-wrap">
+<table class="ref">
+<tr><th></th><th>Docker / Podman</th><th>Incus</th><th>VM (<a href="kvm.html">KVM</a>)</th></tr>
+<tr><td>Dentro tem</td><td>Um programa</td><td>Um sistema inteiro (systemd, SSH, apt)</td><td>Um sistema inteiro com kernel próprio</td></tr>
+<tr><td>Uso típico</td><td>Rodar um serviço empacotado</td><td>"Servidores" leves para testes e serviços</td><td>Outro sistema operacional, isolamento forte</td></tr>
+<tr><td>Kernel</td><td>O do Debian</td><td>O do Debian</td><td>Próprio</td></tr>
+<tr><td>Sobe em</td><td>Menos de 1 s</td><td>Poucos segundos</td><td>Dezenas de segundos</td></tr>
+</table>
+</div>
+
+<h3>Incus, LXD e LXC</h3>
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Nome</th><th>O que é</th><th>No Debian 13</th></tr>
+<tr><td><strong>LXC</strong></td><td>A tecnologia de baixo nível de containers do Linux</td><td>Pacote <code>lxc</code></td></tr>
+<tr><td><strong>LXD</strong></td><td>O gerenciador criado pela Canonical (empresa do Ubuntu), usado pelo comando <code>lxc</code></td><td>Pacote <code>lxd</code> na versão 5.0.2, uma linha antiga mantida pelo Debian</td></tr>
+<tr><td><strong>Incus</strong></td><td>Continuação comunitária do LXD (2023), mantida pela antiga equipe do projeto</td><td>Pacotes <code>incus</code> 6.0.4 (versão de suporte longo), a opção recomendada</td></tr>
+</table>
+</div>
+<p>Os comandos do Incus são quase iguais aos do LXD, trocando <code>lxc</code> por <code>incus</code>. Quem aprender um aprende o outro.</p>
+
+<hr>
+
+<h2>Instalar</h2>
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Pacote</th><th>O que traz</th></tr>
+<tr><td><code>incus-base</code></td><td>O serviço só com containers. Leve.</td></tr>
+<tr><td><code>incus</code></td><td>Containers <strong>e</strong> máquinas virtuais (puxa o QEMU, bem maior)</td></tr>
+<tr><td><code>incus-client</code></td><td>O comando <code>incus</code> (para gerenciar um servidor remoto, por exemplo)</td></tr>
+</table>
+</div>
+
+<pre class="term">$ su -
+Senha:</pre>
+<pre class="term" data-user="root" data-cwd="/root">#> apt install incus-base incus-client
+#> incus --version
+6.0.4
+#> getent group incus incus-admin
+incus:x:987:
+incus-admin:x:986:</pre>
+
+<p>O pacote cria dois grupos. Eles decidem quem pode usar o Incus sem ser root:</p>
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Grupo</th><th>Acesso</th></tr>
+<tr><td><code>incus-admin</code></td><td>Controle total, inclusive do sistema. <strong>Equivale a root</strong>, como o grupo <code>docker</code>.</td></tr>
+<tr><td><code>incus</code></td><td>Cada usuário ganha um "projeto" restrito só dele, com limites. Seguro para usuários comuns.</td></tr>
+</table>
+</div>
+
+<hr>
+
+<h2>Inicializar: <code>incus admin init</code></h2>
+<p>Antes do primeiro container, o Incus precisa de um lugar para guardar os sistemas (<em>storage pool</em>) e de uma rede. O <code>init</code> pergunta tudo; com <code>--minimal</code>, ele usa os padrões:</p>
+
+<dl class="anatomy">
+  <dt>incus admin init</dt><dd>Configuração inicial, uma vez só.</dd>
+  <dt>--minimal</dt><dd>Sem perguntas: armazenamento numa pasta (<code>dir</code>) e uma ponte de rede <code>incusbr0</code> com NAT.</dd>
+</dl>
+
+<pre class="term" data-user="root" data-cwd="/root">#> incus admin init --minimal
+#> incus network list
++----------+----------+---------+----------------+---------------------------+-------------+---------+---------+
+|   NAME   |   TYPE   | MANAGED |      IPV4      |           IPV6            | DESCRIPTION | USED BY |  STATE  |
++----------+----------+---------+----------------+---------------------------+-------------+---------+---------+
+| docker0  | bridge   | NO      |                |                           |             | 0       |         |
+| enp1s0   | physical | NO      |                |                           |             | 0       |         |
+| incusbr0 | bridge   | YES     | 10.12.235.1/24 | fd42:15ad:ed7b:3a08::1/64 |             | 2       | CREATED |   « a rede dos containers
+| lo       | loopback | NO      |                |                           |             | 0       |         |
++----------+----------+---------+----------------+---------------------------+-------------+---------+---------+</pre>
+
+<p>A rede <code>10.12.235.0/24</code> é sorteada na instalação; na sua máquina o número será outro.</p>
+
+<hr>
+
+<h2>Um Debian dentro do Debian</h2>
+
+<dl class="anatomy">
+  <dt>incus launch</dt><dd>Baixa a imagem (se preciso), cria e liga o container.</dd>
+  <dt>images:debian/13</dt><dd>Imagem <code>debian/13</code> do servidor público <code>images</code> (<em>images.linuxcontainers.org</em>).</dd>
+  <dt>c1</dt><dd>O nome do container.</dd>
+</dl>
+
+<pre class="term" data-user="root" data-cwd="/root">#> incus launch images:debian/13 c1
+Launching c1
+Retrieving image: rootfs: 100% (363.10kB/s)          « só na primeira vez (~100 MB)
+#> incus list
++------+---------+----------------------+------+-----------+-----------+
+| NAME |  STATE  |         IPV4         | IPV6 |   TYPE    | SNAPSHOTS |
++------+---------+----------------------+------+-----------+-----------+
+| c1   | RUNNING | 10.12.235.165 (eth0) |      | CONTAINER | 0         |
++------+---------+----------------------+------+-----------+-----------+</pre>
+
+<p>Logo depois do <code>launch</code>, a coluna IPV4 pode aparecer vazia por alguns segundos, enquanto o sistema de dentro dá boot.</p>
+
+<h3>Entrar e usar</h3>
+<pre class="term" data-user="root" data-cwd="/root">#> incus exec c1 -- cat /etc/os-release
+PRETTY_NAME="Debian GNU/Linux 13 (trixie)"
+NAME="Debian GNU/Linux"
+…
+#> incus exec c1 -- bash</pre>
+<pre class="term" data-user="root" data-host="c1">#> apt-get update
+…
+Reading package lists...           « dentro do container as mensagens saem em inglês (a imagem não traz traduções)
+#> exit</pre>
+
+<dl class="anatomy">
+  <dt>incus exec c1</dt><dd>Roda um comando dentro do container, como root dele.</dd>
+  <dt>--</dt><dd>Separa as opções do <code>incus</code> do comando de dentro.</dd>
+  <dt>bash</dt><dd>Um shell: você "entra" no container.</dd>
+</dl>
+
+<hr>
+
+<h2>Snapshots: voltar no tempo</h2>
+<p>Antes de um teste arriscado, tire uma foto do container. Se der errado, restaure em segundos.</p>
+
+<pre class="term" data-user="root" data-cwd="/root">#> incus snapshot create c1 antes
+#> incus snapshot list c1
++-------+----------------------+------------+----------+
+| NAME  |       TAKEN AT       | EXPIRES AT | STATEFUL |
++-------+----------------------+------------+----------+
+| antes | 2026/10/15 23:32 -03 |            | NO       |
++-------+----------------------+------------+----------+
+#> incus exec c1 -- touch /root/arquivo-novo
+#> incus exec c1 -- ls /root
+arquivo-novo
+#> incus snapshot restore c1 antes
+#> incus exec c1 -- ls /root
+#>                                   « vazio: o container voltou ao momento da foto</pre>
+
+<h3>Parar e apagar</h3>
+<pre class="term" data-user="root" data-cwd="/root">#> incus stop c1
+#> incus list c1 -c ns
++------+---------+
+| NAME |  STATE  |
++------+---------+
+| c1   | STOPPED |
++------+---------+
+#> incus delete c1</pre>
+
+<hr>
+
+<h2>Usuários comuns: o grupo <code>incus</code></h2>
+<p>Colocando um usuário no grupo <code>incus</code> (como root: <code>usermod -aG incus ana</code>, e a ana sai e entra de novo), ele ganha um projeto próprio, isolado dos outros:</p>
+
+<pre class="term">$ incus list
+To start your first container, try: incus launch images:ubuntu/22.04
+Or for a virtual machine: incus launch images:ubuntu/22.04 --vm
+
++------+-------+------+------+------+-----------+
+| NAME | STATE | IPV4 | IPV6 | TYPE | SNAPSHOTS |
++------+-------+------+------+------+-----------+
+$ incus project list
++---------------------+--------+----------+-----------------+-----------------+----------+---------------+---------------------------------------------+---------+
+|        NAME         | IMAGES | PROFILES | STORAGE VOLUMES | STORAGE BUCKETS | NETWORKS | NETWORK ZONES |                 DESCRIPTION                 | USED BY |
++---------------------+--------+----------+-----------------+-----------------+----------+---------------+---------------------------------------------+---------+
+| user-1000 (current) | YES    | YES      | YES             | YES             | NO       | YES           | User restricted project for "ana" (1000)    | 1       |
++---------------------+--------+----------+-----------------+-----------------+----------+---------------+---------------------------------------------+---------+</pre>
+
+<p>A sugestão de <code>ubuntu/22.04</code> é só um texto fixo do Incus; a ana pode usar <code>images:debian/13</code> do mesmo jeito.</p>
+
+<hr>
+
+<h2>Formas diferentes de ter "máquinas" de teste</h2>
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Forma</th><th>Exemplo</th><th>Melhor quando…</th></tr>
+<tr><td>Container Incus</td><td><code>incus launch images:debian/13 teste</code></td><td>Muitos sistemas Linux leves, com snapshots</td></tr>
+<tr><td>VM Incus</td><td><code>incus launch images:debian/13 teste --vm</code> (pacote <code>incus</code>)</td><td>Precisa de kernel próprio, sem sair do mesmo comando</td></tr>
+<tr><td>VM com <a href="kvm.html">KVM/libvirt</a></td><td><code>virt-install …</code></td><td>Qualquer sistema, inclusive Windows</td></tr>
+<tr><td>Container de aplicação</td><td><a href="docker.html">Docker</a>, <a href="podman.html">Podman</a></td><td>Um programa só</td></tr>
+<tr><td><code>debootstrap</code> + <code>systemd-nspawn</code></td><td>Um Debian numa pasta</td><td>Montar sistemas à mão, sem serviço gerenciador</td></tr>
+</table>
+</div>
+
+<hr>
+
+<h2>Quando não funciona</h2>
+
+<div class="cenario">
+<strong>O container tem IP, mas não acessa a internet (com Docker instalado)</strong>
+<pre class="term" data-user="root" data-cwd="/root">#> incus exec c1 -- ping -c1 -W3 deb.debian.org
+1 packets transmitted, 0 received, 100% packet loss, time 0ms
+#> iptables -S FORWARD | head -3
+-P FORWARD DROP                         « o Docker mudou a política de encaminhamento
+-A FORWARD -j DOCKER-USER
+-A FORWARD -j DOCKER-ISOLATION-STAGE-1</pre>
+<p><strong>O que aconteceu:</strong> ao instalar, o Docker muda a política de encaminhamento (<code>FORWARD</code>) do firewall para <code>DROP</code>. O tráfego dos containers do Incus passa por ali e é descartado.</p>
+<p><strong>Como resolver:</strong> libere a ponte do Incus na cadeia que o Docker reserva para você, a <code>DOCKER-USER</code>:</p>
+<pre class="term" data-user="root" data-cwd="/root">#> iptables -I DOCKER-USER -i incusbr0 -j ACCEPT
+#> iptables -I DOCKER-USER -o incusbr0 -m conntrack --ctstate RELATED,ESTABLISHED -j ACCEPT
+#> incus exec c1 -- ping -c2 -W3 deb.debian.org
+2 packets transmitted, 2 received, 0% packet loss, time 1007ms</pre>
+<p>Essas regras somem no reboot; para mantê-las, guarde-as no seu firewall (veja <a href="nftables.html">nftables</a>). Se não precisar do Docker, não instale os dois na mesma máquina.</p>
+</div>
+
+<div class="cenario">
+<strong>O <code>incus launch</code> num script "leu" o resto do script</strong>
+<pre class="term" data-user="root" data-cwd="/root">#> bash meu-script.sh
+Error: yaml: unmarshal errors:
+  line 1: cannot unmarshal !!str `incus list` into api.InstancePut</pre>
+<p><strong>O que aconteceu:</strong> o <code>incus launch</code> lê configuração em YAML pela entrada padrão. Num script com <em>here-document</em> ou <em>pipe</em>, ele consome as linhas seguintes.</p>
+<p><strong>Como resolver:</strong> nos scripts, use <code>incus launch images:debian/13 c1 &lt; /dev/null</code>.</p>
+</div>
+
+<div class="cenario">
+<strong>"Error: Only empty projects can be removed."</strong>
+<p><strong>O que aconteceu:</strong> o projeto ainda tem containers ou imagens. <strong>Como resolver:</strong> apague o que houver dentro (<code>incus delete -f --project NOME …</code>, <code>incus image delete --project NOME …</code>) e tente de novo.</p>
+</div>
+
+<div class="cenario">
+<strong>"--vm" não funciona</strong>
+<p><strong>O que aconteceu:</strong> o <code>incus-base</code> só tem containers, ou o processador não tem virtualização disponível (veja <a href="kvm.html">KVM</a>). <strong>Como resolver:</strong> instale o pacote <code>incus</code> e confira o suporte com <code>kvm-ok</code>.</p>
+</div>
+
+<hr>
+
+<h2>Referência</h2>
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Comando</th><th>O que faz</th></tr>
+<tr><td><code>incus admin init [--minimal]</code></td><td>Configuração inicial</td></tr>
+<tr><td><code>incus launch images:debian/13 nome</code></td><td>Cria e liga um container</td></tr>
+<tr><td><code>incus list</code></td><td>Lista containers</td></tr>
+<tr><td><code>incus exec nome -- comando</code></td><td>Roda um comando dentro</td></tr>
+<tr><td><code>incus stop</code> / <code>start</code> / <code>restart nome</code></td><td>Controla o container</td></tr>
+<tr><td><code>incus snapshot create</code> / <code>list</code> / <code>restore</code></td><td>Snapshots</td></tr>
+<tr><td><code>incus delete [-f] nome</code></td><td>Apaga</td></tr>
+<tr><td><code>incus image list images: debian</code></td><td>Procura imagens no servidor público</td></tr>
+<tr><td><code>incus info nome</code></td><td>Detalhes e uso de recursos</td></tr>
+</table>
+</div>
+
+<hr>
+
+<h2>Exercícios</h2>
+
+<div class="exercise">
+<h3>1. Lançar</h3>
+<p>Complete para criar um container Debian 13 chamado <code>web</code>:</p>
+<div class="ex-code">incus launch <input data-answer="images:debian/13" aria-label="imagem"> web</div>
+</div>
+
+<div class="exercise">
+<h3>2. Rodar lá dentro</h3>
+<p>Complete para ver o <code>/etc/hostname</code> do container <code>web</code>:</p>
+<div class="ex-code">incus exec web <input data-answer="--" aria-label="separador"> cat /etc/hostname</div>
+</div>
+
+<div class="mc" data-answer="3">
+<p class="mc-q">3. Qual grupo dá a um usuário comum acesso <strong>restrito</strong> ao Incus, sem equivaler a root?</p>
+<label><input type="radio" name="q3"> <code>incus-admin</code></label>
+<label><input type="radio" name="q3"> <code>sudo</code></label>
+<label><input type="radio" name="q3"> <code>incus</code></label>
+<label><input type="radio" name="q3"> <code>lxd</code></label>
+</div>
+
+<div class="mc" data-answer="1">
+<p class="mc-q">4. Num Debian com Docker, o container do Incus não acessa a internet. Onde você libera o tráfego?</p>
+<label><input type="radio" name="q4"> Na cadeia <code>DOCKER-USER</code> do iptables, para a ponte <code>incusbr0</code>.</label>
+<label><input type="radio" name="q4"> Reinstalando o Incus.</label>
+<label><input type="radio" name="q4"> No <code>/etc/hosts</code> do container.</label>
+<label><input type="radio" name="q4"> Trocando a imagem por <code>ubuntu/22.04</code>.</label>
+</div>
+
+<hr>
+
+<h2>Resumo</h2>
+<ul>
+  <li>Incus = sistemas inteiros em containers leves; no Debian 13, versão 6.0.4 (o LXD 5.0.2 também existe, mas o Incus é a opção recomendada).</li>
+  <li><code>incus-base</code> para containers, <code>incus</code> para containers e VMs.</li>
+  <li><code>incus admin init --minimal</code> uma vez; depois <code>launch</code>, <code>exec</code>, <code>snapshot</code>, <code>delete</code>.</li>
+  <li>Grupo <code>incus</code> = projeto restrito; <code>incus-admin</code> = poder de root.</li>
+  <li>Com Docker na mesma máquina, libere a <code>incusbr0</code> na cadeia <code>DOCKER-USER</code>.</li>
+</ul>
+
+<div class="pager"></div>
+
+</div>
+</main>
+</div>
+<script src="assets/site.js"></script>
+</body>
+</html>

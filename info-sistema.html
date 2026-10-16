@@ -1,0 +1,347 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Debian Informações do Sistema — versão, hardware e discos | Guia Debian</title>
+<meta name="description" content="Descubra tudo sobre a sua máquina Debian 13: hostnamectl, /etc/debian_version, lsb_release, uname, lscpu, free, lsblk, lspci, lsusb e inxi, com saídas reais e o que cada linha significa.">
+<link rel="stylesheet" href="assets/style.css">
+<script>try{var t=localStorage.getItem("tema");if(t)document.documentElement.setAttribute("data-theme",t)}catch(e){}</script>
+</head>
+<body>
+<div class="layout">
+<nav class="sidebar" id="sidebar" aria-label="Tópicos"></nav>
+<main class="main">
+<div class="content">
+
+<div class="pager"></div>
+
+<h1>Debian <span class="hl">Informações do Sistema</span></h1>
+
+<p class="intro">"Qual versão do Debian é essa?", "Quanta memória tem?", "Qual é a placa de rede?". Antes de instalar um programa, pedir ajuda num fórum ou relatar um bug, você vai precisar dessas respostas. Nesta aula você vai encontrá-las pelo terminal, sem abrir o computador.</p>
+
+<div class="note">
+<strong>Você vai aprender</strong>
+<ul>
+  <li>Descobrir a versão exata do Debian (13, 13.7, trixie) de três jeitos.</li>
+  <li>Ver o kernel, o processador, a memória e os discos.</li>
+  <li>Listar as placas (<code>lspci</code>) e os dispositivos USB (<code>lsusb</code>).</li>
+  <li>Juntar tudo num relatório com <code>inxi</code>.</li>
+</ul>
+</div>
+
+<p>As saídas desta aula foram tiradas de um Debian 13.7 real, rodando numa <strong>máquina virtual</strong> (VirtualBox). Por isso aparecem palavras como "VirtualBox" e "oracle"; num notebook de verdade você verá o fabricante e o modelo dele.</p>
+
+<hr>
+
+<h2>O resumo de tudo: hostnamectl</h2>
+<p>Um comando só mostra o nome da máquina, o sistema, o kernel e o hardware:</p>
+
+<pre class="term">$ hostnamectl
+Failed to query product UUID, ignoring: Access denied        « aviso para usuário comum; pode ignorar
+ Static hostname: notebook                                   « o nome da máquina
+       Icon name: computer-vm
+         Chassis: vm 🖴                                       « vm = máquina virtual (num notebook: laptop)
+      Machine ID: 03c89c72dc504632b46ffa5cf5f2879b
+         Boot ID: d6d709bc5a41440cbcef012815c2bdbb
+  Virtualization: oracle                                     « o VirtualBox é da Oracle
+Operating System: Debian GNU/Linux 13 (trixie)
+          Kernel: Linux 6.12.111+deb13-amd64
+    Architecture: x86-64
+ Hardware Vendor: innotek GmbH
+  Hardware Model: VirtualBox
+Firmware Version: VirtualBox
+   Firmware Date: Fri 2006-12-01
+    Firmware Age: 19y 10month 2w</pre>
+
+<p>As mensagens "Access denied" aparecem porque a ana não é root: alguns dados de hardware (número de série, UUID do produto) só o root pode ler. Como root, elas somem.</p>
+
+<hr>
+
+<h2>Versão do Debian</h2>
+<p>O Debian tem um número (13), um número de revisão (13.7) e um codinome (trixie, um personagem de Toy Story). Veja <a href="versoes.html">Versões do Debian</a>. Três formas de descobrir:</p>
+
+<h3>/etc/debian_version: a revisão exata</h3>
+<pre class="term">$ cat /etc/debian_version
+13.7</pre>
+<p>É o único lugar que mostra a <strong>revisão</strong> (o ".7"). Cada revisão (<em>point release</em>) junta as correções de segurança e de bugs publicadas desde a anterior.</p>
+
+<h3>/etc/os-release: para pessoas e scripts</h3>
+<pre class="term">$ cat /etc/os-release
+PRETTY_NAME="Debian GNU/Linux 13 (trixie)"
+NAME="Debian GNU/Linux"
+VERSION_ID="13"
+VERSION="13 (trixie)"
+VERSION_CODENAME=trixie                     « o codinome, usado no sources.list
+DEBIAN_VERSION_FULL=13.7
+ID=debian
+HOME_URL="https://www.debian.org/"
+SUPPORT_URL="https://www.debian.org/support"
+BUG_REPORT_URL="https://bugs.debian.org/"</pre>
+
+<h3>lsb_release</h3>
+<pre class="term">$ lsb_release -a
+Distributor ID:	Debian
+Description:	Debian GNU/Linux 13 (trixie)
+Release:	13
+Codename:	trixie</pre>
+
+<div class="tip">
+<strong>Em scripts</strong>
+<p>Use o <code>/etc/os-release</code>, que existe em qualquer distribuição moderna: <code>. /etc/os-release; echo $VERSION_CODENAME</code> imprime <code>trixie</code>.</p>
+</div>
+
+<hr>
+
+<h2>Kernel: uname</h2>
+<pre class="term">$ uname -r
+6.12.111+deb13-amd64
+$ uname -a
+Linux notebook 6.12.111+deb13-amd64 #1 SMP PREEMPT_DYNAMIC Debian 6.12.111-1 (2026-09-28) x86_64 GNU/Linux</pre>
+
+<dl class="anatomy">
+  <dt>Linux</dt><dd>O sistema.</dd>
+  <dt>notebook</dt><dd>O nome da máquina.</dd>
+  <dt>6.12.111+deb13-amd64</dt><dd>A versão do kernel, compilada pelo Debian 13 para PCs de 64 bits.</dd>
+  <dt>Debian 6.12.111-1 (2026-09-28)</dt><dd>O pacote Debian e a data em que foi compilado.</dd>
+  <dt>x86_64</dt><dd>A arquitetura do processador.</dd>
+</dl>
+
+<p>O Debian 13 usa a série 6.12 do kernel do começo ao fim da sua vida; as atualizações trazem só correções (6.12.86, 6.12.111…). Veja <a href="boot-grub.html">Boot, GRUB e Kernel</a>.</p>
+
+<hr>
+
+<h2>Processador: lscpu e nproc</h2>
+<pre class="term">$ nproc
+2
+$ lscpu | head -14
+Arquitetura:                               x86_64
+Modo(s) operacional da CPU:                32-bit, 64-bit
+Tamanhos de endereço:                      46 bits physical, 48 bits virtual
+Ordem dos bytes:                           Little Endian
+CPU(s):                                    2                     « núcleos que o sistema vê
+Lista de CPU(s) on-line:                   0,1
+ID de fornecedor:                          GenuineIntel
+Nome do modelo:                            Intel(R) Xeon(R) CPU E5-2630 v4 @ 2.20GHz
+Família da CPU:                            6
+Modelo:                                    79
+Thread(s) per núcleo:                      1
+Núcleo(s) por soquete:                     2
+Soquete(s):                                1
+Step:                                      1</pre>
+
+<p>O <code>lscpu</code> está traduzido. Numa máquina virtual, <code>CPU(s)</code> mostra quantos núcleos a VM recebeu, não quantos o computador físico tem. Mais abaixo, a linha <code>Fabricante do hipervisor: KVM</code> confirma que é virtual.</p>
+
+<hr>
+
+<h2>Memória: free</h2>
+<pre class="term">$ free -h
+               total       usada       livre    compart.  buff/cache  disponível
+Mem.:          3,8Gi       475Mi       3,0Gi       9,1Mi       631Mi       3,4Gi
+Swap:          1,3Gi          0B       1,3Gi</pre>
+
+<p>O número que importa é <strong>disponível</strong>: quanto ainda cabe para programas novos. O <code>buff/cache</code> é memória usada como cache de disco, que o sistema libera quando alguém precisa. Mais em <a href="desempenho.html">Desempenho e Monitoramento</a>.</p>
+
+<hr>
+
+<h2>Discos: lsblk e df</h2>
+<pre class="term">$ lsblk
+NAME   MAJ:MIN RM  SIZE RO TYPE MOUNTPOINTS
+sda      8:0    0   25G  0 disk                     « o disco inteiro
+├─sda1   8:1    0 23,7G  0 part /                   « a raiz
+├─sda2   8:2    0    1K  0 part                     « partição "estendida": só um contêiner
+└─sda5   8:5    0  1,3G  0 part [SWAP]              « a swap, dentro da estendida
+sr0     11:0    1 1024M  1 rom                      « o leitor de CD/DVD</pre>
+
+<p>Esse é o particionamento clássico do instalador do Debian em computadores com BIOS (tabela MBR): uma partição primária para tudo e a swap numa partição <strong>lógica</strong>, que começa no número 5. Por isso não existe <code>sda3</code> nem <code>sda4</code>.</p>
+
+<pre class="term">$ df -h /
+Sist. Arq.      Tam. Usado Disp. Uso% Montado em
+/dev/sda1        24G  1,3G   21G   6% /</pre>
+
+<p>Para ver também o tipo e o UUID de cada partição, use <code>lsblk -f</code>. Veja <a href="discos.html">lsblk, df, du</a>.</p>
+
+<hr>
+
+<h2>Placas e dispositivos: lspci e lsusb</h2>
+<p>O <code>lspci</code> lista tudo o que está ligado ao barramento PCI: vídeo, rede, som, controladora de disco. Ele vem instalado:</p>
+
+<pre class="term">$ lspci
+00:00.0 Host bridge: Intel Corporation 440FX - 82441FX PMC [Natoma] (rev 02)
+00:01.0 ISA bridge: Intel Corporation 82371SB PIIX3 ISA [Natoma/Triton II]
+00:01.1 IDE interface: Intel Corporation 82371AB/EB/MB PIIX4 IDE (rev 01)
+00:02.0 VGA compatible controller: VMware SVGA II Adapter                     « vídeo
+00:03.0 Ethernet controller: Intel Corporation 82540EM Gigabit Ethernet Controller (rev 02)   « rede
+00:04.0 System peripheral: InnoTek Systemberatung GmbH VirtualBox Guest Service
+00:05.0 Multimedia audio controller: Intel Corporation 82801AA AC'97 Audio Controller (rev 01)
+00:07.0 Bridge: Intel Corporation 82371AB/EB/MB PIIX4 ACPI (rev 08)
+00:0d.0 SATA controller: Intel Corporation 82801HM/HEM (ICH8M/ICH8M-E) SATA Controller [AHCI mode] (rev 02)</pre>
+
+<p>Para saber qual <strong>driver</strong> (módulo do kernel) cada placa usa, acrescente <code>-k</code>: <code>lspci -k</code>. Isso é útil quando o Wi-Fi ou o vídeo não funcionam.</p>
+
+<p>Já o <code>lsusb</code> não vem instalado no Debian mínimo:</p>
+<pre class="term">$ lsusb
+bash: lsusb: comando não encontrado</pre>
+<p>Ele está no pacote <code>usbutils</code>: como root, <code>apt install usbutils</code>.</p>
+
+<pre class="term" data-user="root">#> apt install usbutils
+#> exit
+$ lsusb
+$ echo $?
+1                                    « nada: esta máquina virtual não tem controladora USB</pre>
+
+<p>Na máquina virtual usada nesta aula não há USB, por isso nada aparece. Num notebook de verdade, cada linha é um dispositivo (exemplo ilustrativo):</p>
+
+<pre class="term">$ lsusb
+Bus 001 Device 001: ID 1d6b:0002 Linux Foundation 2.0 root hub
+Bus 001 Device 003: ID 046d:c52b Logitech, Inc. Unifying Receiver      « o receptor do mouse
+Bus 002 Device 001: ID 1d6b:0003 Linux Foundation 3.0 root hub</pre>
+
+<p>O <code>ID 046d:c52b</code> identifica o fabricante (046d = Logitech) e o produto; é o que você pesquisa quando um dispositivo não funciona.</p>
+
+<hr>
+
+<h2>Tudo num relatório: inxi</h2>
+<p>O <code>inxi</code> junta sistema, CPU, memória, vídeo, rede e discos numa tela só, no formato que fóruns costumam pedir. Ele também não vem instalado: <code>apt install inxi</code>.</p>
+
+<dl class="anatomy">
+  <dt>inxi</dt><dd>O programa.</dd>
+  <dt>-F</dt><dd><em>Full</em>: o relatório completo.</dd>
+  <dt>-z</dt><dd>Esconde dados pessoais (números de série, endereço MAC), para você poder colar num fórum.</dd>
+</dl>
+
+<pre class="term">$ inxi -Fz
+System:
+  Kernel: 6.12.111+deb13-amd64 arch: x86_64 bits: 64
+  Console: N/A Distro: Debian GNU/Linux 13 (trixie)
+Machine:
+  Type: Virtualbox System: innotek GmbH product: VirtualBox v: 1.2 serial: &lt;superuser required&gt;
+CPU:
+  Info: dual core model: Intel Xeon E5-2630 v4 bits: 64 type: MCP cache: L2: 512 KiB
+  Speed (MHz): avg: 2200 min/max: N/A cores: 1: 2200 2: 2200
+Graphics:
+  Device-1: VMware SVGA II Adapter driver: vmwgfx v: 2.20.0.0
+Network:
+  Device-1: Intel 82540EM Gigabit Ethernet driver: e1000                 « placa de rede e o driver
+  IF: enp0s3 state: up speed: 1000 Mbps duplex: full mac: &lt;filter&gt;      « -z escondeu o MAC
+Drives:
+  Local Storage: total: 25 GiB used: 2.19 GiB (8.8%)
+Partition:
+  ID-1: / size: 23.13 GiB used: 2.19 GiB (9.5%) fs: ext4 dev: /dev/sda1
+Swap:
+  ID-1: swap-1 type: partition size: 1.33 GiB used: 0 KiB (0.0%) dev: /dev/sda5
+Sensors:
+  Src: lm-sensors+/sys Message: No sensor data found using /sys/class/hwmon or lm-sensors.
+Info:
+  Memory: total: 4 GiB available: 3.83 GiB used: 754.3 MiB (19.2%)
+  Processes: 216 Uptime: 50m Init: systemd Client: shell wrapper inxi: 3.3.38</pre>
+
+<p>A saída acima foi resumida (o real também mostra áudio e mais detalhes de vídeo). O <code>inxi</code> é em inglês. Repare na seção <strong>Sensors</strong>: numa máquina virtual não há sensores de temperatura. Num notebook real, instale o <code>lm-sensors</code> e rode <code>sensors</code>.</p>
+
+<div class="warning">
+<strong>Cuidado: o inxi puxa muitos pacotes</strong>
+<p>No Debian, <code>apt install inxi</code> instala também as "recomendações" dele: dezenas de pacotes (ferramentas de vídeo, Mesa, GTK…). Num servidor pequeno, prefira <code>apt install --no-install-recommends inxi</code>.</p>
+</div>
+
+<hr>
+
+<h2>Formas diferentes de fazer</h2>
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Pergunta</th><th>Comando principal</th><th>Alternativas</th></tr>
+<tr><td>Qual Debian?</td><td><code>cat /etc/debian_version</code></td><td><code>lsb_release -a</code>, <code>cat /etc/os-release</code>, <code>hostnamectl</code></td></tr>
+<tr><td>Qual kernel?</td><td><code>uname -r</code></td><td><code>hostnamectl</code>, <code>cat /proc/version</code></td></tr>
+<tr><td>Quantos núcleos?</td><td><code>nproc</code></td><td><code>lscpu</code>, <code>grep -c processor /proc/cpuinfo</code></td></tr>
+<tr><td>Quanta memória?</td><td><code>free -h</code></td><td><code>cat /proc/meminfo</code>, <code>top</code></td></tr>
+<tr><td>Quais discos?</td><td><code>lsblk</code></td><td><code>df -h</code>, <code>fdisk -l</code> (root)</td></tr>
+<tr><td>Quais placas?</td><td><code>lspci</code></td><td><code>lspci -k</code>, <code>lshw</code> (pacote <code>lshw</code>)</td></tr>
+<tr><td>Tudo de uma vez</td><td><code>inxi -Fz</code></td><td><code>hostnamectl</code></td></tr>
+<tr><td>No desktop</td><td>Configurações → Sistema → Sobre</td><td>—</td></tr>
+</table>
+</div>
+
+<hr>
+
+<h2>Quando não funciona</h2>
+
+<div class="cenario">
+<strong>"lsusb: comando não encontrado" (ou inxi, lshw, sensors)</strong>
+<p><strong>O que aconteceu:</strong> a instalação mínima do Debian traz pouca coisa. Não existe o <code>command-not-found</code>, que no Ubuntu sugere o pacote.</p>
+<p><strong>Como descobrir o pacote:</strong> <code>apt search lsusb</code>, ou instale o <code>apt-file</code> (como root: <code>apt install apt-file &amp;&amp; apt-file update</code>) e rode <code>apt-file search bin/lsusb</code>.</p>
+</div>
+
+<div class="cenario">
+<strong>hostnamectl mostra "Access denied"</strong>
+<p><strong>O que aconteceu:</strong> alguns dados do firmware só o root lê. Não é erro. Como root (<code>su -</code>), aparecem também o número de série e o UUID.</p>
+</div>
+
+<hr>
+
+<h2>Referência rápida</h2>
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Comando</th><th>Mostra</th><th>Precisa instalar?</th></tr>
+<tr><td><code>hostnamectl</code></td><td>Resumo do sistema e do hardware</td><td>Não</td></tr>
+<tr><td><code>cat /etc/debian_version</code></td><td>Revisão do Debian (13.7)</td><td>Não</td></tr>
+<tr><td><code>lsb_release -a</code></td><td>Distribuição e codinome</td><td>Não</td></tr>
+<tr><td><code>uname -r</code></td><td>Versão do kernel</td><td>Não</td></tr>
+<tr><td><code>lscpu</code> / <code>nproc</code></td><td>Processador / número de núcleos</td><td>Não</td></tr>
+<tr><td><code>free -h</code></td><td>Memória e swap</td><td>Não</td></tr>
+<tr><td><code>lsblk</code> / <code>df -h</code></td><td>Discos e partições / espaço livre</td><td>Não</td></tr>
+<tr><td><code>lspci</code></td><td>Placas PCI</td><td>Não (pciutils)</td></tr>
+<tr><td><code>lsusb</code></td><td>Dispositivos USB</td><td>Sim: <code>usbutils</code></td></tr>
+<tr><td><code>inxi -Fz</code></td><td>Relatório completo</td><td>Sim: <code>inxi</code></td></tr>
+<tr><td><code>sensors</code></td><td>Temperaturas</td><td>Sim: <code>lm-sensors</code></td></tr>
+</table>
+</div>
+
+<hr>
+
+<h2>Exercícios</h2>
+
+<div class="exercise">
+<h3>1. A revisão exata</h3>
+<p>Complete para ver a revisão do Debian (por exemplo, 13.7):</p>
+<div class="ex-code">cat /etc/<input data-answer="debian_version" aria-label="arquivo"></div>
+</div>
+
+<div class="exercise">
+<h3>2. Núcleos</h3>
+<p>Qual comando mostra só o número de núcleos de processador?</p>
+<div class="ex-code"><input data-answer="nproc" aria-label="comando"></div>
+</div>
+
+<div class="mc" data-answer="3">
+<p class="mc-q">3. No <code>lsblk</code> do Debian com BIOS, por que a swap é <code>sda5</code> e não <code>sda3</code>?</p>
+<label><input type="radio" name="q3"> Porque as partições 3 e 4 foram apagadas.</label>
+<label><input type="radio" name="q3"> Porque a swap sempre é a número 5.</label>
+<label><input type="radio" name="q3"> Porque ela é uma partição lógica, dentro da estendida (<code>sda2</code>), e as lógicas começam no 5.</label>
+<label><input type="radio" name="q3"> Porque é um erro do instalador.</label>
+</div>
+
+<div class="mc" data-answer="2">
+<p class="mc-q">4. O <code>lsusb</code> deu "comando não encontrado". O que fazer?</p>
+<label><input type="radio" name="q4"> Reinstalar o Debian.</label>
+<label><input type="radio" name="q4"> Como root, instalar o pacote <code>usbutils</code>.</label>
+<label><input type="radio" name="q4"> Usar <code>sudo lsusb</code>.</label>
+<label><input type="radio" name="q4"> Conectar um dispositivo USB.</label>
+</div>
+
+<hr>
+
+<h2>Resumo</h2>
+<ul>
+  <li><code>hostnamectl</code> é o resumo; <code>/etc/debian_version</code> dá a revisão exata.</li>
+  <li><code>uname -r</code>, <code>lscpu</code>, <code>free -h</code>, <code>lsblk</code> e <code>lspci</code> vêm instalados.</li>
+  <li><code>lsusb</code> (usbutils) e <code>inxi</code> precisam ser instalados como root.</li>
+  <li>Numa máquina virtual, o hardware mostrado é o virtual.</li>
+</ul>
+
+<div class="pager"></div>
+
+</div>
+</main>
+</div>
+<script src="assets/site.js"></script>
+</body>
+</html>

@@ -1,0 +1,236 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Debian Curingas — *, ?, [ ] e { } | Guia Debian</title>
+<meta name="description" content="Use curingas no terminal do Debian: *, ?, [abc], a diferença entre curingas e chaves, a ordem pelo idioma, como conferir antes de apagar e terminal simulado.">
+<link rel="stylesheet" href="assets/style.css">
+<script>try{var t=localStorage.getItem("tema");if(t)document.documentElement.setAttribute("data-theme",t)}catch(e){}</script>
+</head>
+<body>
+<div class="layout">
+<nav class="sidebar" id="sidebar" aria-label="Tópicos"></nav>
+<main class="main">
+<div class="content">
+
+<div class="pager"></div>
+
+<h1>Debian <span class="hl">Curingas</span></h1>
+
+<p class="intro">Curingas são símbolos que representam "qualquer coisa" num nome de arquivo. Com eles, <code>*.txt</code> quer dizer "todos os arquivos que terminam em .txt". Você escreve um padrão e o shell troca pelos nomes que combinam, antes de rodar o comando.</p>
+
+<div class="note">
+<strong>Você vai aprender</strong>
+<ul>
+  <li>Os curingas <code>*</code>, <code>?</code> e <code>[ ]</code>.</li>
+  <li>A diferença entre curingas e chaves <code>{ }</code>.</li>
+  <li>Por que o shell do Debian devolve os nomes na ordem do idioma.</li>
+  <li>O hábito que evita desastres: conferir com <code>echo</code> antes de apagar.</li>
+</ul>
+</div>
+
+<hr>
+
+<h2>Quem entende os curingas é o shell</h2>
+<p>Quando você digita <code>ls *.txt</code>, o <code>ls</code> nunca vê o asterisco. O shell (o bash) procura os nomes que combinam com <code>*.txt</code>, troca o padrão pela lista e só então chama o <code>ls</code>. O <code>echo</code>, que só repete o que recebe, mostra essa troca:</p>
+
+<pre class="term" data-cwd="~/Documentos">$ echo *
+acesso.log notas.txt projetos relatorio.odt
+$ echo a*
+acesso.log</pre>
+
+<p>Por isso os curingas funcionam com <strong>qualquer</strong> comando: <code>ls</code>, <code>cp</code>, <code>rm</code>, <code>cat</code>…</p>
+
+<hr>
+
+<h2>Os três curingas</h2>
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Curinga</th><th>Combina com</th><th>Exemplo</th><th>Pega</th></tr>
+<tr><td><code>*</code></td><td>Qualquer quantidade de caracteres, inclusive nenhum</td><td><code>*.txt</code></td><td>notas.txt, a.txt, .txt não</td></tr>
+<tr><td><code>?</code></td><td>Exatamente um caractere</td><td><code>foto?.jpg</code></td><td>foto1.jpg, fotoA.jpg</td></tr>
+<tr><td><code>[abc]</code></td><td>Um caractere da lista</td><td><code>[an]*</code></td><td>começa com a ou n</td></tr>
+<tr><td><code>[a-z]</code></td><td>Um caractere do intervalo</td><td><code>aula[0-9]</code></td><td>aula0 até aula9</td></tr>
+<tr><td><code>[!x]</code></td><td>Um caractere que <strong>não</strong> é x</td><td><code>[!.]*</code></td><td>tudo que não começa com ponto</td></tr>
+</table>
+</div>
+
+<h3>* : qualquer coisa</h3>
+
+<dl class="anatomy">
+  <dt>ls</dt><dd>O programa.</dd>
+  <dt>*.txt</dt><dd>O padrão: "qualquer nome que termine em .txt". O shell troca pela lista.</dd>
+</dl>
+
+<pre class="term" data-cwd="~/Documentos">$ ls *.log *.txt
+acesso.log  notas.txt</pre>
+
+<h3>? : exatamente um caractere</h3>
+<pre class="term" data-cwd="~/Documentos">$ echo ?????.txt
+notas.txt                          « 5 caracteres antes de .txt</pre>
+
+<h3>[ ] : um caractere de uma lista</h3>
+<pre class="term" data-cwd="~/Documentos">$ echo [an]*
+acesso.log notas.txt</pre>
+
+<div class="try" data-setup="cd Downloads" data-goal="ran:ls .*\*">
+<p class="try-task"><strong>Missão:</strong> na pasta <code>Downloads</code>, liste só os arquivos que começam com <code>f</code>. Depois tente listar só as imagens <code>.jpg</code>.</p>
+</div>
+
+<hr>
+
+<h2>Maiúsculas importam, mas a ordem segue o idioma</h2>
+<p>O padrão diferencia maiúsculas de minúsculas. Já a ordem em que os nomes voltam segue o idioma do sistema, como no <code>ls</code>. Veja uma pasta real do Debian:</p>
+
+<pre class="term" data-cwd="/tmp/nav">$ echo *
+a Área de trabalho aula1 aula10 aula2 Aula3 Documentos Downloads frutas.txt Imagens Música
+$ echo aula*
+aula1 aula10 aula2                 « Aula3 ficou de fora: o A é maiúsculo</pre>
+
+<p>Repare duas coisas: <code>aula*</code> não pegou <code>Aula3</code>, porque o padrão diferencia maiúsculas; e a lista do <code>echo *</code> veio misturando maiúsculas e minúsculas, na ordem do dicionário em português.</p>
+
+<hr>
+
+<h2>Arquivos ocultos ficam de fora</h2>
+<p>O <code>*</code> não pega nomes que começam com ponto. Para eles, o padrão também precisa começar com ponto:</p>
+
+<pre class="term">$ echo .*
+.bash_history .bashrc .profile</pre>
+
+<p>O bash do Debian 13 não inclui <code>.</code> e <code>..</code> nesse resultado, o que evita acidentes.</p>
+
+<hr>
+
+<h2>Quando nada combina</h2>
+<p>Se nenhum nome combina, o bash deixa o padrão como está, e o comando recebe o texto literal:</p>
+
+<pre class="term" data-cwd="~/Documentos">$ echo *.pdf
+*.pdf
+$ ls *.pdf
+ls: não foi possível acessar '*.pdf': Arquivo ou diretório inexistente</pre>
+
+<p>A mensagem é do <code>ls</code>, que procurou um arquivo chamado literalmente <code>*.pdf</code>.</p>
+
+<hr>
+
+<h2>Aspas desligam os curingas</h2>
+<p>Entre aspas, o asterisco é só um asterisco:</p>
+
+<pre class="term" data-cwd="~/Downloads">$ echo f*
+foto.jpg fotos-viagem.zip
+$ echo "f*"
+f*</pre>
+
+<p>Isso é útil quando você quer passar o padrão para outro programa interpretar, como em <code>find . -name "*.txt"</code> (veja <a href="find.html">find e locate</a>).</p>
+
+<hr>
+
+<h2>Curingas x chaves</h2>
+<p>As chaves <code>{a,b}</code> parecem curingas, mas são outra coisa:</p>
+
+<div class="table-wrap">
+<table class="ref">
+<tr><th></th><th>Curingas <code>* ? [ ]</code></th><th>Chaves <code>{a,b}</code> <code>{1..5}</code></th></tr>
+<tr><td>O que fazem</td><td>Procuram nomes que <strong>existem</strong></td><td>Geram nomes, existindo ou não</td></tr>
+<tr><td>Uso típico</td><td>Selecionar arquivos: <code>rm *.tmp</code></td><td>Criar nomes: <code>mkdir mes{01..12}</code></td></tr>
+<tr><td>Se nada combina</td><td>O padrão fica como está</td><td>Sempre geram a lista</td></tr>
+</table>
+</div>
+
+<pre class="term" data-cwd="~/Documentos">$ echo relatorio{1,2}.txt
+relatorio1.txt relatorio2.txt          « gerou, mesmo sem existir
+$ echo relatorio?.txt
+relatorio?.txt                         « não achou nenhum arquivo</pre>
+
+<hr>
+
+<h2>O hábito de ouro: confira com echo antes de apagar</h2>
+<p>Antes de um <code>rm</code> com curinga, troque o <code>rm</code> por <code>echo</code> e veja o que seria apagado. Se a lista estiver certa, aí sim rode o <code>rm</code>:</p>
+
+<pre class="term" data-cwd="~/Downloads">$ echo *.zip
+fotos-viagem.zip
+$ rm *.zip</pre>
+
+<div class="warning">
+<strong>Atenção ao espaço</strong>
+<p><code>rm * .bak</code> (com espaço) apaga <strong>tudo</strong> da pasta e depois reclama que <code>.bak</code> não existe. O certo é <code>rm *.bak</code>, sem espaço. Conferir com <code>echo</code> mostra o erro antes do estrago.</p>
+</div>
+
+<div class="try" data-setup="mkdir limpeza;;cd limpeza;;touch a.tmp b.tmp c.txt d.tmp foto.jpg" data-goal="absent:~/limpeza/a.tmp,absent:~/limpeza/b.tmp,absent:~/limpeza/d.tmp,file:~/limpeza/c.txt,file:~/limpeza/foto.jpg">
+<p class="try-task"><strong>Missão:</strong> na pasta <code>limpeza</code>, apague todos os arquivos <code>.tmp</code> e nada mais. Confira antes com <code>echo *.tmp</code>.</p>
+</div>
+
+<hr>
+
+<h2>Quando não funciona</h2>
+
+<div class="cenario">
+<strong>"não foi possível acessar '*.pdf'"</strong>
+<p><strong>O que aconteceu:</strong> nenhum arquivo combinou, e o padrão foi passado literalmente.</p>
+<p><strong>Como resolver:</strong> confira a pasta com <code>ls</code> e o padrão com <code>echo</code>. Lembre que maiúsculas importam: <code>*.PDF</code> e <code>*.pdf</code> são diferentes.</p>
+</div>
+
+<div class="cenario">
+<strong>O curinga não pegou os arquivos ocultos</strong>
+<p><strong>O que aconteceu:</strong> <code>*</code> ignora nomes que começam com ponto.</p>
+<p><strong>Como resolver:</strong> use <code>.*</code> para os ocultos, ou <code>ls -a</code> para ver tudo.</p>
+</div>
+
+<div class="cenario">
+<strong>"Lista de argumentos muito longa"</strong>
+<p><strong>O que aconteceu:</strong> o curinga gerou milhares de nomes, mais do que um comando aceita de uma vez.</p>
+<p><strong>Como resolver:</strong> use <code>find</code> com <code>-delete</code> ou <code>xargs</code> (veja <a href="pipes.html">Pipes e xargs</a>).</p>
+</div>
+
+<hr>
+
+<h2>Exercícios</h2>
+
+<div class="exercise">
+<h3>1. Todos os .jpg</h3>
+<p>Complete para listar todas as imagens <code>.jpg</code> da pasta atual:</p>
+<div class="ex-code">ls <input data-answer="*.jpg" aria-label="padrão"></div>
+</div>
+
+<div class="exercise">
+<h3>2. Um caractere só</h3>
+<p>Complete para pegar <code>foto1.png</code>, <code>foto2.png</code>… mas não <code>foto10.png</code>:</p>
+<div class="ex-code">ls foto<input data-answer="?.png|[0-9].png" aria-label="padrão"></div>
+</div>
+
+<div class="mc" data-answer="2">
+<p class="mc-q">3. Numa pasta sem nenhum <code>.log</code>, o que <code>echo *.log</code> mostra?</p>
+<label><input type="radio" name="q3"> Nada, uma linha vazia.</label>
+<label><input type="radio" name="q3"> <code>*.log</code></label>
+<label><input type="radio" name="q3"> Um erro do echo.</label>
+<label><input type="radio" name="q3"> Todos os arquivos da pasta.</label>
+</div>
+
+<div class="mc" data-answer="3">
+<p class="mc-q">4. Qual a diferença entre <code>arq{1,2}</code> e <code>arq?</code>?</p>
+<label><input type="radio" name="q4"> Nenhuma, os dois procuram arquivos.</label>
+<label><input type="radio" name="q4"> As chaves só funcionam no <code>ls</code>.</label>
+<label><input type="radio" name="q4"> As chaves geram nomes; o <code>?</code> procura nomes que existem.</label>
+<label><input type="radio" name="q4"> O <code>?</code> só funciona entre aspas.</label>
+</div>
+
+<hr>
+
+<h2>Resumo</h2>
+<ul>
+  <li><code>*</code> qualquer coisa, <code>?</code> um caractere, <code>[ ]</code> um da lista.</li>
+  <li>O shell troca o padrão pelos nomes antes de rodar o comando; a lista vem na ordem do idioma.</li>
+  <li>Maiúsculas importam no padrão; ocultos ficam de fora do <code>*</code>.</li>
+  <li>Aspas desligam os curingas; chaves geram nomes, curingas procuram.</li>
+  <li>Antes de <code>rm</code> com curinga, confira com <code>echo</code>.</li>
+</ul>
+
+<div class="pager"></div>
+
+</div>
+</main>
+</div>
+<script src="assets/site.js"></script>
+</body>
+</html>

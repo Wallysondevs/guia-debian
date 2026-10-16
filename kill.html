@@ -1,0 +1,271 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Debian kill — encerrar programas e sinais | Guia Debian</title>
+<meta name="description" content="Encerre programas travados no Debian com kill e pkill: sinais TERM e KILL, mensagens reais do bash em português e por que o killall não vem instalado.">
+<link rel="stylesheet" href="assets/style.css">
+<script>try{var t=localStorage.getItem("tema");if(t)document.documentElement.setAttribute("data-theme",t)}catch(e){}</script>
+</head>
+<body>
+<div class="layout">
+<nav class="sidebar" id="sidebar" aria-label="Tópicos"></nav>
+<main class="main">
+<div class="content">
+
+<div class="pager"></div>
+
+<h1>Debian <span class="hl">Encerrar Programas (kill)</span></h1>
+
+<p class="intro">Quando um programa trava, você pode encerrá-lo pelo terminal. O comando se chama <code>kill</code> ("matar"), mas o que ele faz de verdade é <strong>mandar um sinal</strong> para o processo. Na maioria das vezes o sinal é um pedido educado: "por favor, feche".</p>
+
+<div class="note">
+<strong>Você vai aprender</strong>
+<ul>
+  <li>O que são sinais e a diferença entre TERM (15) e KILL (9).</li>
+  <li>Encerrar um processo pelo PID com <code>kill</code>.</li>
+  <li>Encerrar pelo nome com <code>pkill</code>, e por que o <code>killall</code> pode não existir no seu Debian.</li>
+  <li>As mensagens reais quando algo dá errado.</li>
+</ul>
+</div>
+
+<div class="tip">
+<strong>Antes de começar</strong>
+<p>Você precisa saber o PID ou o nome do processo. Veja <a href="processos.html">ps, pgrep, top</a>.</p>
+</div>
+
+<hr>
+
+<h2>Sinais: como o sistema conversa com os processos</h2>
+<p>Um <strong>sinal</strong> é uma mensagem curta, com um número, que o sistema entrega a um processo. Os mais usados:</p>
+
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Número</th><th>Nome</th><th>Significado</th><th>O processo pode ignorar?</th></tr>
+<tr><td>15</td><td>TERM</td><td>"Termine, por favor." O programa pode salvar e fechar com calma. É o padrão do <code>kill</code>.</td><td>Sim</td></tr>
+<tr><td>9</td><td>KILL</td><td>"Morra agora." O kernel remove o processo na hora, sem dar chance de salvar.</td><td>Não</td></tr>
+<tr><td>2</td><td>INT</td><td>Interromper. É o que o <kbd>Ctrl</kbd>+<kbd>C</kbd> manda.</td><td>Sim</td></tr>
+<tr><td>1</td><td>HUP</td><td>"O terminal fechou." Muitos serviços usam para recarregar a configuração.</td><td>Sim</td></tr>
+<tr><td>19</td><td>STOP</td><td>Pausa o processo (o <kbd>Ctrl</kbd>+<kbd>Z</kbd> manda o parecido TSTP).</td><td>Não</td></tr>
+<tr><td>18</td><td>CONT</td><td>Continua um processo pausado.</td><td>—</td></tr>
+</table>
+</div>
+
+<p>Para ver a lista completa, use <code>kill -l</code> (de <em>list</em>):</p>
+
+<pre class="term">$ kill -l
+ 1) SIGHUP	 2) SIGINT	 3) SIGQUIT	 4) SIGILL	 5) SIGTRAP
+ 6) SIGABRT	 7) SIGBUS	 8) SIGFPE	 9) SIGKILL	10) SIGUSR1
+11) SIGSEGV	12) SIGUSR2	13) SIGPIPE	14) SIGALRM	15) SIGTERM</pre>
+
+<p>A lista real continua até o 64. Os nomes começam com <code>SIG</code> (de <em>signal</em>), mas nos comandos você pode escrever só <code>TERM</code> ou <code>KILL</code>.</p>
+
+<hr>
+
+<h2>kill: encerrar pelo PID</h2>
+
+<dl class="anatomy">
+  <dt>kill</dt><dd>Comando interno do bash que manda um sinal.</dd>
+  <dt>2210</dt><dd>O PID do processo. Sem dizer o sinal, vai o TERM (15).</dd>
+</dl>
+
+<pre class="term">$ pgrep -l firefox
+2210 firefox-esr
+$ kill 2210
+$ pgrep -l firefox
+$ echo $?
+1                                « o Firefox não existe mais</pre>
+
+<p>Como sempre, <strong>silêncio é sucesso</strong>: o <code>kill</code> não diz nada quando dá certo. Confirme com <code>pgrep</code>.</p>
+
+<h3>Quando o TERM não basta: kill -9</h3>
+<p>Um programa totalmente travado pode nem conseguir "ouvir" o TERM. Espere uns 5 segundos e, se ele continuar lá, mande o KILL:</p>
+
+<dl class="anatomy">
+  <dt>kill</dt><dd>O comando.</dd>
+  <dt>-9</dt><dd>O sinal KILL. Também pode ser escrito <code>-KILL</code> ou <code>-s KILL</code>.</dd>
+  <dt>2210</dt><dd>O PID.</dd>
+</dl>
+
+<pre class="term">$ kill -9 2210</pre>
+
+<div class="warning">
+<strong>Atenção: -9 é o último recurso</strong>
+<p>Com o KILL o programa não tem chance de salvar nada nem de apagar arquivos temporários. Tente sempre o <code>kill</code> simples antes.</p>
+</div>
+
+<h3>O que o bash mostra quando o processo é seu</h3>
+<p>Se o processo foi iniciado no próprio terminal (em segundo plano, com <code>&amp;</code>), o bash avisa como ele terminou. Teste com o <code>sleep</code>, que só espera:</p>
+
+<pre class="term">$ sleep 300 &amp;
+[1] 10472
+$ kill %1
+[1]+  Terminado               sleep 300      « recebeu TERM
+$ sleep 301 &amp;
+[1] 10475
+$ kill -9 %1
+[1]+  Morto                   sleep 301      « recebeu KILL</pre>
+
+<p>O <code>%1</code> é o número do trabalho (<em>job</em>) no terminal, em vez do PID. Veja <a href="jobs.html">Jobs, nohup, tmux</a>.</p>
+
+<div class="try" data-goal="noproc:firefox-esr">
+<p class="try-task"><strong>Missão:</strong> o Firefox (<code>firefox-esr</code>) travou. Ache o PID dele e encerre-o com <code>kill</code>. Depois confirme com <code>pgrep -l firefox</code>.</p>
+</div>
+
+<hr>
+
+<h2>pkill: encerrar pelo nome</h2>
+<p>O <code>pkill</code> é o irmão do <code>pgrep</code>: em vez de mostrar os PIDs, manda o sinal para eles. Aceita as mesmas opções (<code>-f</code>, <code>-u</code>, <code>-i</code>, <code>-x</code>).</p>
+
+<dl class="anatomy">
+  <dt>pkill</dt><dd>Manda um sinal pelo nome.</dd>
+  <dt>-f</dt><dd>Procura na linha de comando inteira.</dd>
+  <dt>firefox-esr</dt><dd>O texto a procurar.</dd>
+</dl>
+
+<pre class="term">$ pkill -f firefox-esr
+$ echo $?
+0                                « achou e mandou o sinal
+$ pkill naoexiste
+$ echo $?
+1                                « não achou nenhum processo</pre>
+
+<p>Com <code>-f firefox-esr</code> ele encerra o processo principal <strong>e</strong> as abas (<code>Isolated Web Co</code>), porque todos têm <code>firefox-esr</code> na linha de comando.</p>
+
+<div class="warning">
+<strong>Cuidado com nomes curtos demais</strong>
+<p><code>pkill -f a</code> mandaria TERM para todo processo seu que tem a letra "a" na linha de comando, inclusive a sua sessão gráfica. Antes de um <code>pkill</code>, rode o <code>pgrep</code> com as mesmas opções e confira a lista.</p>
+</div>
+
+<h3>E o killall?</h3>
+<p>Em muitos tutoriais aparece <code>killall nome</code>. Num Debian instalado sem área de trabalho (servidor ou instalação mínima), ele não existe:</p>
+
+<pre class="term">$ killall firefox-esr
+bash: killall: comando não encontrado</pre>
+
+<p>O <code>killall</code> faz parte do pacote <code>psmisc</code>. Ele vem junto quando você escolhe uma área de trabalho (como o GNOME) no instalador, mas não numa instalação de servidor. Use <code>pkill</code>, que existe em qualquer Debian (pacote <code>procps</code>), ou instale o <code>psmisc</code> como root: <code>su -</code> e depois <code>apt install psmisc</code>.</p>
+
+<h3>Formas diferentes de encerrar um programa</h3>
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Forma</th><th>Exemplo</th><th>Quando usar</th></tr>
+<tr><td>Pelo PID</td><td><code>kill 2210</code></td><td>Você sabe exatamente qual processo.</td></tr>
+<tr><td>Pelo nome</td><td><code>pkill firefox-esr</code></td><td>Todos os processos com aquele nome.</td></tr>
+<tr><td>Pela linha de comando</td><td><code>pkill -f firefox-esr</code></td><td>Programa com vários processos (abas).</td></tr>
+<tr><td>Dentro do top</td><td>tecla <kbd>k</kbd> e o PID</td><td>Você já está olhando o top.</td></tr>
+<tr><td>Interface gráfica</td><td>"Forçar saída" ou o app Monitor do Sistema</td><td>A interface ainda responde.</td></tr>
+<tr><td>Ctrl+C</td><td>no terminal</td><td>O programa está rodando em primeiro plano no terminal.</td></tr>
+</table>
+</div>
+
+<hr>
+
+<h2>Quando não funciona</h2>
+
+<div class="cenario">
+<strong>"Processo inexistente"</strong>
+<pre class="term">$ kill 999999
+bash: kill: (999999) - Processo inexistente</pre>
+<p><strong>O que aconteceu:</strong> não existe processo com esse PID. Ele já fechou, ou o número foi digitado errado.</p>
+<p><strong>Como resolver:</strong> confira com <code>pgrep -l nome</code> e use o PID atual.</p>
+</div>
+
+<div class="cenario">
+<strong>"Operação não permitida"</strong>
+<pre class="term">$ kill 1
+bash: kill: (1) - Operação não permitida</pre>
+<p><strong>O que aconteceu:</strong> o processo pertence a outro usuário (o PID 1 é o systemd, do root). Usuário comum só manda sinais para os próprios processos.</p>
+<p><strong>Como resolver:</strong> se for mesmo necessário, vire root com <code>su -</code> (veja <a href="root-su-sudo.html">root, su e sudo</a>). Para serviços do sistema, prefira <code>systemctl restart serviço</code>.</p>
+</div>
+
+<div class="cenario">
+<strong>"argumentos devem ser IDs de trabalhos ou processo"</strong>
+<pre class="term">$ kill firefox
+bash: kill: firefox: argumentos devem ser IDs de trabalhos ou processo</pre>
+<p><strong>O que aconteceu:</strong> o <code>kill</code> só aceita números (PID) ou trabalhos (<code>%1</code>), nunca nomes.</p>
+<p><strong>Como resolver:</strong> use <code>pkill firefox</code>, ou descubra o PID com <code>pgrep</code>.</p>
+</div>
+
+<div class="cenario">
+<strong>"bash: killall: comando não encontrado"</strong>
+<p><strong>O que aconteceu:</strong> o pacote <code>psmisc</code> não está instalado.</p>
+<p><strong>Como resolver:</strong> use <code>pkill</code>, que faz o mesmo trabalho.</p>
+</div>
+
+<div class="cenario">
+<strong>Mandei kill e o programa continua lá</strong>
+<p><strong>O que aconteceu:</strong> o programa está travado e não processa o TERM, ou está esperando o disco (estado <code>D</code> no <code>ps</code>).</p>
+<p><strong>Como resolver:</strong> espere alguns segundos e use <code>kill -9</code>. Se o estado for <code>D</code>, nem o KILL resolve até o disco responder; veja <a href="travamentos.html">Quando o Sistema Trava</a>.</p>
+</div>
+
+<hr>
+
+<h2>Referência de opções</h2>
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Comando</th><th>Descrição</th></tr>
+<tr><td><code>kill PID</code></td><td>Manda TERM (15)</td></tr>
+<tr><td><code>kill -9 PID</code> / <code>kill -KILL PID</code></td><td>Manda KILL (9)</td></tr>
+<tr><td><code>kill -s HUP PID</code></td><td>Manda um sinal pelo nome</td></tr>
+<tr><td><code>kill %1</code></td><td>Encerra o trabalho 1 deste terminal</td></tr>
+<tr><td><code>kill -l</code></td><td>Lista os sinais</td></tr>
+<tr><td><code>pkill nome</code></td><td>TERM para todos com o nome curto contendo "nome"</td></tr>
+<tr><td><code>pkill -f texto</code></td><td>Procura na linha de comando inteira</td></tr>
+<tr><td><code>pkill -x nome</code></td><td>Só nome exato</td></tr>
+<tr><td><code>pkill -u ana nome</code></td><td>Só processos da ana</td></tr>
+<tr><td><code>pkill -9 nome</code></td><td>KILL pelo nome</td></tr>
+</table>
+</div>
+
+<hr>
+
+<h2>Exercícios</h2>
+
+<div class="exercise">
+<h3>1. Sinal forte</h3>
+<p>Complete para mandar o sinal que não pode ser ignorado ao processo 2210:</p>
+<div class="ex-code">kill <input data-answer="-9|-KILL|-SIGKILL|-s KILL" aria-label="sinal"> 2210</div>
+</div>
+
+<div class="exercise">
+<h3>2. Pelo nome</h3>
+<p>Complete para encerrar todos os processos do Firefox ESR pelo nome, sem saber o PID:</p>
+<div class="ex-code"><input data-answer="pkill" aria-label="comando"> firefox-esr</div>
+</div>
+
+<div class="mc" data-answer="1">
+<p class="mc-q">3. Qual sinal o <code>kill 2210</code> manda?</p>
+<label><input type="radio" name="q3"> TERM (15)</label>
+<label><input type="radio" name="q3"> KILL (9)</label>
+<label><input type="radio" name="q3"> INT (2)</label>
+<label><input type="radio" name="q3"> HUP (1)</label>
+</div>
+
+<div class="mc" data-answer="3">
+<p class="mc-q">4. Num Debian instalado como servidor, sem área de trabalho, <code>killall cron</code> responde:</p>
+<label><input type="radio" name="q4"> Encerra o Firefox.</label>
+<label><input type="radio" name="q4"> <code>Operação não permitida</code>.</label>
+<label><input type="radio" name="q4"> <code>bash: killall: comando não encontrado</code>.</label>
+<label><input type="radio" name="q4"> Pede a senha do root.</label>
+</div>
+
+<hr>
+
+<h2>Resumo</h2>
+<ul>
+  <li><code>kill</code> manda sinais; sem opção, manda TERM (15), um pedido educado.</li>
+  <li><code>kill -9</code> manda KILL: encerra na hora, sem salvar. Use por último.</li>
+  <li><code>pkill</code> encerra pelo nome; confira antes com <code>pgrep</code> e as mesmas opções.</li>
+  <li>No Debian sem área de trabalho, <code>killall</code> não vem instalado (pacote <code>psmisc</code>); <code>pkill</code> sempre existe.</li>
+  <li>Processos de outros usuários exigem root: <code>su -</code>.</li>
+</ul>
+
+<div class="pager"></div>
+
+</div>
+</main>
+</div>
+<script src="assets/site.js"></script>
+</body>
+</html>

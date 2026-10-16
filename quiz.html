@@ -1,0 +1,323 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Debian Quiz — 30 perguntas práticas | Guia Debian</title>
+<meta name="description" content="Quiz do Guia Debian: 30 perguntas práticas sobre Debian 13, 10 por nível, com correção na hora e link para revisar cada assunto.">
+<link rel="stylesheet" href="assets/style.css">
+<script>try{var t=localStorage.getItem("tema");if(t)document.documentElement.setAttribute("data-theme",t)}catch(e){}</script>
+</head>
+<body>
+<div class="layout">
+<nav class="sidebar" id="sidebar" aria-label="Tópicos"></nav>
+<main class="main">
+<div class="content">
+
+<div class="pager"></div>
+
+<h1>Debian <span class="hl">Quiz</span></h1>
+
+<p class="intro">Trinta perguntas práticas sobre o Debian 13: dez de cada nível. Cada uma corrige na hora e tem um link "Revise" para a aula do assunto. Não é decoreba: quase todas pedem para você interpretar uma situação ou uma saída do terminal.</p>
+
+<p>Acertos: <strong id="placar">0 de 30</strong></p>
+
+<h2>Nível 1 · Iniciante</h2>
+
+<div class="mc" data-answer="4">
+<p class="mc-q">1. A <code>ana</code> rodou isto num Debian instalado com senha de root. Por quê?</p>
+<pre class="term">$ sudo apt update
+bash: sudo: comando não encontrado</pre>
+<label><input type="radio" name="q1"> O apt está quebrado.</label>
+<label><input type="radio" name="q1"> A ana digitou a senha errada.</label>
+<label><input type="radio" name="q1"> O sudo só funciona no modo gráfico.</label>
+<label><input type="radio" name="q1"> Com senha de root, o instalador não instala o sudo.</label>
+<p class="mc-q" style="font-weight:400;font-size:14px">Revise: <a href="root-su-sudo.html">root, su e sudo</a></p>
+</div>
+
+<div class="mc" data-answer="1">
+<p class="mc-q">2. Qual comando abre um shell de root com o ambiente completo do root (inclusive o PATH com /sbin)?</p>
+<label><input type="radio" name="q2"> <code>su -</code></label>
+<label><input type="radio" name="q2"> <code>su</code></label>
+<label><input type="radio" name="q2"> <code>root</code></label>
+<label><input type="radio" name="q2"> <code>sudo -l</code></label>
+<p class="mc-q" style="font-weight:400;font-size:14px">Revise: <a href="root-su-sudo.html">root, su e sudo</a></p>
+</div>
+
+<div class="mc" data-answer="3">
+<p class="mc-q">3. O que este resultado diz?</p>
+<pre class="term">$ reboot
+bash: reboot: comando não encontrado</pre>
+<label><input type="radio" name="q3"> O Debian não tem reboot.</label>
+<label><input type="radio" name="q3"> Falta instalar o pacote reboot.</label>
+<label><input type="radio" name="q3"> O reboot está em /usr/sbin, fora do PATH da ana.</label>
+<label><input type="radio" name="q3"> A máquina já está reiniciando.</label>
+<p class="mc-q" style="font-weight:400;font-size:14px">Revise: <a href="root-su-sudo.html">root, su e sudo</a></p>
+</div>
+
+<div class="mc" data-answer="4">
+<p class="mc-q">4. A ana roda <code>ll</code> e recebe "comando não encontrado". O que fazer?</p>
+<label><input type="radio" name="q4"> Instalar o pacote ll.</label>
+<label><input type="radio" name="q4"> Rodar como root.</label>
+<label><input type="radio" name="q4"> Reinstalar o bash.</label>
+<label><input type="radio" name="q4"> Usar <code>ls -l</code> ou descomentar o alias no <code>~/.bashrc</code>.</label>
+<p class="mc-q" style="font-weight:400;font-size:14px">Revise: <a href="bashrc.html">.bashrc, alias, PATH</a></p>
+</div>
+
+<div class="mc" data-answer="2">
+<p class="mc-q">5. Por que o <code>ls</code> do Debian mostra <code>a</code>, <code>Área de trabalho</code>, <code>aula1</code> nessa ordem?</p>
+<label><input type="radio" name="q5"> Ordena pela data.</label>
+<label><input type="radio" name="q5"> Ele ordena pelo idioma, ignorando acentos e misturando maiúsculas e minúsculas.</label>
+<label><input type="radio" name="q5"> Ordena pelo tamanho.</label>
+<label><input type="radio" name="q5"> Ordena por código de caractere.</label>
+<p class="mc-q" style="font-weight:400;font-size:14px">Revise: <a href="ls.html">ls</a></p>
+</div>
+
+<div class="mc" data-answer="3">
+<p class="mc-q">6. Qual a permissão padrão da pasta pessoal no Debian 13?</p>
+<label><input type="radio" name="q6"> <code>drwxr-x---</code> (750)</label>
+<label><input type="radio" name="q6"> <code>drwxr-xr-x</code> (755)</label>
+<label><input type="radio" name="q6"> <code>drwx------</code> (700)</label>
+<label><input type="radio" name="q6"> <code>drwxrwxrwx</code> (777)</label>
+<p class="mc-q" style="font-weight:400;font-size:14px">Revise: <a href="permissoes.html">Entendendo Permissões</a></p>
+</div>
+
+<div class="mc" data-answer="1">
+<p class="mc-q">7. A interface gráfica travou, mas o mouse nem mexe. Qual o primeiro passo?</p>
+<label><input type="radio" name="q7"> <kbd>Ctrl</kbd>+<kbd>Alt</kbd>+<kbd>F3</kbd> para abrir um console de texto.</label>
+<label><input type="radio" name="q7"> Segurar o botão de energia.</label>
+<label><input type="radio" name="q7"> <kbd>Alt</kbd>+<kbd>SysRq</kbd>+<kbd>B</kbd>.</label>
+<label><input type="radio" name="q7"> <kbd>Ctrl</kbd>+<kbd>Alt</kbd>+<kbd>T</kbd>.</label>
+<p class="mc-q" style="font-weight:400;font-size:14px">Revise: <a href="travamentos.html">Quando o Sistema Trava</a></p>
+</div>
+
+<div class="mc" data-answer="2">
+<p class="mc-q">8. Por que <code>pgrep -l firefox</code> não mostra as abas do navegador?</p>
+<pre class="term">$ pgrep -l firefox
+2210 firefox-esr</pre>
+<label><input type="radio" name="q8"> As abas não são processos.</label>
+<label><input type="radio" name="q8"> As abas rodam em processos chamados <code>Isolated Web Co</code>.</label>
+<label><input type="radio" name="q8"> O pgrep só acha o primeiro processo.</label>
+<label><input type="radio" name="q8"> O Firefox esconde os processos.</label>
+<p class="mc-q" style="font-weight:400;font-size:14px">Revise: <a href="processos.html">ps, pgrep, top</a></p>
+</div>
+
+<div class="mc" data-answer="4">
+<p class="mc-q">9. No Debian, qual é o caminho comum para instalar aplicativos fora do apt?</p>
+<label><input type="radio" name="q9"> Snap</label>
+<label><input type="radio" name="q9"> PPA</label>
+<label><input type="radio" name="q9"> AppImage obrigatório</label>
+<label><input type="radio" name="q9"> Flatpak (Flathub)</label>
+<p class="mc-q" style="font-weight:400;font-size:14px">Revise: <a href="flatpak.html">Flatpak</a></p>
+</div>
+
+<div class="mc" data-answer="1">
+<p class="mc-q">10. O que <code>su -c "apt install htop"</code> faz?</p>
+<label><input type="radio" name="q10"> Roda só aquele comando como root e volta para a ana.</label>
+<label><input type="radio" name="q10"> Abre um shell de root permanente.</label>
+<label><input type="radio" name="q10"> Instala o htop para todos sem senha.</label>
+<label><input type="radio" name="q10"> Cria um usuário chamado htop.</label>
+<p class="mc-q" style="font-weight:400;font-size:14px">Revise: <a href="root-su-sudo.html">root, su e sudo</a></p>
+</div>
+
+<h2>Nível 2 · Intermediário</h2>
+
+<div class="mc" data-answer="3">
+<p class="mc-q">11. Qual arquivo lista os repositórios num Debian 13 recém-instalado?</p>
+<label><input type="radio" name="q11"> <code>/etc/apt/sources.list.d/ubuntu.sources</code></label>
+<label><input type="radio" name="q11"> <code>/etc/repos.conf</code></label>
+<label><input type="radio" name="q11"> <code>/etc/apt/sources.list</code>, no formato de uma linha.</label>
+<label><input type="radio" name="q11"> <code>/etc/apt/ppa.list</code></label>
+<p class="mc-q" style="font-weight:400;font-size:14px">Revise: <a href="repositorios.html">Repositórios (sources)</a></p>
+</div>
+
+<div class="mc" data-answer="4">
+<p class="mc-q">12. Você quer uma versão mais nova de um programa sem sair da stable. O que usar?</p>
+<label><input type="radio" name="q12"> Os pacotes da testing.</label>
+<label><input type="radio" name="q12"> Um PPA do Ubuntu.</label>
+<label><input type="radio" name="q12"> O repositório do sid.</label>
+<label><input type="radio" name="q12"> O repositório <code>trixie-backports</code>.</label>
+<p class="mc-q" style="font-weight:400;font-size:14px">Revise: <a href="backports.html">Backports e Pinning</a></p>
+</div>
+
+<div class="mc" data-answer="2">
+<p class="mc-q">13. Onde ver os logs do sistema num Debian 13?</p>
+<label><input type="radio" name="q13"> <code>/var/log/syslog</code></label>
+<label><input type="radio" name="q13"> <code>journalctl</code></label>
+<label><input type="radio" name="q13"> <code>/var/log/messages</code></label>
+<label><input type="radio" name="q13"> <code>dmesg</code> é o único jeito</label>
+<p class="mc-q" style="font-weight:400;font-size:14px">Revise: <a href="journalctl.html">Logs (journalctl)</a></p>
+</div>
+
+<div class="mc" data-answer="3">
+<p class="mc-q">14. O que significa este aviso?</p>
+<pre class="term">$ journalctl -n 2
+Hint: You are currently not seeing messages from other users and the system.</pre>
+<label><input type="radio" name="q14"> O journal está desligado.</label>
+<label><input type="radio" name="q14"> Não há logs no sistema.</label>
+<label><input type="radio" name="q14"> A ana só vê os próprios logs; root ou o grupo adm veem tudo.</label>
+<label><input type="radio" name="q14"> O comando está obsoleto.</label>
+<p class="mc-q" style="font-weight:400;font-size:14px">Revise: <a href="journalctl.html">Logs (journalctl)</a></p>
+</div>
+
+<div class="mc" data-answer="1">
+<p class="mc-q">15. Onde fica a configuração de rede de um Debian servidor?</p>
+<label><input type="radio" name="q15"> <code>/etc/network/interfaces</code> (ifupdown)</label>
+<label><input type="radio" name="q15"> <code>/etc/netplan/</code></label>
+<label><input type="radio" name="q15"> <code>/etc/sysconfig/network</code></label>
+<label><input type="radio" name="q15"> Só no NetworkManager</label>
+<p class="mc-q" style="font-weight:400;font-size:14px">Revise: <a href="configurar-rede.html">Configurar a Rede</a></p>
+</div>
+
+<div class="mc" data-answer="2">
+<p class="mc-q">16. O que acontece aqui, e por quê?</p>
+<pre class="term">$ echo oi | su -c &quot;tee /etc/teste&quot;
+Senha: su: Falha de autenticação</pre>
+<label><input type="radio" name="q16"> O tee não aceita pipes.</label>
+<label><input type="radio" name="q16"> O su leu a senha do pipe e recebeu "oi".</label>
+<label><input type="radio" name="q16"> A ana não pode usar su.</label>
+<label><input type="radio" name="q16"> O /etc está cheio.</label>
+<p class="mc-q" style="font-weight:400;font-size:14px">Revise: <a href="pipes.html">Pipes e xargs</a></p>
+</div>
+
+<div class="mc" data-answer="4">
+<p class="mc-q">17. Qual destes NÃO vem instalado num Debian recém-instalado?</p>
+<label><input type="radio" name="q17"> <code>wget</code></label>
+<label><input type="radio" name="q17"> <code>nano</code></label>
+<label><input type="radio" name="q17"> <code>dig</code></label>
+<label><input type="radio" name="q17"> <code>curl</code></label>
+<p class="mc-q" style="font-weight:400;font-size:14px">Revise: <a href="curl-wget.html">curl, wget, dig</a></p>
+</div>
+
+<div class="mc" data-answer="1">
+<p class="mc-q">18. Você colocou a ana no grupo sudo, mas o <code>id</code> não mostra o grupo. O que falta?</p>
+<label><input type="radio" name="q18"> Sair e entrar de novo na sessão.</label>
+<label><input type="radio" name="q18"> Reiniciar o computador.</label>
+<label><input type="radio" name="q18"> Rodar <code>apt update</code>.</label>
+<label><input type="radio" name="q18"> Editar o <code>/etc/passwd</code>.</label>
+<p class="mc-q" style="font-weight:400;font-size:14px">Revise: <a href="usuarios.html">Usuários e Grupos</a></p>
+</div>
+
+<div class="mc" data-answer="3">
+<p class="mc-q">19. No crontab, qual variável fica literalmente com o til, sem expandir?</p>
+<label><input type="radio" name="q19"> O <code>~</code> no comando da linha</label>
+<label><input type="radio" name="q19"> O <code>~</code> dentro de um script</label>
+<label><input type="radio" name="q19"> <code>PATH=~/bin</code> no topo do crontab</label>
+<label><input type="radio" name="q19"> Nenhuma, o cron sempre expande</label>
+<p class="mc-q" style="font-weight:400;font-size:14px">Revise: <a href="cron.html">Agendar Tarefas (cron)</a></p>
+</div>
+
+<div class="mc" data-answer="4">
+<p class="mc-q">20. Qual o awk padrão do Debian 13?</p>
+<label><input type="radio" name="q20"> gawk</label>
+<label><input type="radio" name="q20"> nawk</label>
+<label><input type="radio" name="q20"> busybox awk</label>
+<label><input type="radio" name="q20"> mawk</label>
+<p class="mc-q" style="font-weight:400;font-size:14px">Revise: <a href="awk.html">awk</a></p>
+</div>
+
+<h2>Nível 3 · Avançado</h2>
+
+<div class="mc" data-answer="2">
+<p class="mc-q">21. O firewall nativo do Debian é o:</p>
+<label><input type="radio" name="q21"> ufw</label>
+<label><input type="radio" name="q21"> nftables (comando <code>nft</code>)</label>
+<label><input type="radio" name="q21"> firewalld</label>
+<label><input type="radio" name="q21"> iptables legado</label>
+<p class="mc-q" style="font-weight:400;font-size:14px">Revise: <a href="nftables.html">Firewall (nftables)</a></p>
+</div>
+
+<div class="mc" data-answer="3">
+<p class="mc-q">22. Como vem o serviço <code>nftables</code> num Debian recém-instalado?</p>
+<label><input type="radio" name="q22"> Ligado, bloqueando tudo.</label>
+<label><input type="radio" name="q22"> Ligado, liberando só o SSH.</label>
+<label><input type="radio" name="q22"> Desligado, com um arquivo que aceita tudo.</label>
+<label><input type="radio" name="q22"> Não existe.</label>
+<p class="mc-q" style="font-weight:400;font-size:14px">Revise: <a href="nftables.html">Firewall (nftables)</a></p>
+</div>
+
+<div class="mc" data-answer="1">
+<p class="mc-q">23. Com <code>kernel.sysrq = 438</code>, quais letras do REISUB funcionam?</p>
+<label><input type="radio" name="q23"> R, S, U e B</label>
+<label><input type="radio" name="q23"> Todas</label>
+<label><input type="radio" name="q23"> Só S, U e B</label>
+<label><input type="radio" name="q23"> Só B</label>
+<p class="mc-q" style="font-weight:400;font-size:14px">Revise: <a href="travamentos.html">Quando o Sistema Trava</a></p>
+</div>
+
+<div class="mc" data-answer="2">
+<p class="mc-q">24. O boot parou em "Give root password for maintenance". O que mais provavelmente aconteceu?</p>
+<label><input type="radio" name="q24"> O GRUB foi apagado.</label>
+<label><input type="radio" name="q24"> Um erro no <code>/etc/fstab</code> ou um disco que sumiu.</label>
+<label><input type="radio" name="q24"> A senha da ana expirou.</label>
+<label><input type="radio" name="q24"> Falta memória RAM.</label>
+<p class="mc-q" style="font-weight:400;font-size:14px">Revise: <a href="recuperacao.html">Recuperar um Sistema</a></p>
+</div>
+
+<div class="mc" data-answer="4">
+<p class="mc-q">25. No Debian, de onde vem o ZFS?</p>
+<label><input type="radio" name="q25"> Da main, já no kernel.</label>
+<label><input type="radio" name="q25"> Só de um PPA.</label>
+<label><input type="radio" name="q25"> Do non-free-firmware.</label>
+<label><input type="radio" name="q25"> Do componente contrib, compilado com DKMS.</label>
+<p class="mc-q" style="font-weight:400;font-size:14px">Revise: <a href="zfs.html">ZFS</a></p>
+</div>
+
+<div class="mc" data-answer="1">
+<p class="mc-q">26. No Apache do Debian, qual comando ativa um site?</p>
+<label><input type="radio" name="q26"> <code>a2ensite</code></label>
+<label><input type="radio" name="q26"> <code>apache-enable</code></label>
+<label><input type="radio" name="q26"> <code>systemctl enable site</code></label>
+<label><input type="radio" name="q26"> <code>ln -s</code> é o único jeito</label>
+<p class="mc-q" style="font-weight:400;font-size:14px">Revise: <a href="apache.html">Servidor Web (Apache)</a></p>
+</div>
+
+<div class="mc" data-answer="3">
+<p class="mc-q">27. Containers do Incus perderam a internet depois de instalar o Docker. Por quê?</p>
+<label><input type="radio" name="q27"> O Incus não suporta rede.</label>
+<label><input type="radio" name="q27"> O Docker apagou a ponte do Incus.</label>
+<label><input type="radio" name="q27"> O Docker mudou a política do FORWARD para DROP.</label>
+<label><input type="radio" name="q27"> Falta o pacote dhcp.</label>
+<p class="mc-q" style="font-weight:400;font-size:14px">Revise: <a href="incus.html">Incus (containers de sistema)</a></p>
+</div>
+
+<div class="mc" data-answer="4">
+<p class="mc-q">28. O que é um arquivo preseed?</p>
+<label><input type="radio" name="q28"> Um pacote .deb compactado.</label>
+<label><input type="radio" name="q28"> A configuração do GRUB.</label>
+<label><input type="radio" name="q28"> Um backup do sistema.</label>
+<label><input type="radio" name="q28"> Respostas prontas para o instalador do Debian rodar sozinho.</label>
+<p class="mc-q" style="font-weight:400;font-size:14px">Revise: <a href="preseed.html">Instalação Automática (preseed)</a></p>
+</div>
+
+<div class="mc" data-answer="2">
+<p class="mc-q">29. Qual ferramenta monta um pacote .deb a partir de uma pasta com <code>DEBIAN/control</code>?</p>
+<label><input type="radio" name="q29"> <code>apt build</code></label>
+<label><input type="radio" name="q29"> <code>dpkg-deb --build</code></label>
+<label><input type="radio" name="q29"> <code>tar -cdeb</code></label>
+<label><input type="radio" name="q29"> <code>make deb</code></label>
+<p class="mc-q" style="font-weight:400;font-size:14px">Revise: <a href="criar-pacote.html">Criar um Pacote .deb</a></p>
+</div>
+
+<div class="mc" data-answer="3">
+<p class="mc-q">30. Por que misturar pacotes da testing numa stable é má ideia?</p>
+<label><input type="radio" name="q30"> A testing é mais lenta.</label>
+<label><input type="radio" name="q30"> O apt não permite.</label>
+<label><input type="radio" name="q30"> Cria um FrankenDebian, com versões incompatíveis que travam as atualizações.</label>
+<label><input type="radio" name="q30"> Os pacotes da testing são pagos.</label>
+<p class="mc-q" style="font-weight:400;font-size:14px">Revise: <a href="backports.html">Backports e Pinning</a></p>
+</div>
+
+<div class="tip">
+<strong>Terminou?</strong>
+<p>Role até o topo para ver o placar. Errou alguma? O link "Revise" leva direto para a aula.</p>
+</div>
+
+<div class="pager"></div>
+
+</div>
+</main>
+</div>
+<script src="assets/site.js"></script>
+</body>
+</html>

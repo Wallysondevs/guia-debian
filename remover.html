@@ -1,0 +1,346 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Debian rm e rmdir — apagar arquivos e pastas | Guia Debian</title>
+<meta name="description" content="Apague arquivos e pastas no Debian com rm e rmdir: -i, -I, -r, -f, a lixeira pelo terminal com gio trash, a proteção do rm -rf /, mensagens reais e terminal simulado.">
+<link rel="stylesheet" href="assets/style.css">
+<script>try{var t=localStorage.getItem("tema");if(t)document.documentElement.setAttribute("data-theme",t)}catch(e){}</script>
+</head>
+<body>
+<div class="layout">
+<nav class="sidebar" id="sidebar" aria-label="Tópicos"></nav>
+<main class="main">
+<div class="content">
+
+<div class="pager"></div>
+
+<h1>Debian <span class="hl">rm e rmdir</span></h1>
+
+<p class="intro">O <code>rm</code> apaga arquivos e o <code>rmdir</code> apaga pastas vazias. Eles são rápidos e não pedem confirmação. Por isso esta aula ensina, junto com os comandos, os hábitos que evitam apagar o que não devia.</p>
+
+<div class="warning">
+<strong>O rm não usa lixeira</strong>
+<p>O que o <code>rm</code> apaga não vai para a lixeira do desktop e não volta com "desfazer". Antes de qualquer <code>rm</code>, confira o que vai sair. Se quiser uma segunda chance, use <code>gio trash</code>, mostrado nesta aula.</p>
+</div>
+
+<div class="note">
+<strong>Você vai aprender</strong>
+<ul>
+  <li>Apagar arquivos com <code>rm</code> e pastas com <code>rmdir</code> e <code>rm -r</code>.</li>
+  <li>Pedir confirmação com <code>-i</code> e <code>-I</code>.</li>
+  <li>Mandar para a lixeira pelo terminal, com <code>gio trash</code>.</li>
+  <li>Por que o <code>rm -rf</code> merece respeito, e a proteção que o Debian tem.</li>
+</ul>
+</div>
+
+<hr>
+
+<h2>A ideia: apagar é tirar o nome da lista</h2>
+<p>Uma pasta é uma lista de nomes que apontam para os dados no disco. O <code>rm</code> tira o nome da lista. Sem nenhum nome apontando para eles, os dados viram espaço livre e serão sobrescritos. Na prática: o arquivo some na hora.</p>
+
+<hr>
+
+<h2>rm: apagar arquivos</h2>
+<p><code>rm</code> vem de <em>remove</em>, "remover".</p>
+
+<dl class="anatomy">
+  <dt>rm</dt><dd>O programa que apaga.</dd>
+  <dt>a.txt</dt><dd>O arquivo a apagar. Pode haver vários: <code>rm a.txt b.txt</code>.</dd>
+</dl>
+
+<pre class="term" data-cwd="~/lixo">$ ls
+a.txt  b.txt  c.log  vazia  velho
+$ rm a.txt
+$ rm -v b.txt
+removido 'b.txt'                  « com -v, o rm conta o que fez</pre>
+
+<h3>O que o comando devolve</h3>
+<p>Silêncio é sucesso, e o código de saída confirma:</p>
+
+<pre class="term" data-cwd="~/lixo">$ rm nada
+rm: não foi possível remover 'nada': Arquivo ou diretório inexistente
+$ echo $?
+1</pre>
+
+<hr>
+
+<h2>Pedir confirmação: <code>-i</code> e <code>-I</code></h2>
+
+<h3><code>-i</code>: pergunta a cada arquivo</h3>
+<p>O <code>-i</code> (de <em>interactive</em>) pergunta antes de cada arquivo. Responda <kbd>s</kbd> para apagar ou <kbd>n</kbd> para manter:</p>
+
+<pre class="term">$ rm -i aula1
+rm: remover regular empty file 'aula1'? n</pre>
+
+<p>A pergunta mistura inglês e português no Debian 13: "regular empty file" quer dizer "arquivo comum vazio". O começo e o fim da frase são traduzidos; o tipo do arquivo ainda não. Com um arquivo com conteúdo, a pergunta vira "remover regular file 'x'?".</p>
+
+<h3><code>-I</code>: pergunta uma vez só</h3>
+<p>O <code>-I</code> (maiúsculo) pergunta uma vez quando há mais de três arquivos, ou quando o apagamento é recursivo. É menos chato que o <code>-i</code> e ainda protege contra um curinga errado:</p>
+
+<pre class="term">$ rm -I *.log
+rm: remover 4 argumentos? n
+$ rm -rI velho
+rm: remover 1 argumento recursivamente? n</pre>
+
+<h3>Arquivos protegidos contra escrita</h3>
+<p>Se o arquivo não tem permissão de escrita, o <code>rm</code> pergunta mesmo sem <code>-i</code>:</p>
+
+<pre class="term">$ rm r1
+rm: remover regular file 'r1' protegido contra escrita? n</pre>
+
+<div class="tip">
+<strong>Sempre perguntar</strong>
+<p>Para que o <code>rm</code> sempre pergunte, crie o apelido <code>alias rm='rm -I'</code> no <code>~/.bashrc</code> (veja <a href="bashrc.html">.bashrc, alias, PATH</a>).</p>
+</div>
+
+<hr>
+
+<h2>Apagar pastas</h2>
+
+<h3>rmdir: só pastas vazias</h3>
+<p><code>rmdir</code> vem de <em>remove directory</em>. Ele só apaga pastas vazias, o que é uma proteção:</p>
+
+<pre class="term" data-cwd="~/lixo">$ rmdir vazia
+$ rmdir velho
+rmdir: falhou em remover 'velho': Diretório não vazio</pre>
+
+<p>Com <code>-p</code>, ele apaga também as pastas de cima que ficarem vazias:</p>
+
+<pre class="term">$ rmdir -pv p1/p2/p3
+rmdir: removendo o diretório 'p1/p2/p3'
+rmdir: removendo o diretório 'p1/p2'
+rmdir: removendo o diretório 'p1'</pre>
+
+<h3>rm -r: a pasta e tudo o que há dentro</h3>
+<p>Sem opção, o <code>rm</code> recusa pastas:</p>
+
+<pre class="term" data-cwd="~/lixo">$ rm velho
+rm: não foi possível remover 'velho': É um diretório</pre>
+
+<p>O <code>-r</code> (de <em>recursive</em>) entra na pasta e apaga tudo, de dentro para fora:</p>
+
+<dl class="anatomy">
+  <dt>rm</dt><dd>O programa.</dd>
+  <dt>-rv</dt><dd><code>-r</code> apaga pastas e o conteúdo; <code>-v</code> mostra cada item.</dd>
+  <dt>velho</dt><dd>A pasta.</dd>
+</dl>
+
+<pre class="term" data-cwd="~/lixo">$ rm -rv velho
+removido 'velho/x.txt'
+removido 'velho/y.txt'
+foi removido o diretório: 'velho'</pre>
+
+<p>Com <code>-r</code> e <code>-i</code> juntos, o <code>rm</code> pergunta até antes de entrar na pasta: <code>rm: entrar no diretório 'velho'?</code>.</p>
+
+<div class="try" data-setup="mkdir lixo;;cd lixo;;touch a.txt b.txt c.log d.log foto.jpg;;mkdir velho vazia;;touch velho/x.txt velho/y.txt" data-goal="absent:~/lixo/velho,absent:~/lixo/vazia,absent:~/lixo/c.log,absent:~/lixo/d.log,file:~/lixo/foto.jpg">
+<p class="try-task"><strong>Missão:</strong> na pasta <code>lixo</code>, apague a pasta <code>vazia</code> com <code>rmdir</code>, a pasta <code>velho</code> com tudo dentro e os dois arquivos <code>.log</code>. A <code>foto.jpg</code> tem de ficar.</p>
+</div>
+
+<hr>
+
+<h2>Confira antes de apagar com curingas</h2>
+<p>Antes de um <code>rm</code> com curinga, troque <code>rm</code> por <code>echo</code> para ver a lista. Se estiver certa, rode o <code>rm</code> (veja <a href="curingas.html">Curingas</a>):</p>
+
+<pre class="term" data-cwd="~/lixo">$ echo *.log
+c.log d.log
+$ rm *.log</pre>
+
+<hr>
+
+<h2>Usar a lixeira pelo terminal: <code>gio trash</code></h2>
+<p>O Debian com desktop GNOME instala o comando <code>gio</code> (do pacote <code>libglib2.0-bin</code>). O <code>gio trash</code> manda arquivos para a <strong>mesma lixeira</strong> do app Arquivos, de onde dá para recuperar:</p>
+
+<dl class="anatomy">
+  <dt>gio</dt><dd>Ferramenta do GNOME para mexer com arquivos.</dd>
+  <dt>trash</dt><dd>O subcomando: "mandar para a lixeira".</dd>
+  <dt>relatorio-velho.odt</dt><dd>O que mandar.</dd>
+</dl>
+
+<pre class="term">$ gio trash relatorio-velho.odt
+$ ls relatorio-velho.odt
+ls: não foi possível acessar 'relatorio-velho.odt': Arquivo ou diretório inexistente      « saiu da pasta, mas está na lixeira</pre>
+
+<p>Para ver, devolver ou esvaziar, use o app <strong>Arquivos</strong> (item Lixeira) ou estes comandos, que funcionam dentro da sessão gráfica do GNOME:</p>
+
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Comando</th><th>Faz</th></tr>
+<tr><td><code>gio trash arq</code></td><td>Manda para a lixeira</td></tr>
+<tr><td><code>gio trash --list</code></td><td>Lista o que está na lixeira</td></tr>
+<tr><td><code>gio trash --restore trash:///arq</code></td><td>Devolve ao lugar original</td></tr>
+<tr><td><code>gio trash --empty</code></td><td>Esvazia a lixeira (aí não volta mais)</td></tr>
+</table>
+</div>
+
+<p>Fora da sessão gráfica (por SSH, por exemplo), só o primeiro funciona. Os outros dependem de um serviço do GNOME (o gvfs) e respondem assim:</p>
+
+<pre class="term">$ gio trash --list
+gio: trash:: Operação sem suporte</pre>
+
+<h3>No servidor: trash-cli</h3>
+<p>Numa instalação sem desktop, o root pode instalar o pacote <code>trash-cli</code>. Ele usa a <strong>mesma lixeira</strong> do GNOME e funciona em qualquer terminal:</p>
+
+<pre class="term">$ trash-put t2.txt
+$ trash-list
+2026-10-15 21:49:05 /home/ana/t2.txt
+2026-10-15 21:49:05 /home/ana/relatorio-velho.odt
+$ trash-restore      « pergunta qual item devolver
+$ trash-empty        « esvazia</pre>
+
+<p>Repare que o <code>trash-list</code> mostrou também o arquivo mandado com <code>gio trash</code>: os dois usam a pasta <code>~/.local/share/Trash</code>.</p>
+
+<hr>
+
+<h2>rm -rf: o comando que merece respeito</h2>
+<p>O <code>-f</code> (de <em>force</em>, "forçar") não pergunta nada e não reclama de arquivos que não existem. Junto com <code>-r</code>, apaga uma pasta inteira em silêncio. É útil em scripts e perigoso digitado à mão.</p>
+
+<div class="warning">
+<strong>Atenção redobrada</strong>
+<ul>
+  <li><code>rm -rf pasta /</code>, com um espaço sem querer antes da barra, tentaria apagar a raiz do sistema.</li>
+  <li><code>rm -rf $PASTA/*</code> com a variável vazia vira <code>rm -rf /*</code>.</li>
+  <li>Como root, nada impede o estrago dentro de <code>/etc</code>, <code>/usr</code> ou <code>/home</code>.</li>
+</ul>
+</div>
+
+<p>O Debian tem uma proteção para o pior caso, apagar a própria raiz:</p>
+
+<pre class="term">$ rm -rf /
+rm: é perigoso operar recursivamente em '/'
+rm: use --no-preserve-root para contornar esta segurança</pre>
+
+<p>Essa trava só protege o <code>/</code> exato. Ela não protege <code>/*</code>, <code>/home</code> nem nenhuma outra pasta. A proteção de verdade é o hábito: confira com <code>ls</code> ou <code>echo</code> antes, prefira <code>-I</code> e tenha <a href="backup.html">backup</a>.</p>
+
+<hr>
+
+<h2>Formas diferentes de apagar</h2>
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Situação</th><th>Comando</th><th>Volta?</th></tr>
+<tr><td>Um arquivo</td><td><code>rm arq</code></td><td>Não</td></tr>
+<tr><td>Com confirmação</td><td><code>rm -i arq</code></td><td>Não</td></tr>
+<tr><td>Pasta vazia</td><td><code>rmdir pasta</code></td><td>Não</td></tr>
+<tr><td>Pasta com conteúdo</td><td><code>rm -r pasta</code></td><td>Não</td></tr>
+<tr><td>Para a lixeira (desktop)</td><td><code>gio trash arq</code></td><td>Sim, até esvaziar</td></tr>
+<tr><td>Para a lixeira (servidor)</td><td><code>trash-put arq</code></td><td>Sim, até esvaziar</td></tr>
+<tr><td>Muitos arquivos por critério</td><td><code>find . -name "*.tmp" -delete</code></td><td>Não (veja <a href="find.html">find</a>)</td></tr>
+<tr><td>Pelo app Arquivos</td><td>Tecla <kbd>Delete</kbd></td><td>Sim, vai para a lixeira</td></tr>
+</table>
+</div>
+
+<hr>
+
+<h2>Quando não funciona</h2>
+
+<div class="cenario">
+<strong>"É um diretório"</strong>
+<p><strong>O que aconteceu:</strong> o <code>rm</code> sem opções não apaga pastas.</p>
+<p><strong>Como resolver:</strong> <code>rmdir pasta</code> se ela estiver vazia, ou <code>rm -r pasta</code> para apagar com o conteúdo.</p>
+</div>
+
+<div class="cenario">
+<strong>"Diretório não vazio"</strong>
+<p><strong>O que aconteceu:</strong> o <code>rmdir</code> só apaga pastas vazias. Às vezes há arquivos ocultos lá dentro.</p>
+<p><strong>Como resolver:</strong> veja o que há com <code>ls -A pasta</code>. Se pode mesmo sair tudo, use <code>rm -r pasta</code>.</p>
+</div>
+
+<div class="cenario">
+<strong>"Permissão negada"</strong>
+<pre class="term">$ rm /etc/hostname
+rm: não foi possível remover '/etc/hostname': Permissão negada</pre>
+<p><strong>O que aconteceu:</strong> para apagar, você precisa poder escrever na <strong>pasta</strong> que contém o arquivo, e <code>/etc</code> é do root.</p>
+<p><strong>Como resolver:</strong> pare e pense se é mesmo para apagar um arquivo do sistema. Se for, faça como root com <code>su -</code>.</p>
+</div>
+
+<div class="cenario">
+<strong>Um arquivo com nome começando por hífen</strong>
+<pre class="term">$ rm -arquivo
+rm: opção inválida -- “a”
+Tente "rm ./-arquivo" para remover o arquivo '-arquivo'.
+Tente "rm --help" para mais informações.</pre>
+<p><strong>O que aconteceu:</strong> o <code>rm</code> achou que <code>-arquivo</code> era uma opção.</p>
+<p><strong>Como resolver:</strong> faça como a própria mensagem sugere: <code>rm ./-arquivo</code>, ou <code>rm -- -arquivo</code>.</p>
+</div>
+
+<div class="cenario">
+<strong>Apaguei sem querer</strong>
+<p><strong>O que aconteceu:</strong> o <code>rm</code> não usa lixeira.</p>
+<p><strong>Como resolver:</strong> pare de gravar no disco e recupere de um <a href="backup.html">backup</a>. Ferramentas de recuperação existem, mas raramente devolvem tudo.</p>
+</div>
+
+<hr>
+
+<h2>Referência de opções</h2>
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Comando</th><th>Opção</th><th>Descrição</th></tr>
+<tr><td><code>rm</code></td><td><code>-i</code></td><td>Pergunta a cada arquivo</td></tr>
+<tr><td><code>rm</code></td><td><code>-I</code></td><td>Pergunta uma vez, se forem mais de 3 ou recursivo</td></tr>
+<tr><td><code>rm</code></td><td><code>-r</code></td><td>Apaga pastas e o conteúdo</td></tr>
+<tr><td><code>rm</code></td><td><code>-f</code></td><td>Não pergunta e não reclama de inexistentes</td></tr>
+<tr><td><code>rm</code></td><td><code>-d</code></td><td>Apaga pastas vazias (como o rmdir)</td></tr>
+<tr><td><code>rm</code></td><td><code>-v</code></td><td>Mostra cada item apagado</td></tr>
+<tr><td><code>rmdir</code></td><td><code>-p</code></td><td>Apaga também as pastas de cima que ficarem vazias</td></tr>
+<tr><td><code>rmdir</code></td><td><code>-v</code></td><td>Mostra cada pasta apagada</td></tr>
+</table>
+</div>
+
+<hr>
+
+<h2>Exercícios</h2>
+
+<div class="exercise">
+<h3>1. Pasta com conteúdo</h3>
+<p>Complete para apagar a pasta <code>antigo</code> com tudo o que há dentro:</p>
+<div class="ex-code">rm <input data-answer="-r|-R|-rf|-rv|-ri|-rI" aria-label="opção"> antigo</div>
+</div>
+
+<div class="exercise">
+<h3>2. Conferir antes</h3>
+<p>Antes de <code>rm *.bak</code>, que comando mostra o que vai ser apagado sem apagar nada?</p>
+<div class="ex-code"><input data-answer="echo *.bak|ls *.bak" aria-label="comando"></div>
+</div>
+
+<div class="exercise">
+<h3>3. Para a lixeira</h3>
+<p>No Debian com GNOME, complete para mandar <code>foto.jpg</code> para a lixeira:</p>
+<div class="ex-code">gio <input data-answer="trash" aria-label="subcomando"> foto.jpg</div>
+</div>
+
+<div class="mc" data-answer="3">
+<p class="mc-q">4. O que <code>rm: é perigoso operar recursivamente em '/'</code> indica?</p>
+<label><input type="radio" name="q4"> Que o sistema foi apagado.</label>
+<label><input type="radio" name="q4"> Que falta permissão de root.</label>
+<label><input type="radio" name="q4"> Que o rm se recusou a apagar a raiz, por segurança.</label>
+<label><input type="radio" name="q4"> Que o disco está cheio.</label>
+</div>
+
+<div class="mc" data-answer="2">
+<p class="mc-q">5. O <code>rmdir velho</code> respondeu "Diretório não vazio", mas o <code>ls velho</code> não mostra nada. Por quê?</p>
+<label><input type="radio" name="q5"> O rmdir está com defeito.</label>
+<label><input type="radio" name="q5"> Há arquivos ocultos, que só o <code>ls -A</code> mostra.</label>
+<label><input type="radio" name="q5"> A pasta é do root.</label>
+<label><input type="radio" name="q5"> Faltou o <code>-f</code>.</label>
+</div>
+
+<hr>
+
+<h2>Resumo</h2>
+<ul>
+  <li><code>rm</code> apaga arquivos de verdade, sem lixeira.</li>
+  <li><code>rmdir</code> apaga pastas vazias; <code>rm -r</code> apaga pastas com conteúdo.</li>
+  <li><code>-i</code> pergunta a cada arquivo, <code>-I</code> pergunta uma vez.</li>
+  <li><code>gio trash</code> (desktop) e <code>trash-put</code> (servidor) mandam para a lixeira.</li>
+  <li>Antes de <code>rm</code> com curinga, confira com <code>echo</code>.</li>
+</ul>
+
+<div class="pager"></div>
+
+</div>
+</main>
+</div>
+<script src="assets/site.js"></script>
+</body>
+</html>

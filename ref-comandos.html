@@ -1,0 +1,446 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Debian Referência de Comandos — de A a Z | Guia Debian</title>
+<meta name="description" content="Todos os comandos ensinados no Guia Debian, de A a Z, com o que cada um faz, o nível e o link para a aula, e uma tabela por tarefa.">
+<link rel="stylesheet" href="assets/style.css">
+<script>try{var t=localStorage.getItem("tema");if(t)document.documentElement.setAttribute("data-theme",t)}catch(e){}</script>
+</head>
+<body>
+<div class="layout">
+<nav class="sidebar" id="sidebar" aria-label="Tópicos"></nav>
+<main class="main">
+<div class="content">
+
+<div class="pager"></div>
+
+<h1>Debian <span class="hl">Referência de Comandos</span></h1>
+
+<p class="intro">Esta página reúne os 175 comandos ensinados no guia, em ordem alfabética, com uma frase sobre cada um, o nível em que aparecem e o link para a aula completa. No fim, há uma tabela "por tarefa" para quando você sabe o que quer fazer, mas não lembra o comando.</p>
+
+<div class="note">
+<strong>Antes de rodar um comando que você não conhece</strong>
+<p>Pergunte ao próprio sistema o que ele é. O <code>type</code> diz se é um programa, um comando do shell ou um apelido; o <code>whatis</code> dá a descrição de uma linha do manual.</p>
+</div>
+
+<dl class="anatomy">
+  <dt>type</dt><dd>Comando do bash: diz o que o nome significa para o shell.</dd>
+  <dt>ls cd reboot</dt><dd>Os nomes a investigar (quantos quiser).</dd>
+</dl>
+
+<pre class="term">$ type ls cd reboot
+ls está apelidada para `ls --color=auto'
+cd é um comando interno do shell
+bash: type: reboot: não encontrado          « está em /usr/sbin, fora do PATH da ana
+$ whatis tar
+tar (1)              - an archiving utility</pre>
+
+<p>Repare no <code>reboot</code>: ele existe, mas fica em <code>/usr/sbin</code>, que não está no PATH de um usuário comum no Debian. Veja <a href="root-su-sudo.html">root, su e sudo</a>.</p>
+
+<div class="tip">
+<strong>Comandos marcados com "instalar antes"</strong>
+<p>Não vêm num Debian recém-instalado. Instale como root: <code>su -c "apt install nome-do-pacote"</code>.</p>
+</div>
+
+<hr>
+
+<p class="indice-letras"><a href="#letra-A">A</a> · <a href="#letra-B">B</a> · <a href="#letra-C">C</a> · <a href="#letra-D">D</a> · <a href="#letra-E">E</a> · <a href="#letra-F">F</a> · <a href="#letra-G">G</a> · <a href="#letra-H">H</a> · <a href="#letra-I">I</a> · <a href="#letra-J">J</a> · <a href="#letra-K">K</a> · <a href="#letra-L">L</a> · <a href="#letra-M">M</a> · <a href="#letra-N">N</a> · <a href="#letra-O">O</a> · <a href="#letra-P">P</a> · <a href="#letra-R">R</a> · <a href="#letra-S">S</a> · <a href="#letra-T">T</a> · <a href="#letra-U">U</a> · <a href="#letra-V">V</a> · <a href="#letra-W">W</a> · <a href="#letra-X">X</a> · <a href="#letra-Z">Z</a></p>
+<h2 id="letra-A">A</h2>
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Comando</th><th>O que faz</th><th>Nível</th><th>Aula</th></tr>
+<tr><td><code>a2dismod</code></td><td>Desativa um módulo do Apache</td><td>Nível 3</td><td><a href="apache.html">Servidor Web (Apache)</a></td></tr>
+<tr><td><code>a2dissite</code></td><td>Desativa um site do Apache</td><td>Nível 3</td><td><a href="apache.html">Servidor Web (Apache)</a></td></tr>
+<tr><td><code>a2enconf</code></td><td>Ativa uma configuração extra do Apache</td><td>Nível 3</td><td><a href="apache.html">Servidor Web (Apache)</a></td></tr>
+<tr><td><code>a2enmod</code></td><td>Ativa um módulo do Apache</td><td>Nível 3</td><td><a href="apache.html">Servidor Web (Apache)</a></td></tr>
+<tr><td><code>a2ensite</code></td><td>Ativa um site do Apache</td><td>Nível 3</td><td><a href="apache.html">Servidor Web (Apache)</a></td></tr>
+<tr><td><code>aa-status</code></td><td>Mostra os perfis do AppArmor carregados</td><td>Nível 3</td><td><a href="seguranca.html">Segurança do Servidor</a></td></tr>
+<tr><td><code>adduser</code></td><td>Cria um usuário (interativo, jeito Debian)</td><td>Nível 2</td><td><a href="usuarios.html">Usuários e Grupos</a></td></tr>
+<tr><td><code>alias</code></td><td>Cria um apelido para um comando</td><td>Nível 2</td><td><a href="bashrc.html">.bashrc, alias, PATH</a></td></tr>
+<tr><td><code>ansible</code></td><td>Executa tarefas em várias máquinas</td><td>Nível 3</td><td><a href="ansible.html">Ansible</a></td></tr>
+<tr><td><code>ansible-playbook</code></td><td>Roda um playbook do Ansible</td><td>Nível 3</td><td><a href="ansible.html">Ansible</a></td></tr>
+<tr><td><code>apache2ctl</code></td><td>Testa e controla o Apache (configtest)</td><td>Nível 3</td><td><a href="apache.html">Servidor Web (Apache)</a></td></tr>
+<tr><td><code>apropos</code></td><td>Procura comandos pela descrição</td><td>Nível 1</td><td><a href="ajuda.html">Obtendo Ajuda</a></td></tr>
+<tr><td><code>apt</code></td><td>Instala, remove e atualiza programas</td><td>Nível 1</td><td><a href="apt.html">apt</a></td></tr>
+<tr><td><code>apt-cache</code></td><td>Consulta informações de pacotes</td><td>Nível 1</td><td><a href="apt.html">apt</a></td></tr>
+<tr><td><code>apt-get</code></td><td>Versão estável do apt para scripts</td><td>Nível 1</td><td><a href="apt.html">apt</a></td></tr>
+<tr><td><code>apt-mark</code></td><td>Marca pacotes (hold, manual, auto)</td><td>Nível 2</td><td><a href="upgrade-versao.html">Atualizar a Versão do Debian</a></td></tr>
+<tr><td><code>awk</code></td><td>Processa colunas de texto</td><td>Nível 2</td><td><a href="awk.html">awk</a></td></tr>
+</table>
+</div>
+<h2 id="letra-B">B</h2>
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Comando</th><th>O que faz</th><th>Nível</th><th>Aula</th></tr>
+<tr><td><code>bash</code></td><td>O shell; também roda scripts</td><td>Nível 2</td><td><a href="script-intro.html">Primeiro Script</a></td></tr>
+<tr><td><code>bg</code></td><td>Continua um job em segundo plano</td><td>Nível 2</td><td><a href="jobs.html">Jobs, nohup, tmux</a></td></tr>
+<tr><td><code>blkid</code></td><td>Mostra UUID e tipo das partições (root)</td><td>Nível 2</td><td><a href="discos.html">lsblk, df, du</a></td></tr>
+</table>
+</div>
+<h2 id="letra-C">C</h2>
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Comando</th><th>O que faz</th><th>Nível</th><th>Aula</th></tr>
+<tr><td><code>cal</code></td><td>Mostra um calendário (pacote ncal)</td><td>Nível 1</td><td><a href="primeiros-comandos.html">Primeiros Comandos</a></td></tr>
+<tr><td><code>cat</code></td><td>Mostra o conteúdo de arquivos</td><td>Nível 1</td><td><a href="ver-arquivos.html">cat, less, head, tail</a></td></tr>
+<tr><td><code>cd</code></td><td>Muda de pasta</td><td>Nível 1</td><td><a href="navegar.html">pwd e cd</a></td></tr>
+<tr><td><code>certbot</code></td><td>Obtém certificados HTTPS do Let&#x27;s Encrypt</td><td>Nível 3</td><td><a href="https.html">HTTPS (Let&#x27;s Encrypt)</a></td></tr>
+<tr><td><code>chgrp</code></td><td>Muda o grupo de um arquivo</td><td>Nível 2</td><td><a href="chown.html">chown, chgrp, umask</a></td></tr>
+<tr><td><code>chmod</code></td><td>Muda permissões</td><td>Nível 2</td><td><a href="chmod.html">chmod</a></td></tr>
+<tr><td><code>chown</code></td><td>Muda o dono de um arquivo</td><td>Nível 2</td><td><a href="chown.html">chown, chgrp, umask</a></td></tr>
+<tr><td><code>chroot</code></td><td>Entra num sistema instalado a partir de outro</td><td>Nível 3</td><td><a href="recuperacao.html">Recuperar um Sistema</a></td></tr>
+<tr><td><code>clear</code></td><td>Limpa a tela do terminal</td><td>Nível 1</td><td><a href="primeiros-comandos.html">Primeiros Comandos</a></td></tr>
+<tr><td><code>cp</code></td><td>Copia arquivos e pastas</td><td>Nível 1</td><td><a href="copiar-mover.html">cp e mv</a></td></tr>
+<tr><td><code>crontab</code></td><td>Agenda tarefas do usuário</td><td>Nível 2</td><td><a href="cron.html">Agendar Tarefas (cron)</a></td></tr>
+<tr><td><code>curl</code></td><td>Baixa e testa endereços web (instalar antes)</td><td>Nível 2</td><td><a href="curl-wget.html">curl, wget, dig</a></td></tr>
+<tr><td><code>cut</code></td><td>Recorta colunas de texto</td><td>Nível 2</td><td><a href="texto.html">sort, uniq, cut, wc, tr</a></td></tr>
+</table>
+</div>
+<h2 id="letra-D">D</h2>
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Comando</th><th>O que faz</th><th>Nível</th><th>Aula</th></tr>
+<tr><td><code>date</code></td><td>Mostra ou formata a data</td><td>Nível 1</td><td><a href="primeiros-comandos.html">Primeiros Comandos</a></td></tr>
+<tr><td><code>debsecan</code></td><td>Lista vulnerabilidades conhecidas nos pacotes</td><td>Nível 3</td><td><a href="seguranca.html">Segurança do Servidor</a></td></tr>
+<tr><td><code>deluser</code></td><td>Remove um usuário</td><td>Nível 2</td><td><a href="usuarios.html">Usuários e Grupos</a></td></tr>
+<tr><td><code>df</code></td><td>Mostra o espaço livre dos discos</td><td>Nível 2</td><td><a href="discos.html">lsblk, df, du</a></td></tr>
+<tr><td><code>dhcpcd</code></td><td>Cliente DHCP do Debian 13</td><td>Nível 2</td><td><a href="configurar-rede.html">Configurar a Rede</a></td></tr>
+<tr><td><code>dig</code></td><td>Consulta o DNS</td><td>Nível 2</td><td><a href="curl-wget.html">curl, wget, dig</a></td></tr>
+<tr><td><code>docker</code></td><td>Gerencia containers</td><td>Nível 3</td><td><a href="docker.html">Docker</a></td></tr>
+<tr><td><code>dpkg</code></td><td>Instala e consulta pacotes .deb</td><td>Nível 2</td><td><a href="dpkg.html">dpkg e .deb</a></td></tr>
+<tr><td><code>dpkg-deb</code></td><td>Monta um pacote .deb</td><td>Nível 3</td><td><a href="criar-pacote.html">Criar um Pacote .deb</a></td></tr>
+<tr><td><code>dpkg-reconfigure</code></td><td>Refaz as perguntas de configuração de um pacote</td><td>Nível 2</td><td><a href="dpkg.html">dpkg e .deb</a></td></tr>
+<tr><td><code>du</code></td><td>Mostra quanto espaço uma pasta ocupa</td><td>Nível 2</td><td><a href="discos.html">lsblk, df, du</a></td></tr>
+</table>
+</div>
+<h2 id="letra-E">E</h2>
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Comando</th><th>O que faz</th><th>Nível</th><th>Aula</th></tr>
+<tr><td><code>echo</code></td><td>Escreve um texto na tela</td><td>Nível 1</td><td><a href="primeiros-comandos.html">Primeiros Comandos</a></td></tr>
+<tr><td><code>exit</code></td><td>Sai do shell (ou do su)</td><td>Nível 1</td><td><a href="root-su-sudo.html">root, su e sudo</a></td></tr>
+<tr><td><code>export</code></td><td>Torna uma variável visível para programas</td><td>Nível 2</td><td><a href="bashrc.html">.bashrc, alias, PATH</a></td></tr>
+</table>
+</div>
+<h2 id="letra-F">F</h2>
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Comando</th><th>O que faz</th><th>Nível</th><th>Aula</th></tr>
+<tr><td><code>fail2ban-client</code></td><td>Consulta o fail2ban</td><td>Nível 3</td><td><a href="seguranca.html">Segurança do Servidor</a></td></tr>
+<tr><td><code>fdisk</code></td><td>Cria e lista partições</td><td>Nível 3</td><td><a href="particionar.html">Particionar e Formatar</a></td></tr>
+<tr><td><code>fg</code></td><td>Traz um job para a frente</td><td>Nível 2</td><td><a href="jobs.html">Jobs, nohup, tmux</a></td></tr>
+<tr><td><code>file</code></td><td>Diz o tipo de um arquivo pelo conteúdo</td><td>Nível 2</td><td><a href="compactar.html">tar, zip, gzip</a></td></tr>
+<tr><td><code>find</code></td><td>Procura arquivos</td><td>Nível 2</td><td><a href="find.html">find e locate</a></td></tr>
+<tr><td><code>findmnt</code></td><td>Mostra o que está montado; verifica o fstab</td><td>Nível 2</td><td><a href="montar.html">mount e fstab</a></td></tr>
+<tr><td><code>flatpak</code></td><td>Instala aplicativos do Flathub</td><td>Nível 1</td><td><a href="flatpak.html">Flatpak</a></td></tr>
+<tr><td><code>free</code></td><td>Mostra o uso de memória</td><td>Nível 3</td><td><a href="desempenho.html">Desempenho e Monitoramento</a></td></tr>
+<tr><td><code>fsck</code></td><td>Verifica e conserta um sistema de arquivos</td><td>Nível 3</td><td><a href="recuperacao.html">Recuperar um Sistema</a></td></tr>
+</table>
+</div>
+<h2 id="letra-G">G</h2>
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Comando</th><th>O que faz</th><th>Nível</th><th>Aula</th></tr>
+<tr><td><code>gio</code></td><td>Manda arquivos para a lixeira (gio trash)</td><td>Nível 1</td><td><a href="remover.html">rm e rmdir</a></td></tr>
+<tr><td><code>git</code></td><td>Controle de versão</td><td>Nível 3</td><td><a href="git.html">Git</a></td></tr>
+<tr><td><code>grep</code></td><td>Procura texto</td><td>Nível 2</td><td><a href="grep.html">grep</a></td></tr>
+<tr><td><code>groups</code></td><td>Mostra os grupos do usuário</td><td>Nível 2</td><td><a href="usuarios.html">Usuários e Grupos</a></td></tr>
+<tr><td><code>gunzip</code></td><td>Descompacta um .gz</td><td>Nível 2</td><td><a href="compactar.html">tar, zip, gzip</a></td></tr>
+<tr><td><code>gzip</code></td><td>Compacta um arquivo</td><td>Nível 2</td><td><a href="compactar.html">tar, zip, gzip</a></td></tr>
+</table>
+</div>
+<h2 id="letra-H">H</h2>
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Comando</th><th>O que faz</th><th>Nível</th><th>Aula</th></tr>
+<tr><td><code>head</code></td><td>Mostra o começo de um arquivo</td><td>Nível 1</td><td><a href="ver-arquivos.html">cat, less, head, tail</a></td></tr>
+<tr><td><code>history</code></td><td>Mostra os comandos digitados</td><td>Nível 1</td><td><a href="terminal.html">O Terminal</a></td></tr>
+<tr><td><code>host</code></td><td>Consulta o DNS (forma curta)</td><td>Nível 2</td><td><a href="curl-wget.html">curl, wget, dig</a></td></tr>
+<tr><td><code>hostname</code></td><td>Mostra o nome da máquina</td><td>Nível 1</td><td><a href="primeiros-comandos.html">Primeiros Comandos</a></td></tr>
+<tr><td><code>hostnamectl</code></td><td>Mostra e muda o nome da máquina</td><td>Nível 2</td><td><a href="configurar-rede.html">Configurar a Rede</a></td></tr>
+</table>
+</div>
+<h2 id="letra-I">I</h2>
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Comando</th><th>O que faz</th><th>Nível</th><th>Aula</th></tr>
+<tr><td><code>id</code></td><td>Mostra usuário, grupos e números</td><td>Nível 2</td><td><a href="usuarios.html">Usuários e Grupos</a></td></tr>
+<tr><td><code>ifdown</code></td><td>Desliga uma interface (ifupdown)</td><td>Nível 2</td><td><a href="configurar-rede.html">Configurar a Rede</a></td></tr>
+<tr><td><code>ifup</code></td><td>Liga uma interface (ifupdown)</td><td>Nível 2</td><td><a href="configurar-rede.html">Configurar a Rede</a></td></tr>
+<tr><td><code>incus</code></td><td>Containers e VMs de sistema</td><td>Nível 3</td><td><a href="incus.html">Incus (containers de sistema)</a></td></tr>
+<tr><td><code>info</code></td><td>Manual no formato GNU info</td><td>Nível 1</td><td><a href="ajuda.html">Obtendo Ajuda</a></td></tr>
+<tr><td><code>ip</code></td><td>Mostra endereços e rotas de rede</td><td>Nível 2</td><td><a href="ip.html">ip, ping, ss</a></td></tr>
+</table>
+</div>
+<h2 id="letra-J">J</h2>
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Comando</th><th>O que faz</th><th>Nível</th><th>Aula</th></tr>
+<tr><td><code>jobs</code></td><td>Lista os jobs do terminal</td><td>Nível 2</td><td><a href="jobs.html">Jobs, nohup, tmux</a></td></tr>
+<tr><td><code>journalctl</code></td><td>Lê os logs do systemd</td><td>Nível 2</td><td><a href="journalctl.html">Logs (journalctl)</a></td></tr>
+</table>
+</div>
+<h2 id="letra-K">K</h2>
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Comando</th><th>O que faz</th><th>Nível</th><th>Aula</th></tr>
+<tr><td><code>kill</code></td><td>Envia um sinal a um processo</td><td>Nível 1</td><td><a href="kill.html">Encerrar Programas (kill)</a></td></tr>
+<tr><td><code>killall</code></td><td>Encerra processos pelo nome (pacote psmisc)</td><td>Nível 1</td><td><a href="kill.html">Encerrar Programas (kill)</a></td></tr>
+</table>
+</div>
+<h2 id="letra-L">L</h2>
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Comando</th><th>O que faz</th><th>Nível</th><th>Aula</th></tr>
+<tr><td><code>less</code></td><td>Lê arquivos página por página</td><td>Nível 1</td><td><a href="ver-arquivos.html">cat, less, head, tail</a></td></tr>
+<tr><td><code>lintian</code></td><td>Confere um pacote .deb</td><td>Nível 3</td><td><a href="criar-pacote.html">Criar um Pacote .deb</a></td></tr>
+<tr><td><code>ln</code></td><td>Cria links</td><td>Nível 2</td><td><a href="links.html">Links (ln)</a></td></tr>
+<tr><td><code>locate</code></td><td>Procura arquivos num índice (pacote plocate)</td><td>Nível 2</td><td><a href="find.html">find e locate</a></td></tr>
+<tr><td><code>losetup</code></td><td>Usa um arquivo como disco (laboratório)</td><td>Nível 3</td><td><a href="particionar.html">Particionar e Formatar</a></td></tr>
+<tr><td><code>ls</code></td><td>Lista arquivos</td><td>Nível 1</td><td><a href="ls.html">ls</a></td></tr>
+<tr><td><code>lsb_release</code></td><td>Mostra a versão do Debian</td><td>Nível 1</td><td><a href="primeiros-comandos.html">Primeiros Comandos</a></td></tr>
+<tr><td><code>lsblk</code></td><td>Lista discos e partições</td><td>Nível 2</td><td><a href="discos.html">lsblk, df, du</a></td></tr>
+<tr><td><code>lscpu</code></td><td>Mostra o processador</td><td>Nível 3</td><td><a href="info-sistema.html">Informações do Sistema</a></td></tr>
+<tr><td><code>lvcreate</code></td><td>Cria um volume lógico (LVM)</td><td>Nível 3</td><td><a href="lvm.html">LVM</a></td></tr>
+<tr><td><code>lvextend</code></td><td>Aumenta um volume lógico</td><td>Nível 3</td><td><a href="lvm.html">LVM</a></td></tr>
+<tr><td><code>lvs</code></td><td>Lista volumes lógicos</td><td>Nível 3</td><td><a href="lvm.html">LVM</a></td></tr>
+</table>
+</div>
+<h2 id="letra-M">M</h2>
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Comando</th><th>O que faz</th><th>Nível</th><th>Aula</th></tr>
+<tr><td><code>man</code></td><td>Abre o manual de um comando</td><td>Nível 1</td><td><a href="ajuda.html">Obtendo Ajuda</a></td></tr>
+<tr><td><code>mdadm</code></td><td>Cria e gerencia RAID por software</td><td>Nível 3</td><td><a href="raid.html">RAID (mdadm)</a></td></tr>
+<tr><td><code>mkdir</code></td><td>Cria pastas</td><td>Nível 1</td><td><a href="criar.html">touch e mkdir</a></td></tr>
+<tr><td><code>mkfs.ext4</code></td><td>Formata uma partição em ext4</td><td>Nível 3</td><td><a href="particionar.html">Particionar e Formatar</a></td></tr>
+<tr><td><code>mount</code></td><td>Monta um sistema de arquivos</td><td>Nível 2</td><td><a href="montar.html">mount e fstab</a></td></tr>
+<tr><td><code>mv</code></td><td>Move ou renomeia</td><td>Nível 1</td><td><a href="copiar-mover.html">cp e mv</a></td></tr>
+<tr><td><code>mysql</code></td><td>Cliente do MariaDB</td><td>Nível 3</td><td><a href="banco-dados.html">Bancos de Dados</a></td></tr>
+<tr><td><code>mysqldump</code></td><td>Backup de um banco MariaDB</td><td>Nível 3</td><td><a href="banco-dados.html">Bancos de Dados</a></td></tr>
+</table>
+</div>
+<h2 id="letra-N">N</h2>
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Comando</th><th>O que faz</th><th>Nível</th><th>Aula</th></tr>
+<tr><td><code>nano</code></td><td>Editor de texto (padrão no Debian)</td><td>Nível 1</td><td><a href="editores.html">nano e vim</a></td></tr>
+<tr><td><code>needrestart</code></td><td>Mostra serviços que precisam reiniciar</td><td>Nível 3</td><td><a href="manutencao.html">Manutenção</a></td></tr>
+<tr><td><code>nft</code></td><td>Configura o firewall nftables</td><td>Nível 3</td><td><a href="nftables.html">Firewall (nftables)</a></td></tr>
+<tr><td><code>nginx</code></td><td>Servidor web; nginx -t testa a configuração</td><td>Nível 3</td><td><a href="nginx.html">Servidor Web (nginx)</a></td></tr>
+<tr><td><code>nmcli</code></td><td>Configura a rede pelo NetworkManager (desktop)</td><td>Nível 2</td><td><a href="configurar-rede.html">Configurar a Rede</a></td></tr>
+<tr><td><code>nohup</code></td><td>Roda um comando que sobrevive ao fechar o terminal</td><td>Nível 2</td><td><a href="jobs.html">Jobs, nohup, tmux</a></td></tr>
+</table>
+</div>
+<h2 id="letra-O">O</h2>
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Comando</th><th>O que faz</th><th>Nível</th><th>Aula</th></tr>
+<tr><td><code>openssl</code></td><td>Cria certificados e chaves</td><td>Nível 3</td><td><a href="https.html">HTTPS (Let&#x27;s Encrypt)</a></td></tr>
+</table>
+</div>
+<h2 id="letra-P">P</h2>
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Comando</th><th>O que faz</th><th>Nível</th><th>Aula</th></tr>
+<tr><td><code>parted</code></td><td>Cria tabelas de partição e partições</td><td>Nível 3</td><td><a href="particionar.html">Particionar e Formatar</a></td></tr>
+<tr><td><code>passwd</code></td><td>Muda a senha</td><td>Nível 2</td><td><a href="usuarios.html">Usuários e Grupos</a></td></tr>
+<tr><td><code>pg_dump</code></td><td>Backup de um banco PostgreSQL</td><td>Nível 3</td><td><a href="banco-dados.html">Bancos de Dados</a></td></tr>
+<tr><td><code>pgrep</code></td><td>Acha o PID pelo nome</td><td>Nível 1</td><td><a href="processos.html">ps, pgrep, top</a></td></tr>
+<tr><td><code>ping</code></td><td>Testa se uma máquina responde</td><td>Nível 2</td><td><a href="ip.html">ip, ping, ss</a></td></tr>
+<tr><td><code>pkill</code></td><td>Encerra processos pelo nome</td><td>Nível 1</td><td><a href="kill.html">Encerrar Programas (kill)</a></td></tr>
+<tr><td><code>podman</code></td><td>Containers sem root</td><td>Nível 3</td><td><a href="podman.html">Podman</a></td></tr>
+<tr><td><code>ps</code></td><td>Lista processos</td><td>Nível 1</td><td><a href="processos.html">ps, pgrep, top</a></td></tr>
+<tr><td><code>psql</code></td><td>Cliente do PostgreSQL</td><td>Nível 3</td><td><a href="banco-dados.html">Bancos de Dados</a></td></tr>
+<tr><td><code>pvcreate</code></td><td>Prepara um disco para o LVM</td><td>Nível 3</td><td><a href="lvm.html">LVM</a></td></tr>
+<tr><td><code>pwd</code></td><td>Mostra a pasta atual</td><td>Nível 1</td><td><a href="navegar.html">pwd e cd</a></td></tr>
+</table>
+</div>
+<h2 id="letra-R">R</h2>
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Comando</th><th>O que faz</th><th>Nível</th><th>Aula</th></tr>
+<tr><td><code>reboot</code></td><td>Reinicia (como root)</td><td>Nível 1</td><td><a href="travamentos.html">Quando o Sistema Trava</a></td></tr>
+<tr><td><code>restic</code></td><td>Backup com versões e criptografia</td><td>Nível 2</td><td><a href="backup.html">Backup</a></td></tr>
+<tr><td><code>rm</code></td><td>Apaga arquivos</td><td>Nível 1</td><td><a href="remover.html">rm e rmdir</a></td></tr>
+<tr><td><code>rmdir</code></td><td>Apaga pastas vazias</td><td>Nível 1</td><td><a href="remover.html">rm e rmdir</a></td></tr>
+<tr><td><code>rsync</code></td><td>Sincroniza e copia pastas (instalar antes)</td><td>Nível 2</td><td><a href="scp-rsync.html">scp e rsync</a></td></tr>
+</table>
+</div>
+<h2 id="letra-S">S</h2>
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Comando</th><th>O que faz</th><th>Nível</th><th>Aula</th></tr>
+<tr><td><code>scp</code></td><td>Copia arquivos por SSH</td><td>Nível 2</td><td><a href="scp-rsync.html">scp e rsync</a></td></tr>
+<tr><td><code>sed</code></td><td>Edita texto em fluxo</td><td>Nível 2</td><td><a href="sed.html">sed</a></td></tr>
+<tr><td><code>seq</code></td><td>Gera sequências de números</td><td>Nível 2</td><td><a href="script-lacos.html">Laços</a></td></tr>
+<tr><td><code>sftp</code></td><td>Transferência interativa por SSH</td><td>Nível 2</td><td><a href="scp-rsync.html">scp e rsync</a></td></tr>
+<tr><td><code>sha256sum</code></td><td>Calcula e confere somas de verificação</td><td>Nível 1</td><td><a href="instalacao.html">Instalação</a></td></tr>
+<tr><td><code>sort</code></td><td>Ordena linhas</td><td>Nível 2</td><td><a href="texto.html">sort, uniq, cut, wc, tr</a></td></tr>
+<tr><td><code>source</code></td><td>Recarrega um arquivo no shell atual</td><td>Nível 2</td><td><a href="bashrc.html">.bashrc, alias, PATH</a></td></tr>
+<tr><td><code>ss</code></td><td>Mostra portas e conexões</td><td>Nível 2</td><td><a href="ip.html">ip, ping, ss</a></td></tr>
+<tr><td><code>ssh</code></td><td>Acesso remoto seguro</td><td>Nível 2</td><td><a href="ssh.html">SSH</a></td></tr>
+<tr><td><code>ssh-copy-id</code></td><td>Instala sua chave em outra máquina</td><td>Nível 2</td><td><a href="ssh.html">SSH</a></td></tr>
+<tr><td><code>ssh-keygen</code></td><td>Cria chaves SSH</td><td>Nível 2</td><td><a href="ssh.html">SSH</a></td></tr>
+<tr><td><code>su</code></td><td>Vira outro usuário (root)</td><td>Nível 1</td><td><a href="root-su-sudo.html">root, su e sudo</a></td></tr>
+<tr><td><code>sudo</code></td><td>Roda um comando como root (se instalado)</td><td>Nível 1</td><td><a href="root-su-sudo.html">root, su e sudo</a></td></tr>
+<tr><td><code>swapon</code></td><td>Ativa e lista a memória de troca</td><td>Nível 3</td><td><a href="particionar.html">Particionar e Formatar</a></td></tr>
+<tr><td><code>systemctl</code></td><td>Controla serviços</td><td>Nível 2</td><td><a href="systemctl.html">systemctl</a></td></tr>
+<tr><td><code>systemd-analyze</code></td><td>Mede o tempo de boot</td><td>Nível 3</td><td><a href="boot-grub.html">Boot, GRUB e Kernel</a></td></tr>
+</table>
+</div>
+<h2 id="letra-T">T</h2>
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Comando</th><th>O que faz</th><th>Nível</th><th>Aula</th></tr>
+<tr><td><code>tail</code></td><td>Mostra o fim de um arquivo</td><td>Nível 1</td><td><a href="ver-arquivos.html">cat, less, head, tail</a></td></tr>
+<tr><td><code>tar</code></td><td>Empacota e extrai arquivos</td><td>Nível 2</td><td><a href="compactar.html">tar, zip, gzip</a></td></tr>
+<tr><td><code>tasksel</code></td><td>Instala ambientes e servidores prontos</td><td>Nível 1</td><td><a href="instalacao.html">Instalação</a></td></tr>
+<tr><td><code>tee</code></td><td>Escreve na tela e num arquivo</td><td>Nível 2</td><td><a href="pipes.html">Pipes e xargs</a></td></tr>
+<tr><td><code>tmux</code></td><td>Sessões de terminal que sobrevivem à desconexão</td><td>Nível 2</td><td><a href="jobs.html">Jobs, nohup, tmux</a></td></tr>
+<tr><td><code>top</code></td><td>Mostra processos ao vivo</td><td>Nível 1</td><td><a href="processos.html">ps, pgrep, top</a></td></tr>
+<tr><td><code>touch</code></td><td>Cria arquivos vazios</td><td>Nível 1</td><td><a href="criar.html">touch e mkdir</a></td></tr>
+<tr><td><code>tr</code></td><td>Troca ou apaga caracteres</td><td>Nível 2</td><td><a href="texto.html">sort, uniq, cut, wc, tr</a></td></tr>
+<tr><td><code>traceroute</code></td><td>Mostra o caminho até um destino</td><td>Nível 2</td><td><a href="curl-wget.html">curl, wget, dig</a></td></tr>
+<tr><td><code>type</code></td><td>Diz o que é um comando</td><td>Nível 1</td><td><a href="ajuda.html">Obtendo Ajuda</a></td></tr>
+</table>
+</div>
+<h2 id="letra-U">U</h2>
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Comando</th><th>O que faz</th><th>Nível</th><th>Aula</th></tr>
+<tr><td><code>ufw</code></td><td>Firewall simplificado (opcional)</td><td>Nível 3</td><td><a href="ufw.html">ufw (opcional)</a></td></tr>
+<tr><td><code>umask</code></td><td>Mostra a máscara de permissões</td><td>Nível 2</td><td><a href="chown.html">chown, chgrp, umask</a></td></tr>
+<tr><td><code>umount</code></td><td>Desmonta um sistema de arquivos</td><td>Nível 2</td><td><a href="montar.html">mount e fstab</a></td></tr>
+<tr><td><code>uname</code></td><td>Mostra o kernel</td><td>Nível 1</td><td><a href="primeiros-comandos.html">Primeiros Comandos</a></td></tr>
+<tr><td><code>unattended-upgrade</code></td><td>Aplica atualizações de segurança sozinho</td><td>Nível 1</td><td><a href="atualizacoes.html">Atualizações</a></td></tr>
+<tr><td><code>uniq</code></td><td>Remove linhas repetidas</td><td>Nível 2</td><td><a href="texto.html">sort, uniq, cut, wc, tr</a></td></tr>
+<tr><td><code>unzip</code></td><td>Extrai .zip (instalar antes)</td><td>Nível 2</td><td><a href="compactar.html">tar, zip, gzip</a></td></tr>
+<tr><td><code>update-grub</code></td><td>Regera o menu do GRUB</td><td>Nível 3</td><td><a href="boot-grub.html">Boot, GRUB e Kernel</a></td></tr>
+<tr><td><code>uptime</code></td><td>Tempo ligado e carga</td><td>Nível 1</td><td><a href="primeiros-comandos.html">Primeiros Comandos</a></td></tr>
+<tr><td><code>useradd</code></td><td>Cria usuário (forma básica)</td><td>Nível 2</td><td><a href="usuarios.html">Usuários e Grupos</a></td></tr>
+<tr><td><code>usermod</code></td><td>Altera um usuário (ex.: -aG grupo)</td><td>Nível 2</td><td><a href="usuarios.html">Usuários e Grupos</a></td></tr>
+</table>
+</div>
+<h2 id="letra-V">V</h2>
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Comando</th><th>O que faz</th><th>Nível</th><th>Aula</th></tr>
+<tr><td><code>vgcreate</code></td><td>Cria um grupo de volumes (LVM)</td><td>Nível 3</td><td><a href="lvm.html">LVM</a></td></tr>
+<tr><td><code>vi</code></td><td>Abre o vim.tiny</td><td>Nível 1</td><td><a href="editores.html">nano e vim</a></td></tr>
+<tr><td><code>virsh</code></td><td>Gerencia VMs do libvirt</td><td>Nível 3</td><td><a href="kvm.html">KVM e virt-manager</a></td></tr>
+<tr><td><code>virt-install</code></td><td>Cria uma VM pelo terminal</td><td>Nível 3</td><td><a href="kvm.html">KVM e virt-manager</a></td></tr>
+<tr><td><code>vmstat</code></td><td>Estatísticas de memória e CPU</td><td>Nível 3</td><td><a href="desempenho.html">Desempenho e Monitoramento</a></td></tr>
+</table>
+</div>
+<h2 id="letra-W">W</h2>
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Comando</th><th>O que faz</th><th>Nível</th><th>Aula</th></tr>
+<tr><td><code>wc</code></td><td>Conta linhas, palavras e bytes</td><td>Nível 2</td><td><a href="texto.html">sort, uniq, cut, wc, tr</a></td></tr>
+<tr><td><code>wg</code></td><td>Mostra e configura o WireGuard</td><td>Nível 3</td><td><a href="wireguard.html">VPN (WireGuard)</a></td></tr>
+<tr><td><code>wg-quick</code></td><td>Liga e desliga um túnel WireGuard</td><td>Nível 3</td><td><a href="wireguard.html">VPN (WireGuard)</a></td></tr>
+<tr><td><code>wget</code></td><td>Baixa arquivos da web</td><td>Nível 2</td><td><a href="curl-wget.html">curl, wget, dig</a></td></tr>
+<tr><td><code>whatis</code></td><td>Descrição de uma linha de um comando</td><td>Nível 1</td><td><a href="ajuda.html">Obtendo Ajuda</a></td></tr>
+<tr><td><code>which</code></td><td>Mostra onde está um programa</td><td>Nível 2</td><td><a href="bashrc.html">.bashrc, alias, PATH</a></td></tr>
+<tr><td><code>whoami</code></td><td>Mostra o usuário atual</td><td>Nível 1</td><td><a href="primeiros-comandos.html">Primeiros Comandos</a></td></tr>
+</table>
+</div>
+<h2 id="letra-X">X</h2>
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Comando</th><th>O que faz</th><th>Nível</th><th>Aula</th></tr>
+<tr><td><code>xargs</code></td><td>Transforma linhas em argumentos</td><td>Nível 2</td><td><a href="pipes.html">Pipes e xargs</a></td></tr>
+<tr><td><code>xz</code></td><td>Compactação forte</td><td>Nível 2</td><td><a href="compactar.html">tar, zip, gzip</a></td></tr>
+</table>
+</div>
+<h2 id="letra-Z">Z</h2>
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Comando</th><th>O que faz</th><th>Nível</th><th>Aula</th></tr>
+<tr><td><code>zcat</code></td><td>Lê um .gz sem descompactar</td><td>Nível 2</td><td><a href="compactar.html">tar, zip, gzip</a></td></tr>
+<tr><td><code>zfs</code></td><td>Gerencia datasets do ZFS</td><td>Nível 3</td><td><a href="zfs.html">ZFS</a></td></tr>
+<tr><td><code>zip</code></td><td>Cria .zip (instalar antes)</td><td>Nível 2</td><td><a href="compactar.html">tar, zip, gzip</a></td></tr>
+<tr><td><code>zpool</code></td><td>Gerencia pools do ZFS</td><td>Nível 3</td><td><a href="zfs.html">ZFS</a></td></tr>
+</table>
+</div>
+
+<hr>
+
+<h2 id="tarefas">Por tarefa</h2>
+<p>Os comandos que usam <code>su -c</code> precisam da senha de root. Se o seu usuário tem <code>sudo</code>, troque <code>su -c "…"</code> por <code>sudo …</code>.</p>
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Quero…</th><th>Comando</th><th>Aula</th></tr>
+<tr><td>Descobrir em que pasta estou</td><td><code>pwd</code></td><td><a href="navegar.html">pwd e cd</a></td></tr>
+<tr><td>Achar um arquivo pelo nome</td><td><code>find ~ -name &#x27;nome*&#x27;</code></td><td><a href="find.html">find e locate</a></td></tr>
+<tr><td>Achar um texto dentro de arquivos</td><td><code>grep -rn &#x27;texto&#x27; pasta/</code></td><td><a href="grep.html">grep</a></td></tr>
+<tr><td>Ver o que ocupa espaço</td><td><code>du -h -d 1 ~ | sort -h</code></td><td><a href="discos.html">lsblk, df, du</a></td></tr>
+<tr><td>Ver espaço livre</td><td><code>df -h</code></td><td><a href="discos.html">lsblk, df, du</a></td></tr>
+<tr><td>Virar root</td><td><code>su -</code></td><td><a href="root-su-sudo.html">root, su e sudo</a></td></tr>
+<tr><td>Rodar um comando como root</td><td><code>su -c &quot;comando&quot;</code></td><td><a href="root-su-sudo.html">root, su e sudo</a></td></tr>
+<tr><td>Instalar um programa</td><td><code>su -c &quot;apt install nome&quot;</code></td><td><a href="apt.html">apt</a></td></tr>
+<tr><td>Atualizar o sistema</td><td><code>su -c &quot;apt update &amp;&amp; apt upgrade&quot;</code></td><td><a href="apt.html">apt</a></td></tr>
+<tr><td>Instalar um aplicativo do Flathub</td><td><code>flatpak install flathub nome</code></td><td><a href="flatpak.html">Flatpak</a></td></tr>
+<tr><td>Programa travou</td><td><code>pgrep -l nome; kill PID</code></td><td><a href="kill.html">Encerrar Programas (kill)</a></td></tr>
+<tr><td>A interface travou</td><td><code>Ctrl+Alt+F3 e entre no console</code></td><td><a href="travamentos.html">Quando o Sistema Trava</a></td></tr>
+<tr><td>Ver meu IP</td><td><code>ip -br a</code></td><td><a href="ip.html">ip, ping, ss</a></td></tr>
+<tr><td>Testar a internet</td><td><code>ping -c 3 deb.debian.org</code></td><td><a href="ip.html">ip, ping, ss</a></td></tr>
+<tr><td>Ver portas abertas</td><td><code>su -c &quot;ss -tulpn&quot;</code></td><td><a href="ip.html">ip, ping, ss</a></td></tr>
+<tr><td>Ver o log de um serviço</td><td><code>su -c &quot;journalctl -u ssh&quot;</code></td><td><a href="journalctl.html">Logs (journalctl)</a></td></tr>
+<tr><td>Reiniciar um serviço</td><td><code>su -c &quot;systemctl restart ssh&quot;</code></td><td><a href="systemctl.html">systemctl</a></td></tr>
+<tr><td>Ver serviços com falha</td><td><code>systemctl --failed</code></td><td><a href="systemctl.html">systemctl</a></td></tr>
+<tr><td>Acessar outra máquina</td><td><code>ssh usuario@servidor</code></td><td><a href="ssh.html">SSH</a></td></tr>
+<tr><td>Copiar uma pasta para outra máquina</td><td><code>rsync -av pasta/ servidor:destino/</code></td><td><a href="scp-rsync.html">scp e rsync</a></td></tr>
+<tr><td>Compactar uma pasta</td><td><code>tar -czf pasta.tar.gz pasta</code></td><td><a href="compactar.html">tar, zip, gzip</a></td></tr>
+<tr><td>Agendar uma tarefa</td><td><code>crontab -e</code></td><td><a href="cron.html">Agendar Tarefas (cron)</a></td></tr>
+<tr><td>Dar sudo a um usuário</td><td><code>su -c &quot;usermod -aG sudo ana&quot;</code></td><td><a href="root-su-sudo.html">root, su e sudo</a></td></tr>
+<tr><td>Mudar permissões</td><td><code>chmod 640 arquivo</code></td><td><a href="chmod.html">chmod</a></td></tr>
+<tr><td>Ver a versão do Debian</td><td><code>cat /etc/debian_version</code></td><td><a href="versoes.html">Versões do Debian</a></td></tr>
+<tr><td>Abrir o firewall</td><td><code>/etc/nftables.conf + systemctl enable --now nftables</code></td><td><a href="nftables.html">Firewall (nftables)</a></td></tr>
+<tr><td>Instalar um .deb baixado</td><td><code>su -c &quot;apt install ./arquivo.deb&quot;</code></td><td><a href="dpkg.html">dpkg e .deb</a></td></tr>
+<tr><td>Pacote mais novo da stable</td><td><code>apt install -t trixie-backports nome</code></td><td><a href="backports.html">Backports e Pinning</a></td></tr>
+<tr><td>Quanto tempo o boot demora</td><td><code>systemd-analyze blame</code></td><td><a href="boot-grub.html">Boot, GRUB e Kernel</a></td></tr>
+<tr><td>Fazer backup da pasta pessoal</td><td><code>rsync -a --delete ~/ /media/ana/HD/backup/</code></td><td><a href="backup.html">Backup</a></td></tr>
+</table>
+</div>
+
+<hr>
+
+<h2>Exercícios</h2>
+
+<div class="mc" data-answer="2">
+<p class="mc-q">1. Qual comando diz que <code>cd</code> é "um comando interno do shell"?</p>
+<label><input type="radio" name="q1"> <code>whatis cd</code></label>
+<label><input type="radio" name="q1"> <code>type cd</code></label>
+<label><input type="radio" name="q1"> <code>which cd</code></label>
+<label><input type="radio" name="q1"> <code>man cd</code></label>
+</div>
+
+<div class="mc" data-answer="3">
+<p class="mc-q">2. Você quer ver as portas abertas com o nome dos programas. O que roda?</p>
+<label><input type="radio" name="q2"> <code>ip -br a</code></label>
+<label><input type="radio" name="q2"> <code>ping -c 3 localhost</code></label>
+<label><input type="radio" name="q2"> <code>su -c "ss -tulpn"</code></label>
+<label><input type="radio" name="q2"> <code>netstat</code></label>
+</div>
+
+<hr>
+
+<h2>Resumo</h2>
+<ul>
+  <li>Use o índice de letras para achar um comando e o link para a aula completa.</li>
+  <li>Na dúvida sobre um nome, rode <code>type</code> e <code>whatis</code> antes de executar.</li>
+  <li>Comandos de administração pedem root: <code>su -c "…"</code> ou <code>sudo</code>, se instalado.</li>
+</ul>
+
+<div class="pager"></div>
+
+</div>
+</main>
+</div>
+<script src="assets/site.js"></script>
+</body>
+</html>

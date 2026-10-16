@@ -1,0 +1,302 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Debian Entendendo Permissões — rwx, 755, 700 e umask | Guia Debian</title>
+<meta name="description" content="Entenda as permissões do Debian: ler -rw-r--r-- posição por posição, r, w e x em arquivos e pastas, números como 644 e 755, a pasta pessoal 700 do Debian e o umask 0002.">
+<link rel="stylesheet" href="assets/style.css">
+<script>try{var t=localStorage.getItem("tema");if(t)document.documentElement.setAttribute("data-theme",t)}catch(e){}</script>
+</head>
+<body>
+<div class="layout">
+<nav class="sidebar" id="sidebar" aria-label="Tópicos"></nav>
+<main class="main">
+<div class="content">
+
+<div class="pager"></div>
+
+<h1>Debian <span class="hl">Entendendo Permissões</span></h1>
+
+<p class="intro">Todo arquivo e toda pasta do Debian guardam quem pode <strong>ler</strong>, <strong>escrever</strong> e <strong>executar</strong>. É isso que está por trás da mensagem <code>Permissão negada</code>. Nesta aula você aprende a ler essas permissões. Para mudá-las, veja <a href="chmod.html">chmod</a> e <a href="chown.html">chown</a>.</p>
+
+<div class="note">
+<strong>Você vai aprender</strong>
+<ul>
+  <li>Ler <code>-rw-r--r--</code> posição por posição.</li>
+  <li>O que <code>r</code>, <code>w</code> e <code>x</code> significam em arquivos e em pastas.</li>
+  <li>Os números 644, 755, 700 e de onde eles vêm.</li>
+  <li>Por que, no Debian, ninguém entra na sua pasta pessoal (700).</li>
+  <li>O que é o <code>umask</code> e por que seus arquivos nascem com 664.</li>
+</ul>
+</div>
+
+<hr>
+
+<h2>A ideia: três perguntas, três grupos de pessoas</h2>
+<p>Para cada arquivo, o sistema responde três perguntas:</p>
+<ul>
+  <li><strong>r</strong> (<em>read</em>): pode <strong>ler</strong>?</li>
+  <li><strong>w</strong> (<em>write</em>): pode <strong>escrever</strong> (alterar)?</li>
+  <li><strong>x</strong> (<em>execute</em>): pode <strong>executar</strong>?</li>
+</ul>
+<p>E responde separadamente para três grupos de pessoas:</p>
+<ul>
+  <li><strong>dono</strong> (<em>user</em>, <code>u</code>): o usuário dono do arquivo;</li>
+  <li><strong>grupo</strong> (<em>group</em>, <code>g</code>): os membros do grupo do arquivo;</li>
+  <li><strong>outros</strong> (<em>others</em>, <code>o</code>): todo o resto.</li>
+</ul>
+<p>O root (o administrador) ignora essas regras de leitura e escrita: ele pode tudo.</p>
+
+<hr>
+
+<h2>Lendo as permissões com ls -l</h2>
+<p>O <code>ls -l</code> mostra as permissões na primeira coluna:</p>
+
+<pre class="term">$ ls -l /etc/passwd /etc/shadow
+-rw-r--r-- 1 root root   1275 out 15 21:12 /etc/passwd
+-rw-r----- 1 root shadow  939 out 15 21:12 /etc/shadow</pre>
+
+<p>Vamos desmontar <code>-rw-r-----</code>, a permissão do <code>/etc/shadow</code>, o arquivo onde ficam as senhas (criptografadas):</p>
+
+<dl class="anatomy">
+  <dt>-</dt><dd>Tipo: <code>-</code> arquivo comum, <code>d</code> pasta (<em>directory</em>), <code>l</code> link.</dd>
+  <dt>rw-</dt><dd><strong>Dono</strong> (root): lê e escreve, não executa.</dd>
+  <dt>r--</dt><dd><strong>Grupo</strong> (shadow): só lê.</dd>
+  <dt>---</dt><dd><strong>Outros</strong>: nada. É por isso que a ana não consegue ler.</dd>
+</dl>
+
+<pre class="term">$ cat /etc/shadow
+cat: /etc/shadow: Permissão negada</pre>
+
+<p>Já o <code>/etc/passwd</code> (<code>-rw-r--r--</code>) pode ser lido por todos: ele guarda a lista de usuários, mas não as senhas.</p>
+
+<div class="try" data-goal="ran:cat +/etc/shadow,ran:ls +-l">
+<p class="try-task"><strong>Missão:</strong> rode <code>ls -l /etc/passwd /etc/shadow</code> e depois tente <code>cat /etc/passwd</code> e <code>cat /etc/shadow</code>. Explique, olhando as letras, por que um funciona e o outro não.</p>
+</div>
+
+<hr>
+
+<h2>r, w, x: em arquivo é uma coisa, em pasta é outra</h2>
+
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Letra</th><th>Num arquivo</th><th>Numa pasta</th></tr>
+<tr><td><code>r</code></td><td>Ler o conteúdo (<code>cat</code>, abrir no editor)</td><td>Listar os nomes de dentro (<code>ls</code>)</td></tr>
+<tr><td><code>w</code></td><td>Alterar o conteúdo</td><td>Criar, apagar e renomear coisas dentro</td></tr>
+<tr><td><code>x</code></td><td>Executar como programa</td><td><strong>Entrar</strong> (<code>cd</code>) e acessar o que está dentro</td></tr>
+</table>
+</div>
+
+<p>Duas consequências que surpreendem:</p>
+<ul>
+  <li>Apagar um arquivo depende do <code>w</code> da <strong>pasta</strong>, não do arquivo.</li>
+  <li>Uma pasta com <code>r</code> e sem <code>x</code> deixa ver os nomes, mas não deixa entrar nem abrir nada:</li>
+</ul>
+
+<pre class="term" data-cwd="/tmp/pp">$ chmod 644 sem-x
+$ ls sem-x
+a                                       « os nomes aparecem (r)
+$ cd sem-x
+bash: cd: sem-x: Permissão negada        « mas não dá para entrar (falta x)
+$ cat sem-x/a
+cat: sem-x/a: Permissão negada</pre>
+
+<hr>
+
+<h2>Permissões em números: 644, 755, 700</h2>
+<p>Cada letra vale um número, e a permissão de cada grupo é a <strong>soma</strong>:</p>
+
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Letra</th><th>Valor</th></tr>
+<tr><td><code>r</code></td><td>4</td></tr>
+<tr><td><code>w</code></td><td>2</td></tr>
+<tr><td><code>x</code></td><td>1</td></tr>
+<tr><td><code>-</code></td><td>0</td></tr>
+</table>
+</div>
+
+<p>Exemplo: <code>rwx r-x r-x</code> = (4+2+1) (4+0+1) (4+0+1) = <strong>755</strong>. O primeiro dígito é o dono, o segundo o grupo, o terceiro os outros.</p>
+
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Número</th><th>Letras</th><th>Uso típico</th></tr>
+<tr><td><code>644</code></td><td><code>rw-r--r--</code></td><td>Arquivo comum que todos podem ler</td></tr>
+<tr><td><code>664</code></td><td><code>rw-rw-r--</code></td><td>Arquivo novo de usuário no Debian (dono e grupo escrevem)</td></tr>
+<tr><td><code>600</code></td><td><code>rw-------</code></td><td>Arquivo privado (chave SSH, senhas)</td></tr>
+<tr><td><code>755</code></td><td><code>rwxr-xr-x</code></td><td>Programa ou pasta pública</td></tr>
+<tr><td><code>775</code></td><td><code>rwxrwxr-x</code></td><td>Pasta nova de usuário no Debian</td></tr>
+<tr><td><code>700</code></td><td><code>rwx------</code></td><td>Pasta privada: a pasta pessoal no Debian</td></tr>
+</table>
+</div>
+
+<p>O comando <code>stat</code> mostra as duas formas lado a lado:</p>
+
+<pre class="term">$ stat -c '%A %a %U %G %n' novo.txt
+-rw-rw-r-- 664 ana ana novo.txt</pre>
+
+<hr>
+
+<h2>A pasta pessoal do Debian é 700</h2>
+
+<pre class="term">$ ls -l /home
+total 8
+drwx------ 7 ana  ana  4096 out 15 21:10 ana
+drwx------ 2 joao joao 4096 out 15 21:09 joao</pre>
+
+<p>No Debian 13, cada pasta pessoal é <code>drwx------</code> (700): só o dono entra. Se o João tentar ver a pasta da Ana, recebe <code>Permissão negada</code>. Isso vem da configuração <code>HOME_MODE</code> do arquivo <code>/etc/login.defs</code>:</p>
+
+<pre class="term">$ grep HOME_MODE /etc/login.defs
+HOME_MODE	0700</pre>
+
+<div class="tip">
+<strong>Comparando com o Ubuntu</strong>
+<p>No Ubuntu, a pasta pessoal é 750 (<code>drwxr-x---</code>): os membros do grupo do usuário também podem entrar. No Debian é mais fechada.</p>
+</div>
+
+<hr>
+
+<h2>umask: com que permissão os arquivos nascem</h2>
+<p>Por que um arquivo novo da ana nasce com 664, e uma pasta nova com 775? Por causa do <strong>umask</strong> (de <em>user file-creation mask</em>), uma "máscara" que tira permissões de tudo que é criado:</p>
+
+<pre class="term">$ umask
+0002
+$ touch novo.txt
+$ mkdir nova
+$ ls -l
+total 0
+drwxrwxr-x 2 ana ana 40 out 15 21:14 nova
+-rw-rw-r-- 1 ana ana  0 out 15 21:14 novo.txt</pre>
+
+<p>A conta: arquivos partem de 666 e pastas de 777. O umask <code>002</code> tira o <code>w</code> dos outros: 666 − 002 = <strong>664</strong>; 777 − 002 = <strong>775</strong>.</p>
+
+<div class="note">
+<strong>Por que 0002 e não 0022?</strong>
+<p>No Debian, cada usuário tem um grupo só dele, com o mesmo nome (o grupo <code>ana</code> só tem a ana). Por isso é seguro deixar o grupo escrever. O root usa <code>0022</code>, e os arquivos dele nascem com 644.</p>
+</div>
+
+<hr>
+
+<h2>Diagnosticando uma "Permissão negada"</h2>
+<ol class="passo">
+  <li><strong>Quem sou eu?</strong> <code>id</code> mostra seu usuário e seus grupos.</li>
+  <li><strong>De quem é o arquivo?</strong> <code>ls -l arquivo</code> mostra dono, grupo e permissões.</li>
+  <li><strong>Em qual dos três grupos eu caio?</strong> Dono, grupo ou outros.</li>
+  <li><strong>A letra necessária está lá?</strong> <code>r</code> para ler, <code>w</code> para alterar, <code>x</code> para executar ou entrar.</li>
+  <li><strong>E as pastas do caminho?</strong> Cada pasta do caminho precisa de <code>x</code>.</li>
+</ol>
+
+<pre class="term">$ id
+uid=1000(ana) gid=1000(ana) grupos=1000(ana),24(cdrom),25(floppy),29(audio),30(dip),44(video),46(plugdev),100(users),101(netdev)
+$ ls -l /etc/shadow
+-rw-r----- 1 root shadow 939 out 15 21:12 /etc/shadow</pre>
+
+<p>A ana não é root nem está no grupo <code>shadow</code>; cai em "outros", que não têm nada (<code>---</code>). Para ler, só como administrador: <code>su -</code> (veja <a href="root-su-sudo.html">root, su e sudo</a>).</p>
+
+<hr>
+
+<h2>Permissões especiais (visão geral)</h2>
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Nome</th><th>Onde aparece</th><th>Exemplo real no Debian</th></tr>
+<tr><td>SUID (<code>s</code> no dono)</td><td>Programa roda com o poder do dono</td><td><code>-rwsr-xr-x root root /usr/bin/passwd</code>: é assim que você troca sua senha no <code>/etc/shadow</code></td></tr>
+<tr><td>SGID (<code>s</code> no grupo)</td><td>Programa roda com o grupo do arquivo; numa pasta, arquivos novos herdam o grupo</td><td>Pastas compartilhadas de equipe</td></tr>
+<tr><td>Sticky bit (<code>t</code>)</td><td>Numa pasta, só o dono apaga os próprios arquivos</td><td><code>drwxrwxrwt root root /tmp</code></td></tr>
+</table>
+</div>
+
+<hr>
+
+<h2>Quando não funciona</h2>
+
+<div class="cenario">
+<strong>"Permissão negada" ao rodar um script</strong>
+<pre class="term">$ ./s.sh
+bash: ./s.sh: Permissão negada
+$ bash s.sh
+oi</pre>
+<p><strong>O que aconteceu:</strong> o arquivo não tem <code>x</code>. Chamando com <code>bash s.sh</code>, quem executa é o bash, que só precisa ler o arquivo.</p>
+<p><strong>Como resolver:</strong> <code>chmod +x s.sh</code>. Veja <a href="chmod.html">chmod</a>.</p>
+</div>
+
+<div class="cenario">
+<strong>"Permissão negada" ao listar /root</strong>
+<pre class="term">$ ls /root
+ls: não foi possível abrir o diretório '/root': Permissão negada</pre>
+<p><strong>O que aconteceu:</strong> <code>/root</code> é <code>drwx------</code>, a pasta pessoal do administrador.</p>
+<p><strong>Como resolver:</strong> só o root lê. Use <code>su -</code> se precisar.</p>
+</div>
+
+<div class="cenario">
+<strong>Outro usuário não consegue abrir um arquivo que eu deixei com 644</strong>
+<p><strong>O que aconteceu:</strong> o arquivo está liberado, mas ele está dentro da sua pasta pessoal, que é 700. Sem o <code>x</code> na pasta, ninguém chega ao arquivo.</p>
+<p><strong>Como resolver:</strong> coloque o arquivo num lugar compartilhado (por exemplo, uma pasta de grupo) em vez de abrir sua pasta pessoal.</p>
+</div>
+
+<hr>
+
+<h2>Referência rápida</h2>
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Comando</th><th>Para quê</th></tr>
+<tr><td><code>ls -l arquivo</code></td><td>Ver permissões, dono e grupo</td></tr>
+<tr><td><code>ls -ld pasta</code></td><td>Ver as permissões da pasta (não do conteúdo)</td></tr>
+<tr><td><code>stat -c '%A %a' arquivo</code></td><td>Letras e números</td></tr>
+<tr><td><code>id</code></td><td>Seu usuário e grupos</td></tr>
+<tr><td><code>umask</code></td><td>Máscara de criação</td></tr>
+<tr><td><code>chmod</code> / <code>chown</code></td><td>Mudar permissões / dono (próximas aulas)</td></tr>
+</table>
+</div>
+
+<hr>
+
+<h2>Exercícios</h2>
+
+<div class="exercise">
+<h3>1. Letras para número</h3>
+<p>Qual o número de <code>rwxr-x---</code>?</p>
+<div class="ex-code"><input data-answer="750|0750" aria-label="número"></div>
+</div>
+
+<div class="exercise">
+<h3>2. Número para letras</h3>
+<p>Escreva as 9 letras de <code>640</code>:</p>
+<div class="ex-code"><input data-answer="rw-r-----" aria-label="letras"></div>
+</div>
+
+<div class="mc" data-answer="2">
+<p class="mc-q">3. Com umask <code>0002</code>, com qual permissão nasce um arquivo novo?</p>
+<label><input type="radio" name="q3"> 644</label>
+<label><input type="radio" name="q3"> 664</label>
+<label><input type="radio" name="q3"> 775</label>
+<label><input type="radio" name="q3"> 600</label>
+</div>
+
+<div class="mc" data-answer="4">
+<p class="mc-q">4. O que o <code>x</code> permite numa pasta?</p>
+<label><input type="radio" name="q4"> Executar os arquivos de dentro.</label>
+<label><input type="radio" name="q4"> Apagar a pasta.</label>
+<label><input type="radio" name="q4"> Listar os nomes.</label>
+<label><input type="radio" name="q4"> Entrar nela e acessar o que está dentro.</label>
+</div>
+
+<hr>
+
+<h2>Resumo</h2>
+<ul>
+  <li>Permissões respondem "ler, escrever, executar?" para dono, grupo e outros.</li>
+  <li>r=4, w=2, x=1; some por grupo: <code>rwxr-xr-x</code> = 755.</li>
+  <li>Em pastas, <code>x</code> é entrar e <code>w</code> é criar ou apagar coisas dentro.</li>
+  <li>No Debian a pasta pessoal é 700 e o umask do usuário é 0002 (arquivos 664, pastas 775).</li>
+  <li>Diante de "Permissão negada": <code>id</code>, <code>ls -l</code> e confira cada pasta do caminho.</li>
+</ul>
+
+<div class="pager"></div>
+
+</div>
+</main>
+</div>
+<script src="assets/site.js"></script>
+</body>
+</html>

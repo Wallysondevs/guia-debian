@@ -1,0 +1,249 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Debian Atualizações — point releases, segurança e unattended-upgrades | Guia Debian</title>
+<meta name="description" content="Mantenha o Debian 13 atualizado: point releases (13.5, 13.7…), atualizações de segurança, a rotina semanal com apt, apt-listchanges e como ativar as atualizações automáticas com unattended-upgrades.">
+<link rel="stylesheet" href="assets/style.css">
+<script>try{var t=localStorage.getItem("tema");if(t)document.documentElement.setAttribute("data-theme",t)}catch(e){}</script>
+</head>
+<body>
+<div class="layout">
+<nav class="sidebar" id="sidebar" aria-label="Tópicos"></nav>
+<main class="main">
+<div class="content">
+
+<div class="pager"></div>
+
+<h1>Debian <span class="hl">Atualizações</span></h1>
+
+<p class="intro">Um Debian atualizado é um Debian seguro. A boa notícia: na versão estável, as atualizações são pequenas, testadas e quase nunca quebram nada. A notícia que surpreende quem vem do Ubuntu: <strong>o Debian não instala atualizações sozinho</strong>. Você faz à mão ou liga as automáticas.</p>
+
+<div class="note">
+<strong>Você vai aprender</strong>
+<ul>
+  <li>Os tipos de atualização do Debian: segurança, <em>point releases</em> e <em>updates</em>.</li>
+  <li>A rotina semanal, passo a passo.</li>
+  <li>O que é o apt-listchanges e as notícias que aparecem durante a atualização.</li>
+  <li>Como ativar as atualizações automáticas de segurança.</li>
+  <li>Como saber se precisa reiniciar.</li>
+</ul>
+</div>
+
+<hr>
+
+<h2>Três tipos de atualização</h2>
+<p>Seu Debian consulta três repositórios (veja o <code>/etc/apt/sources.list</code> em <a href="repositorios.html">Repositórios</a>):</p>
+
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Repositório</th><th>O que traz</th><th>Com que frequência</th></tr>
+<tr><td><code>trixie-security</code></td><td>Correções de segurança</td><td>Sempre que surge uma falha</td></tr>
+<tr><td><code>trixie-updates</code></td><td>Correções que não podem esperar (fuso horário, antivírus…)</td><td>Quando necessário</td></tr>
+<tr><td><code>trixie</code> (a principal)</td><td>Recebe as correções acumuladas nas <strong>point releases</strong></td><td>A cada 2 ou 3 meses</td></tr>
+</table>
+</div>
+
+<h3>Point releases: 13.5, 13.6, 13.7…</h3>
+<p>Uma <em>point release</em> ("versão de ponto") junta as correções dos últimos meses e atualiza o número depois do ponto. Não é uma versão nova do Debian: é o mesmo Debian 13, mais polido. O computador dos exemplos foi instalado com a ISO 13.5 e, depois das atualizações, já está no 13.7:</p>
+
+<pre class="term">$ cat /etc/debian_version
+13.7
+$ grep -E 'VERSION=|DEBIAN_VERSION_FULL' /etc/os-release
+VERSION="13 (trixie)"
+DEBIAN_VERSION_FULL=13.7</pre>
+
+<p>Você não precisa fazer nada especial para ir de 13.5 para 13.7: a rotina normal de <code>apt update</code> e <code>apt upgrade</code> já leva até lá. Trocar para o Debian 14 é outra história, com aula própria: <a href="upgrade-versao.html">Atualizar a Versão do Debian</a>.</p>
+
+<hr>
+
+<h2>A rotina semanal</h2>
+<ol class="passo">
+  <li><strong>Vire root.</strong>
+<pre class="term">$ su -
+Senha:</pre></li>
+  <li><strong>Atualize a lista e os pacotes.</strong>
+<pre class="term">#> apt update
+#> apt upgrade</pre>
+  Leia o resumo antes de confirmar (veja <a href="apt.html">apt</a>).</li>
+  <li><strong>Limpe o que sobrou.</strong>
+<pre class="term">#> apt autoremove</pre>
+  Ele também remove kernels antigos, mas sempre guarda o que está em uso e o anterior, como reserva.</li>
+  <li><strong>Atualize os Flatpaks</strong>, se você usa (veja <a href="flatpak.html">Flatpak</a>).
+<pre class="term">#> flatpak update</pre></li>
+  <li><strong>Reinicie se o kernel mudou</strong> (próxima seção).</li>
+</ol>
+
+<p>No GNOME, o aplicativo <strong>Programas</strong> (GNOME Software) também avisa e instala atualizações pela interface.</p>
+
+<hr>
+
+<h2>Notícias durante a atualização: apt-listchanges</h2>
+<p>O Debian vem com o <strong>apt-listchanges</strong>. Quando um pacote traz uma notícia importante (um arquivo <code>NEWS.Debian</code>, por exemplo "a configuração padrão mudou"), ele mostra o texto durante o <code>apt upgrade</code>, num leitor de página. Leia e saia com <kbd>q</kbd>: a atualização continua.</p>
+
+<pre class="file" data-file="/etc/apt/listchanges.conf">[apt]
+frontend=pager
+which=news
+email_address=root
+email_format=text
+confirm=false
+headers=false
+reverse=false
+save_seen=/var/lib/apt/listchanges</pre>
+
+<p><code>which=news</code> quer dizer "só as notícias importantes", e não a lista de todas as mudanças. O temporizador <code>apt-listchanges.timer</code>, que você vê em <code>systemctl list-timers</code>, só prepara o banco de dados uma vez e depois se desliga.</p>
+
+<hr>
+
+<h2>Atualizações automáticas de segurança</h2>
+<p>Num Debian instalado como neste guia, o pacote <strong>unattended-upgrades</strong> (atualizações "sem supervisão") <strong>não vem instalado</strong>:</p>
+
+<pre class="term">$ dpkg -l unattended-upgrades
+dpkg-query: nenhum pacote encontrado correspondente a unattended-upgrades</pre>
+
+<p>Os temporizadores <code>apt-daily.timer</code> e <code>apt-daily-upgrade.timer</code> existem, mas sozinhos não instalam nada. Para ligar as atualizações automáticas:</p>
+
+<ol class="passo">
+  <li><strong>Instale o pacote</strong> (como root):
+<pre class="term">#> apt install unattended-upgrades</pre>
+  Só instalar não basta: o arquivo que liga as execuções diárias (<code>20auto-upgrades</code>) ainda não existe, e nada acontece. O serviço <code>unattended-upgrades</code> que aparece como ativo no <code>systemctl</code> só serve para terminar uma atualização em andamento se você desligar a máquina.</li>
+  <li><strong>Ative.</strong> O comando abaixo faz uma pergunta; responda <strong>Sim</strong>:
+<dl class="anatomy">
+  <dt>dpkg-reconfigure</dt><dd>Refaz as perguntas de configuração de um pacote.</dd>
+  <dt>-plow</dt><dd>Mostra também as perguntas de prioridade baixa (<em>priority low</em>), onde está a de ativar.</dd>
+  <dt>unattended-upgrades</dt><dd>O pacote.</dd>
+</dl>
+<pre class="term">#> dpkg-reconfigure -plow unattended-upgrades</pre>
+  Isso cria o arquivo:
+<pre class="file" data-file="/etc/apt/apt.conf.d/20auto-upgrades">APT::Periodic::Update-Package-Lists "1";
+APT::Periodic::Unattended-Upgrade "1";</pre>
+  O <code>"1"</code> quer dizer "uma vez por dia".</li>
+  <li><strong>Teste sem instalar nada:</strong>
+<pre class="term">#> unattended-upgrade --dry-run --debug</pre>
+  O registro das execuções reais fica em <code>/var/log/unattended-upgrades/</code>.</li>
+</ol>
+
+<p>Por padrão, ele instala as atualizações do Debian estável, incluindo as de segurança, mas nunca troca de versão. A lista de origens fica em <code>/etc/apt/apt.conf.d/50unattended-upgrades</code>:</p>
+
+<pre class="file" data-file="/etc/apt/apt.conf.d/50unattended-upgrades (trecho, sem comentários)">Unattended-Upgrade::Origins-Pattern {
+        "origin=Debian,codename=${distro_codename},label=Debian";
+        "origin=Debian,codename=${distro_codename},label=Debian-Security";
+        "origin=Debian,codename=${distro_codename}-security,label=Debian-Security";
+};</pre>
+
+<p><code>${distro_codename}</code> vira <code>trixie</code>: são o repositório principal e o de segurança do Debian 13.</p>
+
+<div class="tip">
+<strong>Servidor ou desktop?</strong>
+<p>Em servidores que ficam ligados sozinhos, as atualizações automáticas de segurança são muito recomendadas. No desktop, a rotina semanal manual também funciona bem, desde que você não esqueça.</p>
+</div>
+
+<hr>
+
+<h2>Precisa reiniciar?</h2>
+<p>A maioria das atualizações não exige reinício. A exceção principal é o <strong>kernel</strong> (o núcleo do sistema): o novo só entra em uso depois de reiniciar. Compare o kernel em uso com os instalados:</p>
+
+<pre class="term">$ uname -r
+6.12.111+deb13-amd64
+$ ls /boot/vmlinuz-*
+/boot/vmlinuz-6.12.111+deb13-amd64  /boot/vmlinuz-6.12.86+deb13-amd64</pre>
+
+<p>Se o mais novo de <code>/boot</code> for maior que o do <code>uname -r</code>, reinicie (como root: <code>systemctl reboot</code>). Aqui, o computador já está usando o mais novo (6.12.111). O antigo (6.12.86) fica como reserva, caso o novo dê problema: ele aparece no menu do GRUB em "Advanced options".</p>
+
+<div class="note">
+<strong>Uma ferramenta que avisa</strong>
+<p>O pacote opcional <code>needrestart</code> verifica, depois de cada atualização, se o kernel ou algum serviço precisa ser reiniciado, e pergunta o que fazer.</p>
+</div>
+
+<hr>
+
+<h2>Quando não funciona</h2>
+
+<div class="cenario">
+<strong>"Aguardando por trava de cache"</strong>
+<p><strong>O que aconteceu:</strong> outra instalação está em andamento (a atualização automática, o app Programas ou outro terminal).</p>
+<p><strong>Como resolver:</strong> espere; o apt continua sozinho. Veja os detalhes em <a href="apt.html">apt</a>.</p>
+</div>
+
+<div class="cenario">
+<strong>"Não atualizando: 2" no resumo do upgrade</strong>
+<p><strong>O que aconteceu:</strong> a atualização desses pacotes exige instalar ou remover outro pacote, o que o <code>upgrade</code> não faz.</p>
+<p><strong>Como resolver:</strong> rode <code>apt full-upgrade</code> e leia com atenção a lista do que será removido.</p>
+</div>
+
+<div class="cenario">
+<strong>Ativei o unattended-upgrades e nada mudou</strong>
+<p><strong>O que aconteceu:</strong> ele roda uma vez por dia, num horário sorteado pelo <code>apt-daily-upgrade.timer</code>.</p>
+<p><strong>Como resolver:</strong> confira o horário com <code>systemctl list-timers apt-daily-upgrade.timer</code> e o histórico em <code>/var/log/unattended-upgrades/</code>.</p>
+</div>
+
+<hr>
+
+<h2>Referência</h2>
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Comando (como root)</th><th>Para quê</th></tr>
+<tr><td><code>apt update &amp;&amp; apt upgrade</code></td><td>Rotina de atualização</td></tr>
+<tr><td><code>apt full-upgrade</code></td><td>Atualiza permitindo trocar dependências</td></tr>
+<tr><td><code>apt autoremove</code></td><td>Remove pacotes sem uso e kernels antigos (guarda o atual e o anterior)</td></tr>
+<tr><td><code>apt list --upgradable</code></td><td>Mostra o que tem atualização</td></tr>
+<tr><td><code>apt install unattended-upgrades</code></td><td>Instala as atualizações automáticas</td></tr>
+<tr><td><code>dpkg-reconfigure -plow unattended-upgrades</code></td><td>Ativa/desativa</td></tr>
+<tr><td><code>unattended-upgrade --dry-run --debug</code></td><td>Simula</td></tr>
+<tr><td><code>systemctl list-timers</code></td><td>Mostra quando as tarefas automáticas rodam</td></tr>
+<tr><td><code>cat /etc/debian_version</code></td><td>Mostra a point release atual</td></tr>
+</table>
+</div>
+
+<hr>
+
+<h2>Exercícios</h2>
+
+<div class="exercise">
+<h3>1. Ativar as automáticas</h3>
+<p>Complete o comando que ativa o unattended-upgrades:</p>
+<div class="ex-code"><input data-answer="dpkg-reconfigure" aria-label="comando"> -plow unattended-upgrades</div>
+</div>
+
+<div class="exercise">
+<h3>2. Qual versão de ponto?</h3>
+<p>Qual arquivo guarda o número da point release (como 13.7)?</p>
+<div class="ex-code">cat /etc/<input data-answer="debian_version" aria-label="arquivo"></div>
+</div>
+
+<div class="mc" data-answer="2">
+<p class="mc-q">3. Num Debian recém-instalado como o deste guia, as atualizações de segurança são instaladas sozinhas?</p>
+<label><input type="radio" name="q3"> Sim, sempre.</label>
+<label><input type="radio" name="q3"> Não: é preciso instalar e ativar o unattended-upgrades.</label>
+<label><input type="radio" name="q3"> Só no fim de semana.</label>
+<label><input type="radio" name="q3"> Só se houver internet.</label>
+</div>
+
+<div class="mc" data-answer="3">
+<p class="mc-q">4. Passar do Debian 13.5 para o 13.7 exige:</p>
+<label><input type="radio" name="q4"> Reinstalar o sistema.</label>
+<label><input type="radio" name="q4"> Editar o sources.list.</label>
+<label><input type="radio" name="q4"> Só a rotina normal: <code>apt update</code> e <code>apt upgrade</code>.</label>
+<label><input type="radio" name="q4"> Baixar a ISO nova.</label>
+</div>
+
+<hr>
+
+<h2>Resumo</h2>
+<ul>
+  <li>Segurança, updates e point releases chegam pela rotina <code>apt update &amp;&amp; apt upgrade</code>.</li>
+  <li>Point releases (13.5 → 13.7) não são versões novas; é o mesmo Debian 13.</li>
+  <li>O Debian não se atualiza sozinho: instale e ative o <code>unattended-upgrades</code> se quiser.</li>
+  <li>Durante o upgrade, o apt-listchanges pode mostrar notícias importantes; leia e saia com <kbd>q</kbd>.</li>
+  <li>Kernel novo só vale depois de reiniciar: compare <code>uname -r</code> com <code>/boot</code>.</li>
+</ul>
+
+<div class="pager"></div>
+
+</div>
+</main>
+</div>
+<script src="assets/site.js"></script>
+</body>
+</html>

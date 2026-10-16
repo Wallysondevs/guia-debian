@@ -1,0 +1,334 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Debian scp e rsync — copiar arquivos pela rede | Guia Debian</title>
+<meta name="description" content="Copie arquivos entre máquinas Debian com scp e rsync: caminhos remotos explicados, a barra no final da origem, --dry-run antes do --delete, exclusões e os erros reais.">
+<link rel="stylesheet" href="assets/style.css">
+<script>try{var t=localStorage.getItem("tema");if(t)document.documentElement.setAttribute("data-theme",t)}catch(e){}</script>
+</head>
+<body>
+<div class="layout">
+<nav class="sidebar" id="sidebar" aria-label="Tópicos"></nav>
+<main class="main">
+<div class="content">
+
+<div class="pager"></div>
+
+<h1>Debian <span class="hl">scp e rsync</span></h1>
+
+<p class="intro">Copiar arquivos entre máquinas é a segunda coisa que todo mundo faz depois de aprender SSH. O <code>scp</code> (de <em>secure copy</em>) é o jeito rápido para uma cópia avulsa. O <code>rsync</code> (de <em>remote sync</em>) é o jeito inteligente: só manda o que mudou, retoma cópias interrompidas e sincroniza pastas inteiras. Os dois usam o SSH por baixo, então tudo viaja criptografado.</p>
+
+<div class="note">
+<strong>Você vai aprender</strong>
+<ul>
+  <li>Escrever um caminho remoto (<code>usuario@maquina:/pasta</code>) sem errar.</li>
+  <li>Copiar arquivos e pastas com <code>scp</code>, nos dois sentidos.</li>
+  <li>Instalar o <code>rsync</code> (ele não vem no Debian mínimo) e sincronizar pastas.</li>
+  <li>A diferença que mais confunde: a <strong>barra no final</strong> da origem.</li>
+  <li>Usar <code>--dry-run</code> antes de qualquer <code>--delete</code>.</li>
+</ul>
+</div>
+
+<p>Esta aula supõe que você já entra no servidor por SSH (veja <a href="ssh.html">SSH</a>). Nos exemplos, a Ana copia arquivos do <strong>notebook</strong> para a máquina <strong>servidor</strong> (<code>192.168.0.50</code>).</p>
+
+<hr>
+
+<h2>O caminho remoto</h2>
+<p>Os dois comandos usam o mesmo formato para dizer "um arquivo em outra máquina":</p>
+
+<dl class="anatomy">
+  <dt>ana</dt><dd>O usuário na máquina remota. Pode ser omitido se for o mesmo nome que você usa aqui.</dd>
+  <dt>@servidor</dt><dd>A máquina: nome, IP (<code>192.168.0.50</code>) ou um apelido do <code>~/.ssh/config</code>.</dd>
+  <dt>:</dt><dd>Os <strong>dois-pontos</strong> marcam que é remoto. Sem eles, vira uma cópia local para um arquivo chamado "ana@servidor".</dd>
+  <dt>/home/ana/docs/</dt><dd>O caminho lá dentro. Caminho relativo (sem <code>/</code> no começo) parte da pasta pessoal remota.</dd>
+</dl>
+
+<p>Então <code>ana@servidor:relatorio.pdf</code> é o arquivo <code>/home/ana/relatorio.pdf</code> no servidor, e <code>ana@servidor:</code> (nada depois dos dois-pontos) é a própria pasta pessoal.</p>
+
+<hr>
+
+<h2>scp: cópia rápida</h2>
+<p>O <code>scp</code> vem junto com o cliente SSH (pacote <code>openssh-client</code>), então já está instalado. A ordem é sempre <strong>origem, depois destino</strong>, como no <code>cp</code>.</p>
+
+<h3>Do notebook para o servidor</h3>
+<pre class="term">$ scp relatorio.pdf ana@192.168.0.50:docs/
+relatorio.pdf                                  100%  238KB   8.9MB/s   00:00</pre>
+
+<p>A linha mostra o arquivo, a porcentagem, o tamanho, a velocidade e o tempo. Se o servidor pedir senha (ou a frase da chave), o <code>scp</code> pergunta antes de começar.</p>
+
+<h3>Do servidor para o notebook</h3>
+<p>Basta inverter: a origem remota vem primeiro. O <code>.</code> no fim quer dizer "aqui, na pasta atual".</p>
+<pre class="term">$ scp ana@192.168.0.50:/var/log/meuapp.log .
+meuapp.log                                     100%   12KB   1.4MB/s   00:00</pre>
+
+<h3>Opções do scp</h3>
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Opção</th><th>Faz</th><th>Exemplo</th></tr>
+<tr><td><code>-r</code></td><td>Copia pastas inteiras (recursivo)</td><td><code>scp -r fotos/ ana@servidor:</code></td></tr>
+<tr><td><code>-P 2222</code></td><td>Porta do SSH (P <strong>maiúsculo</strong>; no <code>ssh</code> é <code>-p</code>)</td><td><code>scp -P 2222 a.txt ana@servidor:</code></td></tr>
+<tr><td><code>-i chave</code></td><td>Usa uma chave específica</td><td><code>scp -i ~/.ssh/trabalho a.txt ana@servidor:</code></td></tr>
+<tr><td><code>-C</code></td><td>Comprime durante a transferência</td><td><code>scp -C logs.txt ana@servidor:</code></td></tr>
+<tr><td><code>-p</code></td><td>Mantém datas e permissões</td><td><code>scp -p script.sh ana@servidor:</code></td></tr>
+</table>
+</div>
+
+<div class="warning">
+<strong>O scp sobrescreve sem perguntar</strong>
+<p>Se o destino já tiver um arquivo com o mesmo nome, ele é substituído sem aviso. Para pastas grandes ou cópias que se repetem, prefira o <code>rsync</code>.</p>
+</div>
+
+<hr>
+
+<h2>rsync: instalar primeiro</h2>
+<p>Diferente do Ubuntu, a instalação padrão do Debian <strong>não traz o rsync</strong>. E ele precisa estar instalado <strong>nas duas máquinas</strong>, porque um rsync conversa com o outro.</p>
+
+<pre class="term">$ rsync -av fotos/ ana@servidor:fotos/
+bash: rsync: comando não encontrado
+$ su -
+Senha:
+#> apt install rsync</pre>
+
+<p>Se faltar só no servidor, a mensagem é outra, vinda do lado de lá:</p>
+<pre class="term">$ rsync -av fotos/ ana@servidor:fotos/
+bash: linha 1: rsync: comando não encontrado                     « esta linha vem do servidor
+rsync: connection unexpectedly closed (0 bytes received so far) [sender]
+rsync error: error in rsync protocol data stream (code 12) at io.c(285) [sender=3.5.0]</pre>
+
+<hr>
+
+<h2>rsync: o básico</h2>
+
+<dl class="anatomy">
+  <dt>rsync</dt><dd>O programa.</dd>
+  <dt>-a</dt><dd>Modo <em>archive</em>: recursivo e mantém permissões, datas, links e donos. Use quase sempre.</dd>
+  <dt>-v</dt><dd>Detalhado (<em>verbose</em>): lista cada arquivo.</dd>
+  <dt>fotos/</dt><dd>A origem.</dd>
+  <dt>backup/</dt><dd>O destino. Pode ser local ou remoto (<code>ana@servidor:backup/</code>).</dd>
+</dl>
+
+<p>O rsync funciona igual entre duas pastas da mesma máquina, o que é ótimo para treinar. Os exemplos a seguir foram rodados num Debian 13:</p>
+
+<pre class="term" data-cwd="~/rs">$ rsync -av fotos/ backup/
+sending incremental file list           « calcula a lista enquanto envia
+praia.jpg
+serra.jpg
+viagem/
+viagem/mapa.png
+
+sent 301 bytes  received 85 bytes  772,00 bytes/sec
+total size is 7  speedup is 0,02</pre>
+
+<p>Rode o mesmo comando de novo e a lista vem vazia: nada mudou, então nada é copiado. Essa é a grande vantagem sobre o <code>scp</code>.</p>
+
+<p>As mensagens do rsync ficam em inglês, mas os números usam vírgula porque o sistema está em português (<code>772,00</code>).</p>
+
+<hr>
+
+<h2>A barra no final da origem</h2>
+<p>Esta é a pegadinha mais famosa do rsync. Com barra (<code>fotos/</code>), ele copia <strong>o conteúdo</strong> da pasta. Sem barra (<code>fotos</code>), ele copia <strong>a pasta em si</strong>, criando uma subpasta no destino.</p>
+
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Sem barra: <code>rsync -av fotos backup/</code></th><th>Com barra: <code>rsync -av fotos/ backup/</code></th></tr>
+<tr><td><pre class="syntax">backup
+└── fotos
+    ├── praia.jpg
+    ├── serra.jpg
+    └── viagem
+        └── mapa.png</pre></td><td><pre class="syntax">backup
+├── praia.jpg
+├── serra.jpg
+└── viagem
+    └── mapa.png</pre></td></tr>
+</table>
+</div>
+
+<p>Uma forma de lembrar: a barra significa "o que está <strong>dentro</strong> de". A barra no <strong>destino</strong> não muda nada; só a da origem importa.</p>
+
+<hr>
+
+<h2>Espelhar com --delete (e por que testar antes)</h2>
+<p>Por padrão, o rsync só acrescenta e atualiza: se você apagar um arquivo da origem, ele continua no destino. Para um <strong>espelho</strong> exato, existe o <code>--delete</code>, que apaga no destino o que não existe mais na origem.</p>
+
+<div class="warning">
+<strong>--delete apaga de verdade</strong>
+<p>Uma barra trocada ou uma pasta errada, junto com <code>--delete</code>, pode apagar o destino inteiro. Rode sempre antes com <code>-n</code> (<code>--dry-run</code>, "ensaio"), que só mostra o que seria feito.</p>
+</div>
+
+<p>A Ana apagou <code>serra.jpg</code> e criou <code>nova.jpg</code> na origem. Primeiro, o ensaio:</p>
+
+<pre class="term" data-cwd="~/rs">$ rsync -avn --delete fotos/ backup/
+sending incremental file list
+deleting serra.jpg                     « seria apagado no destino
+nova.jpg                               « seria copiado
+
+sent 156 bytes  received 36 bytes  384,00 bytes/sec
+total size is 9  speedup is 0,05 (DRY RUN)     « nada foi feito de verdade</pre>
+
+<p>O <code>(DRY RUN)</code> no fim confirma que foi só um ensaio. Conferido, rode sem o <code>n</code>:</p>
+
+<pre class="term" data-cwd="~/rs">$ rsync -avh --delete fotos/ backup/
+sending incremental file list
+deleting serra.jpg
+nova.jpg
+
+sent 205 bytes  received 56 bytes  522,00 bytes/sec
+total size is 9  speedup is 0,03</pre>
+
+<hr>
+
+<h2>Opções que você vai usar</h2>
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Opção</th><th>Faz</th></tr>
+<tr><td><code>-a</code></td><td>Modo arquivo: recursivo, mantém permissões, datas e links</td></tr>
+<tr><td><code>-v</code></td><td>Lista cada arquivo transferido</td></tr>
+<tr><td><code>-h</code></td><td>Tamanhos legíveis (K, M, G)</td></tr>
+<tr><td><code>-z</code></td><td>Comprime durante a transferência (vale a pena pela internet)</td></tr>
+<tr><td><code>-n</code> / <code>--dry-run</code></td><td>Ensaio: mostra o que faria, sem fazer</td></tr>
+<tr><td><code>--delete</code></td><td>Apaga no destino o que sumiu da origem</td></tr>
+<tr><td><code>--progress</code> ou <code>-P</code></td><td>Barra de progresso por arquivo (<code>-P</code> também retoma cópias interrompidas)</td></tr>
+<tr><td><code>--exclude='*.tmp'</code></td><td>Ignora arquivos que combinam com o padrão</td></tr>
+<tr><td><code>-e "ssh -p 2222"</code></td><td>Usa o SSH numa porta diferente</td></tr>
+</table>
+</div>
+
+<h3>Excluir arquivos</h3>
+<pre class="term" data-cwd="~/rs">$ rsync -av --exclude='*.png' fotos/ semPng/
+sending incremental file list
+created directory semPng              « o rsync cria a pasta de destino
+./
+nova.jpg
+praia.jpg
+viagem/                               « a pasta veio, mas o mapa.png ficou de fora</pre>
+
+<h3>Pela rede, numa porta diferente</h3>
+<pre class="term">$ rsync -avz -e "ssh -p 2222" ~/projeto/ ana@192.168.0.50:projeto/</pre>
+
+<hr>
+
+<h2>Formas diferentes de copiar entre máquinas</h2>
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Ferramenta</th><th>Exemplo</th><th>Melhor quando…</th></tr>
+<tr><td><code>scp</code></td><td><code>scp a.pdf ana@servidor:</code></td><td>Um ou poucos arquivos, uma vez.</td></tr>
+<tr><td><code>rsync</code></td><td><code>rsync -avz pasta/ ana@servidor:pasta/</code></td><td>Pastas grandes, cópias repetidas, backups.</td></tr>
+<tr><td><code>sftp</code></td><td><code>sftp ana@servidor</code> e depois <code>put</code>/<code>get</code></td><td>Navegar pelas pastas remotas antes de copiar.</td></tr>
+<tr><td>Gerenciador de arquivos</td><td>Endereço <code>sftp://ana@servidor/</code> no Arquivos</td><td>No desktop, arrastando com o mouse.</td></tr>
+</table>
+</div>
+
+<hr>
+
+<h2>Quando não funciona</h2>
+
+<div class="cenario">
+<strong>"stat local … No such file or directory"</strong>
+<pre class="term">$ scp nada.txt ana@192.168.0.50:
+scp: stat local "nada.txt": No such file or directory</pre>
+<p><strong>O que aconteceu:</strong> o arquivo de origem não existe na pasta atual. Confira com <code>ls</code> ou use o caminho completo.</p>
+</div>
+
+<div class="cenario">
+<strong>rsync com código 23</strong>
+<pre class="term">$ rsync -av nada/ backup/
+sending incremental file list
+rsync: [sender] change_dir "/home/ana/rs/nada" failed: No such file or directory (2)
+
+sent 19 bytes  received 12 bytes  62,00 bytes/sec
+total size is 0  speedup is 0,00
+rsync error: some files/attrs were not transferred (see previous errors) (code 23) at main.c(1394) [sender=3.5.0]</pre>
+<p><strong>O que aconteceu:</strong> o código 23 quer dizer "transferência parcial". A causa está na linha <code>rsync: …</code> mais acima: aqui, a origem <code>nada/</code> não existe. Em outros casos são arquivos sem permissão de leitura.</p>
+</div>
+
+<div class="cenario">
+<strong>Apareceu uma pasta a mais no destino</strong>
+<p><strong>O que aconteceu:</strong> faltou a barra no final da origem, e o rsync criou <code>backup/fotos/</code>.</p>
+<p><strong>Como resolver:</strong> apague a pasta extra e repita com <code>fotos/</code>.</p>
+</div>
+
+<div class="cenario">
+<strong>"connection unexpectedly closed" / código 12</strong>
+<p><strong>O que aconteceu:</strong> o rsync não está instalado na máquina remota. A pista é a primeira linha, <code>bash: linha 1: rsync: comando não encontrado</code>, que vem do servidor. Instale lá com <code>apt install rsync</code> (como root).</p>
+</div>
+
+<div class="cenario">
+<strong>"is not a regular file"</strong>
+<pre class="term">$ scp fotos ana@192.168.0.50:
+scp: local "/home/ana/fotos" is not a regular file
+scp: failed to upload file /home/ana/fotos to .</pre>
+<p><strong>O que aconteceu:</strong> <code>fotos</code> é uma pasta, e o <code>scp</code> só copia pastas com <code>-r</code>: <code>scp -r fotos ana@192.168.0.50:</code>.</p>
+</div>
+
+<div class="cenario">
+<strong>Arquivo remoto inexistente</strong>
+<pre class="term">$ scp ana@192.168.0.50:nada.txt .
+scp: nada.txt: No such file or directory</pre>
+<p><strong>O que aconteceu:</strong> o caminho depois dos dois-pontos não existe no servidor. Lembre que caminho relativo parte da pasta pessoal remota; confira com <code>ssh ana@192.168.0.50 ls</code>.</p>
+</div>
+
+<div class="cenario">
+<strong>Connection refused ou timed out</strong>
+<p><strong>O que aconteceu:</strong> o problema é a conexão SSH, não a cópia. Teste antes com <code>ssh ana@servidor</code> e veja os erros em <a href="ssh.html">SSH</a>.</p>
+</div>
+
+<hr>
+
+<h2>Exercícios</h2>
+
+<div class="exercise">
+<h3>1. Do servidor para cá</h3>
+<p>Complete para trazer <code>/etc/hostname</code> do servidor para a pasta atual:</p>
+<div class="ex-code">scp ana@192.168.0.50:/etc/hostname <input data-answer=".|./" aria-label="destino"></div>
+</div>
+
+<div class="exercise">
+<h3>2. Ensaio antes de espelhar</h3>
+<p>Complete para ver o que seria apagado, sem apagar nada:</p>
+<div class="ex-code">rsync -av <input data-answer="-n|--dry-run" aria-label="opção"> --delete fotos/ backup/</div>
+</div>
+
+<div class="exercise">
+<h3>3. Porta diferente no scp</h3>
+<p>Complete para usar a porta 2222:</p>
+<div class="ex-code">scp <input data-answer="-P 2222|-P2222" aria-label="opção"> a.txt ana@servidor:</div>
+</div>
+
+<div class="mc" data-answer="2">
+<p class="mc-q">4. <code>rsync -av fotos backup/</code> (sem barra em "fotos") resulta em:</p>
+<label><input type="radio" name="q4"> <code>backup/praia.jpg</code></label>
+<label><input type="radio" name="q4"> <code>backup/fotos/praia.jpg</code></label>
+<label><input type="radio" name="q4"> Erro: falta a barra.</label>
+<label><input type="radio" name="q4"> <code>fotos/backup/praia.jpg</code></label>
+</div>
+
+<div class="mc" data-answer="4">
+<p class="mc-q">5. Num Debian recém-instalado, <code>rsync</code> dá "comando não encontrado". O que fazer?</p>
+<label><input type="radio" name="q5"> Usar <code>sudo rsync</code>.</label>
+<label><input type="radio" name="q5"> Trocar por <code>cp -r</code>, porque o Debian não tem rsync.</label>
+<label><input type="radio" name="q5"> Adicionar <code>/sbin</code> ao PATH.</label>
+<label><input type="radio" name="q5"> Instalar como root com <code>apt install rsync</code>, nas duas máquinas.</label>
+</div>
+
+<hr>
+
+<h2>Resumo</h2>
+<ul>
+  <li>Caminho remoto: <code>usuario@maquina:caminho</code>; os dois-pontos são obrigatórios.</li>
+  <li><code>scp origem destino</code> para cópias rápidas; <code>-r</code> para pastas, <code>-P</code> para a porta.</li>
+  <li>O <code>rsync</code> não vem no Debian mínimo: <code>apt install rsync</code> nas duas pontas.</li>
+  <li><code>fotos/</code> copia o conteúdo; <code>fotos</code> copia a pasta.</li>
+  <li>Antes de <code>--delete</code>, sempre <code>-n</code> e confira o <code>(DRY RUN)</code>.</li>
+</ul>
+
+<div class="pager"></div>
+
+</div>
+</main>
+</div>
+<script src="assets/site.js"></script>
+</body>
+</html>

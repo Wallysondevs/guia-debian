@@ -1,0 +1,310 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Debian O Terminal — prompt, atalhos e histórico | Guia Debian</title>
+<meta name="description" content="Como usar o terminal no Debian 13: abrir o GNOME Terminal, ler o prompt ana@notebook:~$, completar com Tab, usar o histórico, copiar e colar, e o terminal de emergência (TTY).">
+<link rel="stylesheet" href="assets/style.css">
+<script>try{var t=localStorage.getItem("tema");if(t)document.documentElement.setAttribute("data-theme",t)}catch(e){}</script>
+</head>
+<body>
+<div class="layout">
+<nav class="sidebar" id="sidebar" aria-label="Tópicos"></nav>
+<main class="main">
+<div class="content">
+
+<div class="pager"></div>
+
+<h1>Debian <span class="hl">O Terminal</span></h1>
+
+<p class="intro">O <strong>terminal</strong> é uma janela onde você conversa com o computador por texto: você digita um comando, aperta <kbd>Enter</kbd> e ele responde. Parece antiquado, mas é a forma mais rápida e precisa de administrar um Debian, e em servidores é a única. Nesta aula você abre o terminal, aprende a ler o que ele mostra e os atalhos que poupam metade da digitação.</p>
+
+<div class="note">
+<strong>Você vai aprender</strong>
+<ul>
+  <li>Como abrir o terminal no Debian (o atalho do Ubuntu não vem configurado).</li>
+  <li>O que significa cada pedaço do prompt <code>ana@notebook:~$</code>.</li>
+  <li>Completar nomes com <kbd>Tab</kbd> e reaproveitar comandos com o histórico.</li>
+  <li>Copiar e colar no terminal.</li>
+  <li>Que existe um terminal de emergência fora da interface gráfica.</li>
+</ul>
+</div>
+
+<hr>
+
+<h2>Terminal, shell, console: os nomes</h2>
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Nome</th><th>O que é</th><th>No Debian 13</th></tr>
+<tr><td><strong>Terminal</strong></td><td>A janela onde o texto aparece.</td><td>GNOME Terminal (<code>gnome-terminal</code>)</td></tr>
+<tr><td><strong>Shell</strong></td><td>O programa que lê e executa o que você digita.</td><td>bash 5.2</td></tr>
+<tr><td><strong>Console</strong> ou <strong>TTY</strong></td><td>Um terminal em tela cheia, fora da interface gráfica.</td><td><kbd>Ctrl</kbd>+<kbd>Alt</kbd>+<kbd>F3</kbd> a <kbd>F6</kbd></td></tr>
+<tr><td><strong>Prompt</strong></td><td>O texto que o shell mostra quando espera um comando.</td><td><code>ana@notebook:~$</code></td></tr>
+</table>
+</div>
+
+<hr>
+
+<h2>Abrir o terminal</h2>
+<p>No GNOME do Debian, o <kbd>Ctrl</kbd>+<kbd>Alt</kbd>+<kbd>T</kbd> <strong>não</strong> vem configurado (ao contrário do Ubuntu). As formas que funcionam desde o primeiro dia:</p>
+<ol class="passo">
+  <li>Aperte <kbd>Super</kbd>, digite <code>terminal</code> e aperte <kbd>Enter</kbd>.</li>
+  <li>Aperte <kbd>Super</kbd>+<kbd>A</kbd> e clique em <strong>Terminal</strong>.</li>
+  <li>No app Arquivos, clique com o botão direito numa pasta e escolha "Abrir no Terminal".</li>
+</ol>
+<p>Para ter o <kbd>Ctrl</kbd>+<kbd>Alt</kbd>+<kbd>T</kbd>, crie o atalho em Configurações → Teclado (o passo a passo está em <a href="desktop.html">O Desktop</a>).</p>
+
+<hr>
+
+<h2>Lendo o prompt</h2>
+<p>Quando o terminal abre, aparece o prompt e um cursor piscando. Cada pedaço do prompt tem um significado:</p>
+
+<pre class="term">$ pwd
+/home/ana</pre>
+
+<dl class="anatomy">
+  <dt>ana</dt><dd>O usuário que está usando o terminal.</dd>
+  <dt>@notebook</dt><dd>O nome da máquina. "@" se lê "em".</dd>
+  <dt>:~</dt><dd>A pasta atual. O <code>~</code> é a pasta pessoal, <code>/home/ana</code>.</dd>
+  <dt>$</dt><dd>Fim do prompt: o shell espera um comando de um usuário comum.</dd>
+</dl>
+
+<p>Quando a Ana entra em outra pasta, o prompt acompanha:</p>
+
+<pre class="term">$ cd /etc/apt
+$ pwd
+/etc/apt                                « o prompt mostra a pasta inteira fora da pasta pessoal</pre>
+
+<h3>O prompt do root</h3>
+<p>Quando a Ana vira administrador com <code>su -</code>, o prompt muda em dois pontos: o usuário vira <code>root</code> e o <code>$</code> vira <code>#</code>. O <code>#</code> é o aviso de que você pode alterar qualquer coisa do sistema.</p>
+
+<pre class="term">$ su -
+Senha:                                  « a senha do root; nada aparece enquanto você digita</pre>
+<pre class="term" data-user="root" data-cwd="~">#> whoami
+root
+#> exit
+sair                                    « o bash avisa que saiu da sessão do root</pre>
+<pre class="term">$ whoami
+ana</pre>
+
+<div class="note">
+<strong>Cores no prompt</strong>
+<p>No GNOME Terminal, o prompt da Ana aparece com o usuário em verde e a pasta em azul. Isso vem do <code>~/.bashrc</code> do Debian, que só liga as cores quando o terminal avisa que tem cores (<code>TERM=xterm-256color</code>). O prompt do root e o do console (TTY) aparecem sem cores, porque o <code>.bashrc</code> do root não as liga e o console usa <code>TERM=linux</code>.</p>
+</div>
+
+<hr>
+
+<h2>Digitar um comando</h2>
+<ol class="passo">
+  <li>Digite o comando. Ex.: <code>date</code>.</li>
+  <li>Aperte <kbd>Enter</kbd>.</li>
+  <li>Leia a resposta. Quando o prompt reaparece, o comando terminou.</li>
+</ol>
+
+<pre class="term">$ date
+qui 15 out 2026 21:06:14 -03
+$ whoami
+ana</pre>
+
+<p>Se um comando não termina (por exemplo, ficou esperando algo), aperte <kbd>Ctrl</kbd>+<kbd>C</kbd> para interromper. Isso não copia texto no terminal: interrompe o programa.</p>
+
+<hr>
+
+<h2>Tab: o atalho mais importante</h2>
+<p>A tecla <kbd>Tab</kbd> <strong>completa</strong> nomes de comandos, pastas e arquivos. Digite o começo e aperte <kbd>Tab</kbd>:</p>
+<ul>
+  <li>Se só existe uma opção, o shell completa sozinho.</li>
+  <li>Se existem várias, nada acontece no primeiro <kbd>Tab</kbd>; no segundo, ele lista as opções.</li>
+</ul>
+
+<pre class="term">$ cd Do                    « aperte Tab duas vezes
+Documentos/  Downloads/
+$ cd Doc                   « aperte Tab
+$ cd Documentos/</pre>
+
+<p>Além de economizar digitação, o <kbd>Tab</kbd> evita erros: se ele não completa, é porque o nome não existe do jeito que você digitou. O Debian ainda vem com o <code>bash-completion</code>, que completa também as opções de muitos comandos (<code>apt ins</code> + <kbd>Tab</kbd> vira <code>apt install</code>).</p>
+
+<div class="try" data-goal="cwd:~/Documentos/projetos/site">
+<p class="try-task"><strong>Missão:</strong> entre na pasta <code>Documentos/projetos/site</code> com um único <code>cd</code>, digitando só as primeiras letras de cada pasta e completando com <kbd>Tab</kbd>. Confira com <code>pwd</code>.</p>
+</div>
+
+<hr>
+
+<h2>Histórico: não digite de novo</h2>
+<p>O bash guarda os comandos que você digitou. No Debian, o <code>~/.bashrc</code> configura o histórico para guardar 1.000 comandos na sessão e 2.000 no arquivo <code>~/.bash_history</code>, ignorando comandos repetidos em sequência e os que começam com espaço (<code>HISTCONTROL=ignoreboth</code>).</p>
+
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Tecla ou comando</th><th>O que faz</th></tr>
+<tr><td><kbd>↑</kbd> e <kbd>↓</kbd></td><td>Navega pelos comandos anteriores</td></tr>
+<tr><td><kbd>Ctrl</kbd>+<kbd>R</kbd></td><td>Busca no histórico: digite um pedaço do comando; <kbd>Ctrl</kbd>+<kbd>R</kbd> de novo procura o anterior; <kbd>Enter</kbd> executa</td></tr>
+<tr><td><code>history</code></td><td>Lista o histórico numerado</td></tr>
+<tr><td><code>!!</code></td><td>Repete o último comando</td></tr>
+<tr><td><code>!42</code></td><td>Repete o comando número 42 do <code>history</code></td></tr>
+</table>
+</div>
+
+<pre class="term">$ echo oi
+oi
+$ ls /naoexiste
+ls: não foi possível acessar '/naoexiste': Arquivo ou diretório inexistente
+$ !!
+ls /naoexiste                           « o bash mostra o comando que vai repetir
+ls: não foi possível acessar '/naoexiste': Arquivo ou diretório inexistente
+$ history | tail -3
+   74  echo oi
+   75  ls /naoexiste                    « a repetição não foi guardada de novo (ignoreboth)
+   76  history | tail -3</pre>
+
+<div class="tip">
+<strong>Truque com su</strong>
+<p>Esqueceu que precisava ser root? No Debian sem <code>sudo</code>, o jeito é <code>su -c '…'</code> com o comando entre aspas. Ex.: <code>su -c 'apt update'</code> pede a senha do root e roda só aquele comando. Veja <a href="root-su-sudo.html">root, su e sudo</a>.</p>
+</div>
+
+<div class="try" data-goal="ran:^\s*history">
+<p class="try-task"><strong>Missão:</strong> rode três comandos quaisquer (<code>date</code>, <code>whoami</code>, <code>ls</code>). Depois use <kbd>↑</kbd> para trazer o <code>date</code> de volta e, por fim, veja a lista com <code>history</code>.</p>
+</div>
+
+<hr>
+
+<h2>Editar a linha antes de apertar Enter</h2>
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Atalho</th><th>O que faz</th></tr>
+<tr><td><kbd>Ctrl</kbd>+<kbd>A</kbd> / <kbd>Ctrl</kbd>+<kbd>E</kbd></td><td>Vai para o começo / fim da linha</td></tr>
+<tr><td><kbd>Ctrl</kbd>+<kbd>U</kbd></td><td>Apaga do cursor até o começo da linha</td></tr>
+<tr><td><kbd>Ctrl</kbd>+<kbd>K</kbd></td><td>Apaga do cursor até o fim da linha</td></tr>
+<tr><td><kbd>Ctrl</kbd>+<kbd>W</kbd></td><td>Apaga a palavra antes do cursor</td></tr>
+<tr><td><kbd>Alt</kbd>+<kbd>B</kbd> / <kbd>Alt</kbd>+<kbd>F</kbd></td><td>Volta / avança uma palavra</td></tr>
+<tr><td><kbd>Ctrl</kbd>+<kbd>L</kbd></td><td>Limpa a tela (o mesmo que <code>clear</code>)</td></tr>
+<tr><td><kbd>Ctrl</kbd>+<kbd>C</kbd></td><td>Cancela a linha ou interrompe o programa</td></tr>
+<tr><td><kbd>Ctrl</kbd>+<kbd>D</kbd></td><td>Numa linha vazia, fecha o terminal (como <code>exit</code>)</td></tr>
+</table>
+</div>
+
+<hr>
+
+<h2>Copiar e colar</h2>
+<p>No terminal, <kbd>Ctrl</kbd>+<kbd>C</kbd> já tem outra função (interromper). Por isso copiar e colar usa o <kbd>Shift</kbd> junto. Estes são os atalhos padrão do GNOME Terminal 3.56:</p>
+
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Atalho</th><th>O que faz</th></tr>
+<tr><td><kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>C</kbd></td><td>Copiar o texto selecionado</td></tr>
+<tr><td><kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>V</kbd></td><td>Colar</td></tr>
+<tr><td><kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>T</kbd></td><td>Nova aba</td></tr>
+<tr><td><kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>N</kbd></td><td>Nova janela</td></tr>
+<tr><td><kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>W</kbd></td><td>Fechar a aba</td></tr>
+<tr><td><kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>F</kbd></td><td>Procurar texto na tela</td></tr>
+<tr><td><kbd>Ctrl</kbd>+<kbd>PgUp</kbd> / <kbd>PgDn</kbd></td><td>Aba anterior / próxima</td></tr>
+<tr><td><kbd>Ctrl</kbd>+<kbd>+</kbd></td><td>Aumentar a letra</td></tr>
+<tr><td><kbd>F11</kbd></td><td>Tela cheia</td></tr>
+</table>
+</div>
+
+<p>Também dá para selecionar com o mouse e colar com o <strong>botão do meio</strong> (a rodinha). É um jeito antigo e rápido, típico do Linux.</p>
+
+<div class="warning">
+<strong>Cuidado ao colar comandos da internet</strong>
+<p>Leia antes de colar, principalmente se for rodar como root. Um comando colado é executado do jeito que está, e o texto escondido numa página pode ser diferente do que aparece na tela.</p>
+</div>
+
+<hr>
+
+<h2>O terminal de emergência (TTY)</h2>
+<p>Além da janela do terminal, o Linux tem <strong>consoles virtuais</strong>: telas de texto independentes da interface gráfica. Se o GNOME travar, eles continuam funcionando. Aperte <kbd>Ctrl</kbd>+<kbd>Alt</kbd>+<kbd>F3</kbd>:</p>
+
+<pre class="term" data-title="tty3">Debian GNU/Linux 13 notebook tty3
+
+notebook login: ana
+Senha:
+$ </pre>
+
+<p>Lá você pode fechar o programa que travou e voltar para a interface gráfica. O passo a passo completo está em <a href="travamentos.html">Quando o Sistema Trava</a>.</p>
+
+<hr>
+
+<h2>Quando não funciona</h2>
+
+<div class="cenario">
+<strong>"bash: ll: comando não encontrado"</strong>
+<pre class="term">$ ll
+bash: ll: comando não encontrado</pre>
+<p><strong>O que aconteceu:</strong> no Debian, o atalho <code>ll</code> vem desativado (comentado) no <code>~/.bashrc</code>. Quem vem do Ubuntu estranha.</p>
+<p><strong>Como resolver:</strong> use <code>ls -l</code>, ou crie o atalho: veja <a href="bashrc.html">.bashrc, alias, PATH</a>.</p>
+</div>
+
+<div class="cenario">
+<strong>Apertei Ctrl+C para copiar e o comando parou</strong>
+<p><strong>O que aconteceu:</strong> no terminal, <kbd>Ctrl</kbd>+<kbd>C</kbd> interrompe o programa em execução.</p>
+<p><strong>Como resolver:</strong> use <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>C</kbd> para copiar.</p>
+</div>
+
+<div class="cenario">
+<strong>Digito a senha e nada aparece</strong>
+<p><strong>O que aconteceu:</strong> é proposital. Nem asteriscos aparecem, para ninguém contar quantas letras a senha tem.</p>
+<p><strong>Como resolver:</strong> digite normalmente e aperte <kbd>Enter</kbd>. Se errar, aparece <code>su: Falha de autenticação</code> e você tenta de novo.</p>
+</div>
+
+<div class="cenario">
+<strong>Apareceu um "&gt;" e o comando não roda</strong>
+<pre class="term">$ echo "olá
+&gt;</pre>
+<p><strong>O que aconteceu:</strong> você abriu aspas e não fechou. O <code>&gt;</code> é o shell pedindo o resto do comando.</p>
+<p><strong>Como resolver:</strong> feche as aspas e aperte <kbd>Enter</kbd>, ou cancele com <kbd>Ctrl</kbd>+<kbd>C</kbd>.</p>
+</div>
+
+<hr>
+
+<h2>Exercícios</h2>
+
+<div class="mc" data-answer="3">
+<p class="mc-q">1. O prompt mostra <code>root@notebook:/etc#</code>. O que isso significa?</p>
+<label><input type="radio" name="q1"> A usuária ana está na pasta pessoal.</label>
+<label><input type="radio" name="q1"> O root está na pasta pessoal.</label>
+<label><input type="radio" name="q1"> O root está na pasta <code>/etc</code>, e pode alterar qualquer coisa.</label>
+<label><input type="radio" name="q1"> A máquina se chama root.</label>
+</div>
+
+<div class="mc" data-answer="2">
+<p class="mc-q">2. Qual atalho copia texto no GNOME Terminal?</p>
+<label><input type="radio" name="q2"> <kbd>Ctrl</kbd>+<kbd>C</kbd></label>
+<label><input type="radio" name="q2"> <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>C</kbd></label>
+<label><input type="radio" name="q2"> <kbd>Ctrl</kbd>+<kbd>Alt</kbd>+<kbd>C</kbd></label>
+<label><input type="radio" name="q2"> <kbd>Ctrl</kbd>+<kbd>R</kbd></label>
+</div>
+
+<div class="exercise">
+<h3>3. Repetir o último comando</h3>
+<p>Qual é o atalho de duas letras que repete o último comando?</p>
+<div class="ex-code"><input data-answer="!!" aria-label="atalho"></div>
+</div>
+
+<div class="mc" data-answer="1">
+<p class="mc-q">4. A interface gráfica travou. Qual atalho abre um terminal de texto fora dela?</p>
+<label><input type="radio" name="q4"> <kbd>Ctrl</kbd>+<kbd>Alt</kbd>+<kbd>F3</kbd></label>
+<label><input type="radio" name="q4"> <kbd>Ctrl</kbd>+<kbd>Alt</kbd>+<kbd>T</kbd></label>
+<label><input type="radio" name="q4"> <kbd>Super</kbd>+<kbd>A</kbd></label>
+<label><input type="radio" name="q4"> <kbd>Alt</kbd>+<kbd>F4</kbd></label>
+</div>
+
+<hr>
+
+<h2>Resumo</h2>
+<ul>
+  <li>Abra o terminal com <kbd>Super</kbd> e "terminal"; o <kbd>Ctrl</kbd>+<kbd>Alt</kbd>+<kbd>T</kbd> precisa ser criado.</li>
+  <li><code>ana@notebook:~$</code>: usuário, máquina, pasta e <code>$</code> (comum) ou <code>#</code> (root).</li>
+  <li><kbd>Tab</kbd> completa nomes; <kbd>↑</kbd>, <kbd>Ctrl</kbd>+<kbd>R</kbd> e <code>!!</code> reaproveitam comandos.</li>
+  <li>Copiar e colar: <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>C</kbd> e <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>V</kbd>.</li>
+  <li>Se a interface travar, <kbd>Ctrl</kbd>+<kbd>Alt</kbd>+<kbd>F3</kbd> abre um console de texto.</li>
+</ul>
+
+<div class="pager"></div>
+
+</div>
+</main>
+</div>
+<script src="assets/site.js"></script>
+</body>
+</html>

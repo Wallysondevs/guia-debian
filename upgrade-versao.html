@@ -1,0 +1,373 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Debian — atualizar de versão (12 bookworm para 13 trixie) | Guia Debian</title>
+<meta name="description" content="Passo a passo para atualizar o Debian 12 (bookworm) para o 13 (trixie) seguindo as Release Notes: backup, sistema em dia, troca de bookworm por trixie, apt upgrade --without-new-pkgs, apt full-upgrade, reinicialização e limpeza. E como será o 13 para o 14 (forky).">
+<link rel="stylesheet" href="assets/style.css">
+<script>try{var t=localStorage.getItem("tema");if(t)document.documentElement.setAttribute("data-theme",t)}catch(e){}</script>
+</head>
+<body>
+<div class="layout">
+<nav class="sidebar" id="sidebar" aria-label="Tópicos"></nav>
+<main class="main">
+<div class="content">
+
+<div class="pager"></div>
+
+<h1>Debian <span class="hl">Atualizar a Versão do Debian</span></h1>
+
+<p class="intro">O <code>apt upgrade</code> do dia a dia atualiza os pacotes <strong>dentro</strong> da mesma versão: do Debian 12.10 para o 12.11, por exemplo. Passar do Debian 12 (<code>bookworm</code>) para o 13 (<code>trixie</code>) é outra operação, maior: troca centenas de pacotes, o kernel e às vezes o comportamento de programas. O Debian faz isso sem reinstalar, desde que você siga a receita.</p>
+
+<div class="note">
+<strong>Você vai aprender</strong>
+<ul>
+  <li>Quando atualizar de versão, e onde está a receita oficial (as <em>Release Notes</em>).</li>
+  <li>A preparar o sistema: backup, Debian 12 em dia, repositórios de fora desligados.</li>
+  <li>A trocar <code>bookworm</code> por <code>trixie</code> nos repositórios.</li>
+  <li>A fazer a atualização em duas etapas: <code>apt upgrade --without-new-pkgs</code> e <code>apt full-upgrade</code>.</li>
+  <li>O que conferir e limpar depois, e como será a passagem do 13 para o 14 (<code>forky</code>).</li>
+</ul>
+</div>
+
+<div class="warning">
+<strong>Leia antes de começar</strong>
+<p>Esta aula mostra o caminho e explica cada passo, mas a referência é sempre o capítulo "Atualizações a partir do Debian 12 (bookworm)" das <a href="https://www.debian.org/releases/trixie/releasenotes" rel="noopener">Release Notes do Debian 13</a>, que lista os problemas conhecidos daquela versão. As saídas abaixo são <strong>ilustrativas</strong>: o número de pacotes e os nomes mudam de máquina para máquina. Faça a primeira vez numa máquina virtual.</p>
+</div>
+
+<hr>
+
+<h2>Antes do comando: quando atualizar</h2>
+<p>Cada versão estável do Debian tem cerca de 3 anos de suporte normal, mais 2 de suporte estendido (LTS). Quando uma versão nova sai, a anterior continua recebendo correções por um ano. Não há pressa no dia do lançamento: muita gente espera o primeiro "point release" (13.1) para os primeiros problemas serem corrigidos.</p>
+
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Versão</th><th>Codinome</th><th>Situação (out/2026)</th></tr>
+<tr><td>Debian 12</td><td><code>bookworm</code></td><td>Estável anterior: ainda recebe correções de segurança, por pouco tempo</td></tr>
+<tr><td>Debian 13</td><td><code>trixie</code></td><td>Estável atual (13.7)</td></tr>
+<tr><td>Debian 14</td><td><code>forky</code></td><td>Em desenvolvimento (testing); ainda não lançado</td></tr>
+</table>
+</div>
+
+<p>Veja o ciclo completo em <a href="versoes.html">Versões do Debian</a>.</p>
+
+<hr>
+
+<h2>O mapa do caminho</h2>
+<ol class="passo">
+  <li><strong>Backup</strong> do que importa.</li>
+  <li><strong>Debian 12 totalmente atualizado</strong> e sem pacotes quebrados.</li>
+  <li><strong>Desligar repositórios de fora</strong> (terceiros e backports).</li>
+  <li><strong>Trocar <code>bookworm</code> por <code>trixie</code></strong> nos repositórios.</li>
+  <li><strong>Atualização mínima</strong>: <code>apt upgrade --without-new-pkgs</code>.</li>
+  <li><strong>Atualização completa</strong>: <code>apt full-upgrade</code>.</li>
+  <li><strong>Reiniciar</strong> e conferir.</li>
+  <li><strong>Limpar</strong> o que sobrou da versão antiga.</li>
+</ol>
+
+<p>Todos os comandos são feitos como root (<code>su -</code>). Se você estiver numa máquina remota, use o <code>tmux</code> (veja <a href="jobs.html">Jobs, nohup, tmux</a>): se a conexão cair no meio, a atualização continua e você volta para a mesma tela.</p>
+
+<hr>
+
+<h2>Passo 1: backup</h2>
+<p>A atualização raramente dá errado, mas quando dá, o backup é o que salva. O mínimo:</p>
+
+<pre class="term" data-user="root" data-host="servidor">#> tar -czf /root/etc-antes-trixie.tar.gz /etc
+#> dpkg --get-selections '*' &gt; /root/pacotes-antes.txt
+#> cp /etc/apt/sources.list /root/sources.list.bookworm</pre>
+
+<dl class="anatomy">
+  <dt>tar -czf … /etc</dt><dd>Guarda todas as configurações do sistema num arquivo compactado.</dd>
+  <dt>dpkg --get-selections '*'</dt><dd>A lista dos pacotes instalados; serve para reinstalar tudo se for preciso.</dd>
+  <dt>cp /etc/apt/sources.list …</dt><dd>Uma cópia dos repositórios do jeito que estão.</dd>
+</dl>
+
+<p>Os dados das pessoas (<code>/home</code>), bancos de dados e sites também entram no backup. Veja <a href="backup.html">Backup</a>.</p>
+
+<hr>
+
+<h2>Passo 2: o Debian 12 em dia e saudável</h2>
+
+<pre class="term" data-user="root" data-host="servidor">#> cat /etc/debian_version
+12.12
+#> apt update
+#> apt full-upgrade
+#> dpkg --audit
+#> apt-mark showhold</pre>
+
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Comando</th><th>O que você quer ver</th></tr>
+<tr><td><code>apt full-upgrade</code></td><td>O último point release do Debian 12 instalado</td></tr>
+<tr><td><code>dpkg --audit</code></td><td><strong>Nada.</strong> Se listar pacotes "bagunçados" ou "não configurados", resolva antes (<code>dpkg --configure -a</code>)</td></tr>
+<tr><td><code>apt-mark showhold</code></td><td><strong>Nada.</strong> Pacotes segurados atrapalham a atualização; solte com <code>apt-mark unhold</code></td></tr>
+</table>
+</div>
+
+<p>Veja também quais pacotes <strong>não vieram</strong> do Debian (de repositórios de terceiros, ou instalados de um <code>.deb</code> solto). São os que mais costumam dar problema:</p>
+
+<pre class="term" data-user="root" data-host="servidor">#> apt list '?narrow(?installed, ?not(?origin(Debian)))'
+Listando...
+docker-ce/bookworm,now 5:28.5.1-1~debian.12~bookworm amd64 [instalado]
+code/stable,now 1.104.0 amd64 [instalado]</pre>
+
+<hr>
+
+<h2>Passo 3: desligar repositórios de fora</h2>
+<p>Repositórios de terceiros e o backports devem ser desligados durante a atualização. Comente as linhas (ponha <code>#</code> no começo) ou renomeie os arquivos:</p>
+
+<pre class="term" data-user="root" data-host="servidor">#> ls /etc/apt/sources.list.d/
+backports.list  docker.list  vscode.sources
+#> cd /etc/apt/sources.list.d/
+#> for f in *; do mv "$f" "$f.desligado"; done</pre>
+
+<p>Depois da atualização, você religa um por um, já trocando <code>bookworm</code> por <code>trixie</code> onde o fabricante tiver repositório para o Debian 13.</p>
+
+<hr>
+
+<h2>Passo 4: trocar bookworm por trixie</h2>
+
+<pre class="term" data-user="root" data-host="servidor">#> cat /etc/apt/sources.list
+deb http://deb.debian.org/debian bookworm main non-free-firmware
+deb http://security.debian.org/debian-security bookworm-security main non-free-firmware
+deb http://deb.debian.org/debian bookworm-updates main non-free-firmware
+#> sed -i 's/bookworm/trixie/g' /etc/apt/sources.list
+#> cat /etc/apt/sources.list
+deb http://deb.debian.org/debian trixie main non-free-firmware
+deb http://security.debian.org/debian-security trixie-security main non-free-firmware
+deb http://deb.debian.org/debian trixie-updates main non-free-firmware</pre>
+
+<dl class="anatomy">
+  <dt>sed</dt><dd>Editor de texto em lote (veja <a href="sed.html">sed</a>).</dd>
+  <dt>-i</dt><dd>Edita o arquivo no lugar.</dd>
+  <dt>'s/bookworm/trixie/g'</dt><dd>Substitui <code>bookworm</code> por <code>trixie</code>, todas as vezes em cada linha. Pega também <code>bookworm-security</code> e <code>bookworm-updates</code>.</dd>
+  <dt>/etc/apt/sources.list</dt><dd>O arquivo. Se você já usa o formato <code>.sources</code>, aplique em <code>/etc/apt/sources.list.d/debian.sources</code>.</dd>
+</dl>
+
+<div class="warning">
+<strong>Nunca use "stable" para fazer isso</strong>
+<p>Trocar para <code>trixie</code> é uma decisão sua, num dia que você escolheu. Se o arquivo tiver <code>stable</code>, a troca de versão aconteceria sozinha no primeiro <code>apt full-upgrade</code> depois de um lançamento.</p>
+</div>
+
+<pre class="term" data-user="root" data-host="servidor">#> apt update
+…
+Obter:1 http://deb.debian.org/debian trixie InRelease [140 kB]
+Obter:2 http://security.debian.org/debian-security trixie-security InRelease [43,4 kB]
+…
+1045 packages can be upgraded. Run 'apt list --upgradable' to see them.     « esta frase não tem tradução</pre>
+
+<hr>
+
+<h2>Passo 5: gravar a sessão e conferir o espaço</h2>
+<p>As Release Notes recomendam gravar tudo o que aparece na tela, para investigar depois se algo der errado. O comando <code>script</code> faz isso:</p>
+
+<pre class="term" data-user="root" data-host="servidor">#> script -t 2&gt;~/upgrade-trixie.time -a ~/upgrade-trixie.script</pre>
+
+<p>Daqui até o <code>exit</code>, tudo fica gravado em <code>~/upgrade-trixie.script</code>. Em seguida, confira se há espaço em disco, sem atualizar nada:</p>
+
+<pre class="term" data-user="root" data-host="servidor">#> apt -o APT::Get::Trivial-Only=true full-upgrade
+…
+Depois desta operação, 512 MB adicionais de espaço em disco serão usados.
+Erro: "Trivial Only" especificado, mas esta não é uma operação trivial.</pre>
+
+<p>O "Erro" no fim é esperado: a opção <code>Trivial-Only</code> faz o apt parar antes de mudar qualquer coisa, só para você ler quanto espaço vai precisar. Compare com o <code>df -h</code>; as partições <code>/</code> e <code>/var</code> precisam de folga, e a <code>/boot</code> também, por causa do kernel novo.</p>
+
+<hr>
+
+<h2>Passo 6: a atualização mínima</h2>
+
+<dl class="anatomy">
+  <dt>apt upgrade</dt><dd>Atualiza os pacotes instalados…</dd>
+  <dt>--without-new-pkgs</dt><dd>…mas sem instalar pacotes novos nem remover nenhum. Só o que dá para trocar "por cima".</dd>
+</dl>
+
+<pre class="term" data-user="root" data-host="servidor">#> apt upgrade --without-new-pkgs</pre>
+
+<p>Por que em duas etapas? Atualizar primeiro o que é simples (o apt, o dpkg, bibliotecas básicas) deixa o sistema numa situação mais estável para a etapa difícil, que é resolver os pacotes que mudaram de nome, se dividiram ou foram removidos.</p>
+
+<p>Durante a atualização, algumas perguntas aparecem. As mais comuns:</p>
+
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Pergunta</th><th>Resposta segura</th></tr>
+<tr><td>"Reiniciar serviços durante atualizações de pacotes sem perguntar?"</td><td>Sim (num servidor que pode ficar uns segundos sem o serviço)</td></tr>
+<tr><td>Um arquivo de configuração que você mudou ganhou versão nova: manter a sua (<code>N</code>) ou instalar a do pacote (<code>Y</code>)?</td><td>Na dúvida, <code>N</code> (mantém a sua). Use <code>D</code> para ver a diferença antes</td></tr>
+<tr><td>Uma tela com notícias (<code>apt-listchanges</code>)</td><td>Leia e aperte <kbd>q</kbd></td></tr>
+</table>
+</div>
+
+<hr>
+
+<h2>Passo 7: a atualização completa</h2>
+
+<pre class="term" data-user="root" data-host="servidor">#> apt full-upgrade
+…
+Atualizando:
+  …
+Instalando:
+  linux-image-6.12.111+deb13-amd64
+  …
+REMOVENDO:
+  …
+Resumo:
+  …
+Você quer continuar? [S/n] S</pre>
+
+<p>O <code>full-upgrade</code> pode instalar pacotes novos e remover os que ficaram obsoletos, que é o que uma troca de versão precisa. Leia a lista "REMOVENDO" antes de confirmar: se aparecer algo importante para você (o servidor web, o banco de dados), pare e investigue.</p>
+
+<hr>
+
+<h2>Passo 8: reiniciar e conferir</h2>
+<p>O kernel novo só passa a valer depois de reiniciar. Saia da gravação e reinicie:</p>
+
+<pre class="term" data-user="root" data-host="servidor">#> exit
+Script done.
+#> systemctl reboot</pre>
+
+<p>Depois que voltar:</p>
+
+<pre class="term" data-user="root" data-host="servidor">#> cat /etc/debian_version
+13.7
+#> uname -r
+6.12.111+deb13-amd64
+#> systemctl --failed
+  UNIT LOAD ACTIVE SUB DESCRIPTION
+
+0 loaded units listed.</pre>
+
+<hr>
+
+<h2>Passo 9: limpar a casa</h2>
+
+<pre class="term" data-user="root" data-host="servidor">#> apt autoremove                        « remove dependências que ninguém usa mais
+#> apt list '?narrow(?installed, ?not(?origin(Debian)))'
+Listando...
+linux-image-6.12.86+deb13-amd64/now 6.12.86-1 amd64 [instalado,local]   « restos da versão anterior
+#> apt purge '~c'                         « apaga configurações de pacotes já removidos
+#> apt modernize-sources                  « opcional: converte para o formato .sources</pre>
+
+<p>Por último, religue os repositórios de terceiros, um por um, trocando <code>bookworm</code> por <code>trixie</code>, e rode <code>apt update</code> depois de cada um.</p>
+
+<h3>O que muda do Debian 12 para o 13 (alguns exemplos)</h3>
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Item</th><th>Debian 12</th><th>Debian 13</th></tr>
+<tr><td>Kernel</td><td>6.1</td><td>6.12</td></tr>
+<tr><td>apt</td><td>2.6</td><td>3.0 (mensagens com <code>Erro:</code>/<code>Aviso:</code>, cores, <code>apt modernize-sources</code>)</td></tr>
+<tr><td><code>/tmp</code></td><td>No disco</td><td>Na memória (<code>tmpfs</code>): esvazia a cada reinicialização</td></tr>
+<tr><td>Verificação de assinaturas do apt</td><td>gpgv</td><td><code>sqv</code></td></tr>
+</table>
+</div>
+
+<hr>
+
+<h2>E do 13 para o 14 (forky)?</h2>
+<p>O processo será o mesmo, trocando <code>trixie</code> por <code>forky</code>. Mas só quando o Debian 14 for lançado e as Release Notes dele estiverem publicadas, com os problemas conhecidos daquela passagem. Até lá, <code>forky</code> é a <em>testing</em>: colocar <code>forky</code> no sources.list hoje transformaria seu Debian estável numa testing, que muda todo dia.</p>
+
+<div class="tip">
+<strong>Uma versão de cada vez</strong>
+<p>O Debian só garante a atualização entre versões vizinhas. Para ir do 11 para o 13, passe primeiro pelo 12: reinicie, confira, e só então siga para o 13.</p>
+</div>
+
+<hr>
+
+<h2>Quando não funciona</h2>
+
+<div class="cenario">
+<strong>A conexão SSH caiu no meio da atualização</strong>
+<p><strong>O que aconteceu:</strong> se você não estava no <code>tmux</code>, o apt pode ter sido interrompido no meio.</p>
+<p><strong>Como resolver:</strong> conecte de novo e rode, como root:</p>
+<pre class="term" data-user="root" data-host="servidor">#> dpkg --configure -a
+#> apt full-upgrade</pre>
+<p>O <code>dpkg --configure -a</code> termina de configurar o que ficou pela metade. Veja <a href="dpkg.html">dpkg e .deb</a>.</p>
+</div>
+
+<div class="cenario">
+<strong>"Os pacotes a seguir têm dependências desencontradas"</strong>
+<p><strong>O que aconteceu:</strong> quase sempre é um pacote de repositório de terceiros, ou do backports, que não tem versão para o Debian 13.</p>
+<p><strong>Como resolver:</strong> veja quais pacotes não vêm do Debian com <code>apt list '?narrow(?installed, ?not(?origin(Debian)))'</code>, remova ou atualize os culpados, e rode <code>apt full-upgrade</code> de novo.</p>
+</div>
+
+<div class="cenario">
+<strong>Não sobrou espaço em <code>/boot</code></strong>
+<p><strong>O que aconteceu:</strong> a partição <code>/boot</code> separada e pequena não comporta o kernel novo junto com os antigos.</p>
+<p><strong>Como resolver:</strong> antes do <code>full-upgrade</code>, remova kernels antigos que não estão em uso (<code>uname -r</code> mostra o atual) com <code>apt purge linux-image-VERSÃO</code>.</p>
+</div>
+
+<div class="cenario">
+<strong>Um serviço não subiu depois de reiniciar</strong>
+<p><strong>Como investigar:</strong> <code>systemctl --failed</code> mostra qual; <code>journalctl -u serviço -b</code> mostra o porquê. Se você manteve um arquivo de configuração antigo, compare com a versão nova que o pacote deixou ao lado, com o nome terminado em <code>.dpkg-dist</code>. Veja <a href="journalctl.html">Logs (journalctl)</a>.</p>
+</div>
+
+<hr>
+
+<h2>Referência</h2>
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Comando</th><th>Para quê</th></tr>
+<tr><td><code>cat /etc/debian_version</code></td><td>Versão exata (13.7)</td></tr>
+<tr><td><code>dpkg --audit</code></td><td>Lista pacotes quebrados ou não configurados</td></tr>
+<tr><td><code>apt-mark showhold</code></td><td>Pacotes segurados</td></tr>
+<tr><td><code>apt list '?narrow(?installed, ?not(?origin(Debian)))'</code></td><td>Pacotes que não vieram do Debian</td></tr>
+<tr><td><code>sed -i 's/bookworm/trixie/g' arquivo</code></td><td>Troca o codinome nos repositórios</td></tr>
+<tr><td><code>script -t 2&gt;~/x.time -a ~/x.script</code></td><td>Grava a sessão</td></tr>
+<tr><td><code>apt -o APT::Get::Trivial-Only=true full-upgrade</code></td><td>Mostra o espaço necessário sem mudar nada</td></tr>
+<tr><td><code>apt upgrade --without-new-pkgs</code></td><td>Atualização mínima</td></tr>
+<tr><td><code>apt full-upgrade</code></td><td>Atualização completa</td></tr>
+<tr><td><code>apt purge '~c'</code></td><td>Apaga configurações de pacotes removidos</td></tr>
+</table>
+</div>
+
+<hr>
+
+<h2>Exercícios</h2>
+
+<div class="exercise">
+<h3>1. Trocar o codinome</h3>
+<p>Complete o comando que troca <code>bookworm</code> por <code>trixie</code> no sources.list:</p>
+<div class="ex-code">sed -i '<input data-answer="s/bookworm/trixie/g" aria-label="expressão">' /etc/apt/sources.list</div>
+</div>
+
+<div class="exercise">
+<h3>2. A primeira etapa</h3>
+<p>Complete a atualização mínima, que não instala nem remove pacotes:</p>
+<div class="ex-code">apt upgrade <input data-answer="--without-new-pkgs" aria-label="opção"></div>
+</div>
+
+<div class="mc" data-answer="2">
+<p class="mc-q">3. Por que desligar os repositórios de terceiros antes de atualizar?</p>
+<label><input type="radio" name="q3"> Porque o apt não aceita mais de três repositórios.</label>
+<label><input type="radio" name="q3"> Porque pacotes de fora costumam não ter versão para o Debian novo e travam as dependências.</label>
+<label><input type="radio" name="q3"> Porque eles apagam o /etc durante a atualização.</label>
+<label><input type="radio" name="q3"> Porque o Debian proíbe repositórios de terceiros.</label>
+</div>
+
+<div class="mc" data-answer="4">
+<p class="mc-q">4. Você está no Debian 11. Qual é o caminho certo para chegar ao 13?</p>
+<label><input type="radio" name="q4"> Trocar <code>bullseye</code> direto por <code>trixie</code>.</label>
+<label><input type="radio" name="q4"> Trocar para <code>stable</code> e rodar <code>apt upgrade</code>.</label>
+<label><input type="radio" name="q4"> Instalar os pacotes do 13 com <code>dpkg -i</code>.</label>
+<label><input type="radio" name="q4"> Ir do 11 para o 12, reiniciar e conferir, e só depois do 12 para o 13.</label>
+</div>
+
+<hr>
+
+<h2>Resumo</h2>
+<ul>
+  <li>A receita oficial são as Release Notes da versão nova; leia antes.</li>
+  <li>Backup, Debian antigo em dia, <code>dpkg --audit</code> limpo, repositórios de fora desligados.</li>
+  <li>Troque o codinome (<code>bookworm</code> → <code>trixie</code>), nunca use <code>stable</code>.</li>
+  <li>Duas etapas: <code>apt upgrade --without-new-pkgs</code> e <code>apt full-upgrade</code>; reinicie e confira.</li>
+  <li>Limpe com <code>apt autoremove</code> e <code>apt purge '~c'</code>; religue os repositórios de fora já com <code>trixie</code>.</li>
+  <li>Do 13 para o 14 (<code>forky</code>), só depois do lançamento, e uma versão por vez.</li>
+</ul>
+
+<div class="pager"></div>
+
+</div>
+</main>
+</div>
+<script src="assets/site.js"></script>
+</body>
+</html>

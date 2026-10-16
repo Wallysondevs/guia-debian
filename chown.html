@@ -1,0 +1,329 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Debian chown, chgrp e umask — dono, grupo e permissões padrão | Guia Debian</title>
+<meta name="description" content="Aprenda chown, chgrp e umask no Debian 13: mudar dono e grupo como root (com su -), consertar arquivo que virou do root, pasta compartilhada com setgid e a umask 0002 dos usuários.">
+<link rel="stylesheet" href="assets/style.css">
+<script>try{var t=localStorage.getItem("tema");if(t)document.documentElement.setAttribute("data-theme",t)}catch(e){}</script>
+</head>
+<body>
+<div class="layout">
+<nav class="sidebar" id="sidebar" aria-label="Tópicos"></nav>
+<main class="main">
+<div class="content">
+
+<div class="pager"></div>
+
+<h1>Debian <span class="hl">chown, chgrp e umask</span></h1>
+
+<p class="intro">Todo arquivo tem um <strong>dono</strong> e um <strong>grupo</strong>. As permissões que você viu no <a href="chmod.html">chmod</a> dizem o que cada um pode fazer. O <code>chown</code> (<em>change owner</em>, "mudar dono") e o <code>chgrp</code> (<em>change group</em>, "mudar grupo") decidem <strong>quem</strong> são eles. O <code>umask</code> define as permissões que os arquivos novos já ganham ao nascer.</p>
+
+<div class="note">
+<strong>Você vai aprender</strong>
+<ul>
+  <li>A ver o dono e o grupo de um arquivo.</li>
+  <li>A usar o <code>chown</code> nas suas formas (só dono, dono e grupo, só grupo).</li>
+  <li>A consertar o caso mais comum: um arquivo seu que ficou "do root".</li>
+  <li>A montar uma pasta compartilhada e a entender o <code>umask</code> do Debian.</li>
+</ul>
+</div>
+
+<div class="tip">
+<strong>No Debian, "como root" quer dizer <code>su -</code></strong>
+<p>Mudar o dono de um arquivo exige ser root. Se você instalou o Debian definindo uma senha de root, o <code>sudo</code> nem vem instalado: você vira root com <code>su -</code>, digita a senha do root, faz o que precisa e volta com <code>exit</code>. Os exemplos desta página com prompt <code>root@notebook:~#</code> são feitos assim. Detalhes em <a href="root-su-sudo.html">root, su e sudo</a>.</p>
+</div>
+
+<hr>
+
+<h2>Ver o dono e o grupo</h2>
+<p>No <code>ls -l</code>, o dono é a 3ª coluna e o grupo é a 4ª:</p>
+
+<pre class="term">$ ls -l frutas.txt /etc/hostname /etc/shadow
+-rw-r--r-- 1 root root      9 out 15 20:29 /etc/hostname     « dono root, grupo root
+-rw-r----- 1 root shadow 1039 out 15 21:17 /etc/shadow       « dono root, grupo shadow
+-rw-rw-r-- 1 ana  ana      47 out 14 16:05 frutas.txt        « dono ana, grupo ana</pre>
+
+<dl class="anatomy">
+  <dt>-rw-rw-r--</dt><dd>Permissões: o que o dono, o grupo e os outros podem fazer.</dd>
+  <dt>ana</dt><dd>3ª coluna: o <strong>dono</strong>.</dd>
+  <dt>ana</dt><dd>4ª coluna: o <strong>grupo</strong>. No Debian, cada usuário tem um grupo com o próprio nome (o "grupo particular").</dd>
+</dl>
+
+<p>O comando <code>stat</code> mostra só o que você pedir: <code>stat -c "%U %G %n" frutas.txt</code> imprime <code>ana ana frutas.txt</code>, com dono (<code>%U</code>), grupo (<code>%G</code>) e nome (<code>%n</code>).</p>
+
+<div class="try" data-goal="ran:ls -l">
+<p class="try-task"><strong>Missão:</strong> use <code>ls -l</code> para descobrir o dono e o grupo de <code>/etc/hostname</code>, de <code>/etc/shadow</code> e da pasta <code>Documentos</code>. Qual deles tem um grupo diferente do dono?</p>
+</div>
+
+<hr>
+
+<h2>chown: mudar o dono</h2>
+<p>Só o root pode dar um arquivo para outra pessoa. Veja o que acontece se a ana tentar:</p>
+
+<pre class="term">$ chown root relatorio.txt
+chown: alterando o dono de 'relatorio.txt': Operação não permitida</pre>
+
+<p>Isso é uma proteção: se qualquer um pudesse "dar" arquivos aos outros, daria para esconder coisas na conta de outra pessoa. Então o primeiro passo é virar root:</p>
+
+<pre class="term">$ su -
+Senha:                                « a senha do ROOT; nada aparece enquanto digita</pre>
+
+<dl class="anatomy">
+  <dt>chown</dt><dd>O programa.</dd>
+  <dt>joao</dt><dd>O <strong>novo dono</strong>.</dd>
+  <dt>/srv/site/index.html</dt><dd>O arquivo.</dd>
+</dl>
+
+<pre class="term" data-user="root">#> chown -v joao /srv/site/index.html
+alterado o dono de '/srv/site/index.html' de root para joao</pre>
+
+<p>A opção <code>-v</code> (<em>verbose</em>) faz o chown contar o que fez, em português. Sem ela, ele fica quieto quando dá certo.</p>
+
+<h3>As formas do chown</h3>
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Forma</th><th>Muda</th><th>Exemplo</th></tr>
+<tr><td><code>chown dono arq</code></td><td>Só o dono</td><td><code>chown joao a.txt</code></td></tr>
+<tr><td><code>chown dono:grupo arq</code></td><td>Dono e grupo</td><td><code>chown joao:users a.txt</code></td></tr>
+<tr><td><code>chown dono: arq</code></td><td>Dono, e o grupo vira o grupo principal dele</td><td><code>chown joao: a.txt</code></td></tr>
+<tr><td><code>chown :grupo arq</code></td><td>Só o grupo (igual ao <code>chgrp</code>)</td><td><code>chown :users a.txt</code></td></tr>
+</table>
+</div>
+
+<pre class="term" data-user="root">#> chown -v joao:users /srv/site/index.html
+alterado o dono de '/srv/site/index.html' de joao:root para joao:users
+#> chown -v joao /srv/site/index.html
+dono de '/srv/site/index.html' mantido como joao                « nada mudou</pre>
+
+<hr>
+
+<h2>O caso clássico: "meu arquivo virou do root"</h2>
+<p>Acontece assim: a ana vira root para copiar algo, e a cópia nasce com dono root, mesmo dentro da pasta dela.</p>
+
+<ol class="passo">
+<li>
+<p>Como root, ela copia o <code>/etc/hosts</code> para a própria pasta:</p>
+<pre class="term" data-user="root">#> cp /etc/hosts /home/ana/hosts-copia
+#> ls -l /home/ana/hosts-copia
+-rw-r--r-- 1 root root 201 out 15 10:40 /home/ana/hosts-copia      « dono root!
+#> exit</pre>
+</li>
+<li>
+<p>De volta como ana, ela não consegue editar:</p>
+<pre class="term">$ echo "192.168.0.50 servidor" &gt;&gt; ~/hosts-copia
+bash: /home/ana/hosts-copia: Permissão negada</pre>
+<p>O arquivo está na pasta dela, mas pertence ao root, e só o dono tem o <code>w</code>.</p>
+</li>
+<li>
+<p>Ela devolve o arquivo para si mesma, como root:</p>
+<pre class="term" data-user="root">#> chown ana:ana /home/ana/hosts-copia
+#> ls -l /home/ana/hosts-copia
+-rw-r--r-- 1 ana ana 201 out 15 10:40 /home/ana/hosts-copia      « agora é dela</pre>
+</li>
+</ol>
+
+<div class="tip">
+<strong>Evite o problema</strong>
+<p>Vire root só para o que realmente precisa. Para <strong>ler</strong> um arquivo do sistema e guardar uma cópia sua, <code>cp /etc/hosts ~/</code> como ana já funciona, porque o arquivo pode ser lido por todos, e a cópia nasce sua.</p>
+</div>
+
+<hr>
+
+<h2>Pastas inteiras: <code>-R</code></h2>
+<p>Com <code>-R</code>, o chown muda a pasta e tudo o que está dentro. O exemplo típico é entregar os arquivos de um site ao usuário do servidor web, o <code>www-data</code>, que já existe no Debian:</p>
+
+<pre class="term" data-user="root">#> chown -R -v www-data:www-data /srv/site
+alterado o dono de '/srv/site/index.html' de joao:users para www-data:www-data
+alterado o dono de '/srv/site/img/a.png' de root:root para www-data:www-data
+alterado o dono de '/srv/site/img' de root:root para www-data:www-data
+alterado o dono de '/srv/site' de root:root para www-data:www-data</pre>
+
+<div class="warning">
+<strong>Cuidado com <code>chown -R</code> como root</strong>
+<p>Um caminho errado, como <code>chown -R ana /usr</code> ou um espaço a mais em <code>chown -R ana / home/ana</code>, muda o dono de arquivos do sistema e pode deixar o Debian sem funcionar (programas como o <code>su</code> precisam pertencer ao root). Confira o caminho antes de apertar <kbd>Enter</kbd>.</p>
+</div>
+
+<hr>
+
+<h2>chgrp: mudar só o grupo</h2>
+<p>O <code>chgrp</code> muda apenas o grupo. Diferente do chown, um usuário comum pode usá-lo <strong>sem ser root</strong>, desde que seja dono do arquivo e participe do grupo de destino. A ana participa do grupo <code>users</code>, mas não do <code>sudo</code>:</p>
+
+<pre class="term">$ chgrp users relatorio.txt
+$ ls -l relatorio.txt
+-rw-r--r-- 1 ana users 0 out 15 10:50 relatorio.txt     « funcionou
+$ chgrp sudo relatorio.txt
+chgrp: alterando o grupo de 'relatorio.txt': Operação não permitida
+$ chgrp -v users relatorio.txt
+grupo de 'relatorio.txt' mantido como users</pre>
+
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Para mudar só o grupo…</th><th>Observação</th></tr>
+<tr><td><code>chgrp equipe arq</code></td><td>O comando específico; o mais claro.</td></tr>
+<tr><td><code>chown :equipe arq</code></td><td>O mesmo efeito, com dois-pontos na frente.</td></tr>
+<tr><td><code>chgrp -R equipe pasta</code> (como root)</td><td>Para uma pasta inteira, ou grupos de que você não participa.</td></tr>
+</table>
+</div>
+
+<hr>
+
+<h2>Projeto: pasta compartilhada pela equipe</h2>
+<p>A ana e o joao precisam editar os mesmos arquivos. A receita junta grupos, chown e chmod, toda feita como root (depois de <code>su -</code>):</p>
+
+<ol class="passo">
+<li><p>Crie o grupo e coloque os dois nele (veja <a href="usuarios.html">Usuários e Grupos</a>):</p>
+<pre class="term" data-user="root">#> groupadd equipe
+#> usermod -aG equipe ana
+#> usermod -aG equipe joao</pre></li>
+<li><p>Crie a pasta e entregue-a ao grupo:</p>
+<pre class="term" data-user="root">#> mkdir /srv/equipe
+#> chown root:equipe /srv/equipe</pre></li>
+<li><p>Dê permissão total ao grupo e ligue o <strong>setgid</strong> (o <code>2</code> na frente). Assim, todo arquivo criado ali dentro herda o grupo <code>equipe</code>:</p>
+<pre class="term" data-user="root">#> chmod 2775 /srv/equipe
+#> ls -ld /srv/equipe
+drwxrwsr-x 2 root equipe 4096 out 15 11:00 /srv/equipe     « o "s" é o setgid</pre></li>
+<li><p>Depois de sair e entrar de novo na sessão (para o grupo valer), a ana testa:</p>
+<pre class="term">$ id
+uid=1000(ana) gid=1000(ana) grupos=1000(ana),24(cdrom),25(floppy),29(audio),30(dip),44(video),46(plugdev),100(users),101(netdev),1003(equipe)
+$ touch /srv/equipe/plano.txt
+$ ls -l /srv/equipe/plano.txt
+-rw-rw-r-- 1 ana equipe 0 out 15 11:05 /srv/equipe/plano.txt   « grupo equipe, com rw para o grupo</pre></li>
+</ol>
+
+<hr>
+
+<h2>umask: as permissões de quem acabou de nascer</h2>
+<p>Quando você cria um arquivo, ele já nasce com permissões. Quem decide quais é a <strong>umask</strong> (<em>user mask</em>, "máscara do usuário"). Ela não dá permissões: ela diz quais <strong>tirar</strong> do máximo.</p>
+
+<ul>
+  <li>O máximo para arquivos é <code>666</code> (<code>rw-rw-rw-</code>): arquivos nunca nascem executáveis.</li>
+  <li>O máximo para pastas é <code>777</code> (<code>rwxrwxrwx</code>).</li>
+  <li>A umask tira os bits dela desse máximo.</li>
+</ul>
+
+<pre class="term">$ umask
+0002                                   « o padrão do Debian para usuários comuns
+$ umask -S
+u=rwx,g=rwx,o=rx                       « o mesmo, em letras: o que fica permitido</pre>
+
+<pre class="term" data-user="root">#> umask
+0022                                   « o root usa uma máscara mais fechada</pre>
+
+<p>Por que a ana tem <code>0002</code> e o root <code>0022</code>? O Debian dá a cada usuário um grupo particular (só ele está no grupo <code>ana</code>), então deixar o grupo escrever não abre nada para ninguém, e facilita pastas compartilhadas com setgid.</p>
+
+<div class="table-wrap">
+<table class="ref">
+<tr><th>umask</th><th>Arquivo novo</th><th>Pasta nova</th><th>Quando usar</th></tr>
+<tr><td><code>002</code></td><td><code>664</code> rw-rw-r--</td><td><code>775</code> rwxrwxr-x</td><td>Padrão da usuária comum no Debian</td></tr>
+<tr><td><code>022</code></td><td><code>644</code> rw-r--r--</td><td><code>755</code> rwxr-xr-x</td><td>Padrão do root</td></tr>
+<tr><td><code>077</code></td><td><code>600</code> rw-------</td><td><code>700</code> rwx------</td><td>Máxima privacidade</td></tr>
+</table>
+</div>
+
+<pre class="term">$ umask 077
+$ touch secreto
+$ ls -l secreto
+-rw------- 1 ana ana 0 out 15 11:12 secreto       « nasceu privado</pre>
+
+<p>O <code>umask 077</code> vale só até fechar o terminal. Para deixar fixo, coloque a linha no fim do <code>~/.bashrc</code> (veja <a href="bashrc.html">.bashrc, alias, PATH</a>).</p>
+
+<hr>
+
+<h2>Quando não funciona</h2>
+
+<div class="cenario">
+<strong>"Operação não permitida" no chown</strong>
+<pre class="term">$ chown joao relatorio.txt
+chown: alterando o dono de 'relatorio.txt': Operação não permitida</pre>
+<p><strong>O que aconteceu:</strong> usuários comuns não podem dar arquivos a outra pessoa, nem os próprios.</p>
+<p><strong>Como resolver:</strong> faça como root: <code>su -</code> e depois <code>chown joao /caminho/completo/relatorio.txt</code>. Lembre que, depois do <code>su -</code>, você está em <code>/root</code>: use o caminho completo.</p>
+</div>
+
+<div class="cenario">
+<strong>"invalid user" ou "invalid group"</strong>
+<pre class="term" data-user="root">#> chown jaoo /srv/site
+chown: invalid user: ‘jaoo’
+#> chown joao:equpe /srv/site
+chown: invalid group: ‘joao:equpe’</pre>
+<p><strong>O que aconteceu:</strong> o usuário ou o grupo não existe; quase sempre é erro de digitação. Repare que essa mensagem fica em inglês, mesmo com o Debian em português.</p>
+<p><strong>Como resolver:</strong> confira com <code>getent passwd joao</code> e <code>getent group equipe</code>.</p>
+</div>
+
+<div class="cenario">
+<strong>Entrei no grupo, mas o acesso continua negado</strong>
+<pre class="term">$ touch /srv/equipe/plano.txt
+touch: não foi possível tocar '/srv/equipe/plano.txt': Permissão negada
+$ id
+uid=1000(ana) gid=1000(ana) grupos=1000(ana),24(cdrom),25(floppy),29(audio),30(dip),44(video),46(plugdev),100(users),101(netdev)   « sem "equipe"</pre>
+<p><strong>O que aconteceu:</strong> o grupo novo só vale nas sessões abertas <strong>depois</strong> do <code>usermod</code>. O terminal antigo ainda usa a lista de grupos velha.</p>
+<p><strong>Como resolver:</strong> saia e entre de novo na sessão (ou reconecte o SSH). Para testar na hora, <code>newgrp equipe</code> abre um shell já com o grupo.</p>
+</div>
+
+<hr>
+
+<h2>Referência</h2>
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Comando</th><th>O que faz</th></tr>
+<tr><td><code>chown joao arq</code></td><td>Muda o dono (como root)</td></tr>
+<tr><td><code>chown joao:equipe arq</code></td><td>Muda dono e grupo</td></tr>
+<tr><td><code>chown -R www-data: pasta</code></td><td>Pasta inteira; grupo principal do novo dono</td></tr>
+<tr><td><code>chown -v</code> / <code>-c</code></td><td>Mostra cada mudança / só as mudanças reais</td></tr>
+<tr><td><code>chown --reference=a b</code></td><td>Copia dono e grupo de outro arquivo</td></tr>
+<tr><td><code>chgrp equipe arq</code></td><td>Muda só o grupo (dono do arquivo e membro do grupo)</td></tr>
+<tr><td><code>umask</code> / <code>umask -S</code></td><td>Mostra a máscara em número / em letras</td></tr>
+<tr><td><code>umask 077</code></td><td>Arquivos novos só para você</td></tr>
+</table>
+</div>
+
+<hr>
+
+<h2>Exercícios</h2>
+
+<div class="exercise">
+<h3>1. Dono e grupo de uma vez</h3>
+<p>Como root, entregue <code>index.html</code> ao usuário e ao grupo <code>www-data</code>:</p>
+<div class="ex-code">chown <input data-answer="www-data:www-data|www-data:|www-data.www-data" aria-label="dono:grupo"> index.html</div>
+</div>
+
+<div class="exercise">
+<h3>2. Pasta inteira</h3>
+<p>Complete para mudar o dono de <code>/srv/site</code> e de tudo dentro dela:</p>
+<div class="ex-code">chown <input data-answer="-R" aria-label="opção"> joao /srv/site</div>
+</div>
+
+<div class="exercise">
+<h3>3. A conta da umask</h3>
+<p>Com <code>umask 0022</code>, com quais permissões (octal) nasce um arquivo novo?</p>
+<div class="ex-code"><input data-answer="644|0644" aria-label="octal"></div>
+</div>
+
+<div class="mc" data-answer="1">
+<p class="mc-q">4. A ana (fora do grupo <code>sudo</code>) roda <code>chgrp sudo nota.txt</code> num arquivo dela. O que acontece?</p>
+<label><input type="radio" name="q4"> <code>chgrp: alterando o grupo de 'nota.txt': Operação não permitida</code></label>
+<label><input type="radio" name="q4"> Funciona, porque ela é a dona do arquivo.</label>
+<label><input type="radio" name="q4"> <code>bash: chgrp: comando não encontrado</code></label>
+<label><input type="radio" name="q4"> O arquivo passa a pertencer ao root.</label>
+</div>
+
+<hr>
+
+<h2>Resumo</h2>
+<ul>
+  <li>Dono é a 3ª coluna do <code>ls -l</code>; grupo, a 4ª.</li>
+  <li><code>chown</code> muda o dono e só funciona como root; no Debian, vire root com <code>su -</code>.</li>
+  <li><code>chgrp</code> muda só o grupo; a dona pode usá-lo para grupos de que participa.</li>
+  <li>Arquivo que "virou do root"? <code>chown ana:ana arquivo</code>, como root.</li>
+  <li>A umask decide as permissões de nascimento: <code>0002</code> para usuários, <code>0022</code> para o root.</li>
+</ul>
+
+<div class="pager"></div>
+
+</div>
+</main>
+</div>
+<script src="assets/site.js"></script>
+</body>
+</html>

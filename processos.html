@@ -1,0 +1,346 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Debian ps, pgrep, top — ver e achar processos | Guia Debian</title>
+<meta name="description" content="Aprenda a ver os processos do Debian com ps, ps aux, pgrep e top: cada coluna explicada, por que pgrep não acha o Firefox pelo nome que você espera e o limite de 15 caracteres.">
+<link rel="stylesheet" href="assets/style.css">
+<script>try{var t=localStorage.getItem("tema");if(t)document.documentElement.setAttribute("data-theme",t)}catch(e){}</script>
+</head>
+<body>
+<div class="layout">
+<nav class="sidebar" id="sidebar" aria-label="Tópicos"></nav>
+<main class="main">
+<div class="content">
+
+<div class="pager"></div>
+
+<h1>Debian <span class="hl">ps, pgrep, top</span></h1>
+
+<p class="intro">Todo programa aberto no seu Debian vira um ou mais <strong>processos</strong>. Nesta aula você vai listar esses processos, encontrar um pelo nome e entender os casos em que o terminal "não acha nada", mesmo com o programa aberto na sua frente.</p>
+
+<div class="note">
+<strong>Você vai aprender</strong>
+<ul>
+  <li>O que é um processo e o que é um PID.</li>
+  <li>Por que <code>ps</code> sozinho mostra só dois processos.</li>
+  <li>Como ler cada coluna do <code>ps aux</code>.</li>
+  <li>Por que as abas do Firefox se chamam <code>Isolated Web Co</code>, e como achar um processo pelo nome certo.</li>
+  <li>Como acompanhar tudo ao vivo com <code>top</code>.</li>
+</ul>
+</div>
+
+<hr>
+
+<h2>O que é um processo</h2>
+<p>Um <strong>programa</strong> é um arquivo parado no disco, como <code>/usr/lib/firefox-esr/firefox-esr</code>. Quando você o abre, o sistema carrega esse arquivo na memória e começa a executá-lo. Essa execução é um <strong>processo</strong>.</p>
+<ul>
+  <li>Cada processo recebe um número único, o <strong>PID</strong> (<em>process ID</em>, "identificador do processo").</li>
+  <li>Cada processo tem um <strong>dono</strong>: o usuário que o iniciou.</li>
+  <li>Um programa pode virar <strong>vários</strong> processos. O Firefox cria um processo principal e outros para as abas.</li>
+  <li>Cada processo tem um <strong>nome curto</strong> (no máximo 15 caracteres), que nem sempre é o nome que aparece no menu de aplicativos.</li>
+</ul>
+<p>Nos exemplos, a máquina fictícia <strong>notebook</strong> é um Debian 13 com GNOME e está com o Firefox ESR, o Arquivos (Nautilus) e o Editor de Texto abertos.</p>
+
+<div class="note">
+<strong>Firefox ESR</strong>
+<p>O Debian instala o <strong>Firefox ESR</strong> (<em>Extended Support Release</em>, a versão de suporte estendido). Por isso o programa e o processo se chamam <code>firefox-esr</code>, e não <code>firefox</code>.</p>
+</div>
+
+<hr>
+
+<h2>ps: a foto dos processos</h2>
+<p><code>ps</code> vem de <em>process status</em>, "situação dos processos". Ele tira uma <strong>foto</strong> do momento: mostra a lista e termina.</p>
+
+<dl class="anatomy">
+  <dt>ps</dt><dd>O programa, sem nenhuma opção.</dd>
+</dl>
+
+<pre class="term">$ ps
+    PID TTY          TIME CMD
+   3001 pts/0    00:00:00 bash          « o shell deste terminal
+   3100 pts/0    00:00:00 ps            « o próprio ps</pre>
+
+<h3>Por que só aparecem dois processos?</h3>
+<p>O Firefox está aberto, mas não apareceu. Isso não é erro: <strong><code>ps</code> sem opções mostra só os processos do terminal em que você está</strong>. Neste terminal só existem o <code>bash</code> (o programa que lê o que você digita) e o próprio <code>ps</code>.</p>
+
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Coluna</th><th>Exemplo</th><th>Significado</th></tr>
+<tr><td><code>PID</code></td><td><code>3001</code></td><td>O número do processo.</td></tr>
+<tr><td><code>TTY</code></td><td><code>pts/0</code></td><td>O terminal ao qual o processo pertence. <code>pts/0</code> é a primeira janela de terminal; outra seria <code>pts/1</code>.</td></tr>
+<tr><td><code>TIME</code></td><td><code>00:00:00</code></td><td>Tempo de processador já usado (não é há quanto tempo está aberto).</td></tr>
+<tr><td><code>CMD</code></td><td><code>bash</code></td><td>O nome do processo.</td></tr>
+</table>
+</div>
+
+<div class="try" data-goal="ran:^\s*ps\s*$,ran:ps +aux">
+<p class="try-task"><strong>Missão:</strong> rode <code>ps</code> e confira que só aparecem o <code>bash</code> e o próprio <code>ps</code>. Depois rode <code>ps aux</code> e compare.</p>
+</div>
+
+<hr>
+
+<h2>ps aux: todos os processos</h2>
+<p>Para ver tudo, de todos os usuários, use três opções juntas. Elas vêm da tradição BSD e, por isso, são escritas <strong>sem hífen</strong>:</p>
+
+<dl class="anatomy">
+  <dt>ps</dt><dd>O programa.</dd>
+  <dt>a</dt><dd>Processos de <strong>todos</strong> os usuários (<em>all</em>).</dd>
+  <dt>u</dt><dd>Formato orientado ao <strong>usuário</strong>: mostra dono, CPU e memória.</dd>
+  <dt>x</dt><dd>Inclui processos <strong>sem terminal</strong> (programas gráficos e serviços).</dd>
+</dl>
+
+<pre class="term">$ ps aux
+USER         PID %CPU %MEM    VSZ   RSS TTY      STAT START   TIME COMMAND
+root           1  0.0  0.1  23200  5600 ?        Ssl  08:00   0:00 /sbin/init
+root         640  0.0  0.2  28400  7200 ?        Ssl  08:00   0:00 /usr/sbin/NetworkManager --no-daemon
+ana         1534  3.1  4.2 236400 71200 ?        Ssl  08:00   0:09 /usr/bin/gnome-shell
+ana         2210  5.4  6.8 371600 112800 ?        Ssl  08:00   0:16 /usr/lib/firefox-esr/firefox-esr   « o Firefox
+ana         2251  2.0  3.9 220800 66400 ?        Ssl  08:00   0:06 /usr/lib/firefox-esr/firefox-esr -contentproc -isForBrowser 4 tab   « uma aba
+ana         2304  0.1  1.5  96000 28000 ?        Ssl  08:00   0:00 /usr/bin/nautilus --gapplication-service
+ana         2388  0.0  1.1  75200 21600 ?        Ssl  08:00   0:00 /usr/bin/gnome-text-editor
+ana         2950  0.3  0.9  64800 18400 ?        Ssl  08:00   0:01 /usr/libexec/gnome-terminal-server
+ana         3001  0.0  0.1  23200  5600 pts/0    Ss   08:00   0:00 bash
+ana         3101  0.0  0.0  18000  4000 pts/0    R+   08:00   0:00 ps aux</pre>
+
+<p>Num Debian real a lista tem mais de 100 linhas, incluindo processos do kernel entre colchetes, como <code>[kthreadd]</code>. Aqui ela foi encurtada.</p>
+
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Coluna</th><th>Significado</th></tr>
+<tr><td><code>USER</code></td><td>Dono do processo.</td></tr>
+<tr><td><code>PID</code></td><td>Número do processo.</td></tr>
+<tr><td><code>%CPU</code></td><td>Uso do processador, em porcentagem.</td></tr>
+<tr><td><code>%MEM</code></td><td>Uso da memória RAM, em porcentagem.</td></tr>
+<tr><td><code>VSZ</code></td><td>Memória virtual reservada, em KiB (costuma ser bem maior que o uso real).</td></tr>
+<tr><td><code>RSS</code></td><td>Memória realmente ocupada na RAM, em KiB. Quando o número é grande, ele "empurra" as colunas seguintes, como no Firefox acima.</td></tr>
+<tr><td><code>TTY</code></td><td>Terminal; <code>?</code> quando não tem terminal.</td></tr>
+<tr><td><code>STAT</code></td><td>Estado: <code>R</code> rodando, <code>S</code> dormindo (esperando algo), <code>D</code> esperando o disco, <code>Z</code> zumbi, <code>T</code> parado. Letras extras: <code>s</code> líder de sessão, <code>l</code> várias threads, <code>+</code> em primeiro plano.</td></tr>
+<tr><td><code>START</code></td><td>Hora em que começou.</td></tr>
+<tr><td><code>TIME</code></td><td>Tempo de processador usado.</td></tr>
+<tr><td><code>COMMAND</code></td><td>A linha de comando completa.</td></tr>
+</table>
+</div>
+
+<h3>Formas diferentes de ver todos os processos</h3>
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Comando</th><th>Mostra</th><th>Quando usar</th></tr>
+<tr><td><code>ps aux</code></td><td>Todos, com CPU e memória</td><td>O mais usado no dia a dia.</td></tr>
+<tr><td><code>ps -ef</code></td><td>Todos, com o processo pai (PPID)</td><td>Para ver quem abriu quem.</td></tr>
+<tr><td><code>ps aux --sort=-%mem | head</code></td><td>Os que mais gastam memória</td><td>Computador lento.</td></tr>
+<tr><td><code>top</code></td><td>Lista ao vivo</td><td>Acompanhar o que muda.</td></tr>
+</table>
+</div>
+
+<hr>
+
+<h2>pgrep: achar um processo pelo nome</h2>
+<p><code>pgrep</code> junta <em>process</em> e <em>grep</em> (procurar). Ele procura pelo <strong>nome curto</strong> do processo e devolve os PIDs.</p>
+
+<dl class="anatomy">
+  <dt>pgrep</dt><dd>O programa.</dd>
+  <dt>-l</dt><dd>Mostra o nome junto do PID (<em>list name</em>).</dd>
+  <dt>firefox</dt><dd>O texto a procurar. Basta ser <strong>parte</strong> do nome.</dd>
+</dl>
+
+<pre class="term">$ pgrep firefox
+2210
+$ pgrep -l firefox
+2210 firefox-esr</pre>
+
+<p>Como <code>firefox</code> é parte de <code>firefox-esr</code>, ele achou o processo principal. Mas cadê a aba (PID 2251)?</p>
+
+<h3>O nome curto de 15 caracteres</h3>
+<p>O nome curto de um processo (chamado <code>comm</code>) tem no máximo 15 caracteres. As abas do Firefox se dão o nome "Isolated Web Content", que é cortado para <code>Isolated Web Co</code>:</p>
+
+<pre class="term">$ pgrep -l Isolated
+2251 Isolated Web Co</pre>
+
+<p>O mesmo acontece com o terminal do GNOME: o programa é <code>gnome-terminal-server</code>, mas o processo se chama <code>gnome-terminal-</code>. Se você pesquisar o nome inteiro, o <code>pgrep</code> do Debian avisa:</p>
+
+<pre class="term">$ pgrep -l gnome-terminal-server
+pgrep: o padrão que pesquisa por nomes de processo maiores que 15 caracteres vai resultar em zero correspondências
+Tente a opção "pgrep -f" para corresponder com a linha de comando completa.
+$ pgrep -l gnome-terminal
+2950 gnome-terminal-</pre>
+
+<h3>-f: procurar na linha de comando inteira</h3>
+<p>A opção <code>-f</code> (de <em>full</em>, "completa") procura na linha de comando inteira, e não só no nome curto. Como as abas foram iniciadas a partir de <code>/usr/lib/firefox-esr/firefox-esr</code>, elas aparecem:</p>
+
+<dl class="anatomy">
+  <dt>pgrep</dt><dd>O programa.</dd>
+  <dt>-a</dt><dd>Mostra a linha de comando completa (<em>all</em>).</dd>
+  <dt>-f</dt><dd>Procura na linha de comando, não só no nome curto.</dd>
+  <dt>firefox</dt><dd>O texto a procurar.</dd>
+</dl>
+
+<pre class="term">$ pgrep -af firefox
+2210 /usr/lib/firefox-esr/firefox-esr
+2251 /usr/lib/firefox-esr/firefox-esr -contentproc -isForBrowser 4 tab</pre>
+
+<h3>O que o pgrep devolve quando não acha nada</h3>
+<p>Quando não encontra nada, o <code>pgrep</code> <strong>não mostra mensagem nenhuma</strong>. Ele só devolve o código de saída 1. Isso confunde quem está começando:</p>
+
+<pre class="term">$ pgrep chromium
+$ echo $?
+1                                « 1 = nada encontrado
+$ pgrep firefox
+2210
+$ echo $?
+0                                « 0 = achou</pre>
+
+<p>Esse código é útil em scripts: <code>pgrep firefox-esr &gt; /dev/null || echo "O Firefox está fechado"</code>.</p>
+
+<div class="try" data-goal="ran:pgrep +-[a-z]*f,ran:echo +\$\?">
+<p class="try-task"><strong>Missão:</strong> descubra o PID das abas do Firefox. Tente primeiro <code>pgrep -l firefox</code>, depois <code>pgrep -af firefox</code>, e compare. Confira o código de saída com <code>echo $?</code> depois de um <code>pgrep</code> que não acha nada.</p>
+</div>
+
+<hr>
+
+<h2>Descobrir o nome real de um processo</h2>
+<p>Quando você não sabe como o processo se chama, procure na lista completa com <a href="grep.html">grep</a>:</p>
+
+<pre class="term">$ ps aux | grep firefox
+ana         2210  5.4  6.8 371600 112800 ?        Ssl  08:00   0:16 /usr/lib/firefox-esr/firefox-esr
+ana         2251  2.0  3.9 220800 66400 ?        Ssl  08:00   0:06 /usr/lib/firefox-esr/firefox-esr -contentproc -isForBrowser 4 tab
+ana         3103  0.0  0.0  18000  4000 pts/0    S+   08:00   0:00 grep firefox      « o próprio grep</pre>
+
+<p>A última linha é o próprio <code>grep</code>: ele também é um processo e contém a palavra que você procurou. Ignore-a, ou use <code>pgrep -af</code>, que não se lista.</p>
+
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Forma</th><th>Exemplo</th><th>Quando usar</th></tr>
+<tr><td><code>pgrep -l</code></td><td><code>pgrep -l firefox</code></td><td>Você sabe parte do nome curto.</td></tr>
+<tr><td><code>pgrep -af</code></td><td><code>pgrep -af firefox</code></td><td>Você sabe só o caminho ou o comando.</td></tr>
+<tr><td><code>pgrep -i</code></td><td><code>pgrep -il FIREFOX</code></td><td>Não sabe se é maiúscula ou minúscula.</td></tr>
+<tr><td><code>pidof</code></td><td><code>pidof firefox-esr</code></td><td>Você sabe o nome exato do programa.</td></tr>
+<tr><td><code>ps aux | grep</code></td><td><code>ps aux | grep -i fire</code></td><td>Quer ver dono, CPU e memória junto.</td></tr>
+</table>
+</div>
+
+<hr>
+
+<h2>top: os processos ao vivo</h2>
+<p>O <code>top</code> mostra a lista atualizada a cada 3 segundos, com os que mais gastam processador no alto. No Debian, os cabeçalhos aparecem em português:</p>
+
+<pre class="term">$ top
+top - 10:30:00 up 2:31,  1 user,  load average: 0,42, 0,38, 0,35
+Tarefas: 228 total,   1 em exec., 227 dormindo,   0 parado,   0 zumbi
+%CPU(s):  5,3 us,  1,2 sy,  0,0 ni, 93,1 id,  0,3 wa,  0,0 hi,  0,1 si,  0,0 st
+MB mem :  15829,3 total,   9874,1 free,   3802,4 used,   2412,8 buff/cache
+MB swap:   1359,0 total,   1359,0 free,      0,0 used.  12026,9 avail mem
+
+    PID USUARIO   PR  NI    VIRT    RES    SHR S  %CPU  %MEM    TEMPO+ COMANDO
+   2210 ana       20   0 3716000 112800  86200 S   5,4   6,8   0:16.41 firefox-esr
+   1534 ana       20   0 2364000  71200  52100 S   3,1   4,2   0:09.10 gnome-shell</pre>
+
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Tecla (dentro do top)</th><th>O que faz</th></tr>
+<tr><td><kbd>M</kbd></td><td>Ordena por memória</td></tr>
+<tr><td><kbd>P</kbd></td><td>Ordena por processador (padrão)</td></tr>
+<tr><td><kbd>k</kbd></td><td>Pede um PID para encerrar (<em>kill</em>)</td></tr>
+<tr><td><kbd>1</kbd></td><td>Mostra cada núcleo do processador</td></tr>
+<tr><td><kbd>q</kbd></td><td>Sai do top</td></tr>
+</table>
+</div>
+
+<p>O <code>htop</code> é uma versão mais amigável, com cores e mouse. Ele não vem instalado; como root: <code>apt install htop</code> (veja <a href="apt.html">apt</a>).</p>
+
+<hr>
+
+<h2>Quando não funciona</h2>
+
+<div class="cenario">
+<strong>O programa está aberto, mas o pgrep não mostra nada</strong>
+<p><strong>O que aconteceu:</strong> o nome curto do processo é diferente do nome que você conhece (as abas do Firefox se chamam <code>Isolated Web Co</code>, e o terminal do GNOME é <code>gnome-terminal-</code>, e não <code>terminal</code>), ou você usou maiúsculas.</p>
+<p><strong>Como resolver:</strong> procure por um pedaço com <code>pgrep -ail pedaço</code>, ou na linha inteira com <code>pgrep -af pedaço</code>.</p>
+</div>
+
+<div class="cenario">
+<strong>"…maiores que 15 caracteres vai resultar em zero correspondências"</strong>
+<p><strong>O que aconteceu:</strong> o nome que você pesquisou é maior que o nome curto, que tem no máximo 15 caracteres.</p>
+<p><strong>Como resolver:</strong> pesquise só o começo (<code>pgrep gnome-terminal</code>) ou use <code>-f</code>.</p>
+</div>
+
+<div class="cenario">
+<strong>"bash: htop: comando não encontrado"</strong>
+<p><strong>O que aconteceu:</strong> o htop não vem no Debian, e o Debian não sugere pacotes quando um comando não existe.</p>
+<p><strong>Como resolver:</strong> use <code>top</code>, que já vem, ou instale com <code>su -</code> e <code>apt install htop</code>.</p>
+</div>
+
+<hr>
+
+<h2>Referência de opções</h2>
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Comando</th><th>Descrição</th></tr>
+<tr><td><code>ps</code></td><td>Processos deste terminal</td></tr>
+<tr><td><code>ps aux</code></td><td>Todos os processos, com dono, CPU e memória</td></tr>
+<tr><td><code>ps -ef</code></td><td>Todos, com o PID do pai (PPID)</td></tr>
+<tr><td><code>ps aux --sort=-%cpu</code></td><td>Ordenado por CPU, do maior para o menor</td></tr>
+<tr><td><code>ps -u ana</code></td><td>Só os processos de um usuário</td></tr>
+<tr><td><code>pgrep nome</code></td><td>PIDs cujo nome curto contém "nome"</td></tr>
+<tr><td><code>pgrep -l</code> / <code>-a</code></td><td>Mostra o nome curto / a linha completa</td></tr>
+<tr><td><code>pgrep -f</code></td><td>Procura na linha de comando inteira</td></tr>
+<tr><td><code>pgrep -i</code></td><td>Ignora maiúsculas e minúsculas</td></tr>
+<tr><td><code>pgrep -c</code></td><td>Só conta quantos achou</td></tr>
+<tr><td><code>pgrep -u ana</code></td><td>Só de um usuário</td></tr>
+<tr><td><code>pidof programa</code></td><td>PIDs de um programa pelo nome exato</td></tr>
+<tr><td><code>top</code></td><td>Lista ao vivo (sai com <kbd>q</kbd>)</td></tr>
+</table>
+</div>
+
+<hr>
+
+<h2>Exercícios</h2>
+
+<div class="exercise">
+<h3>1. Todos os processos</h3>
+<p>Complete para listar os processos de todos os usuários, com CPU e memória:</p>
+<div class="ex-code">ps <input data-answer="aux|axu" aria-label="opções"></div>
+</div>
+
+<div class="exercise">
+<h3>2. Procurar na linha inteira</h3>
+<p>Complete para achar as abas do Firefox procurando na linha de comando completa:</p>
+<div class="ex-code">pgrep -a<input data-answer="f" aria-label="opção"> firefox</div>
+</div>
+
+<div class="mc" data-answer="2">
+<p class="mc-q">3. Você roda <code>pgrep chromium</code> e não aparece nada. O que o comando devolveu?</p>
+<label><input type="radio" name="q3"> Uma mensagem de erro.</label>
+<label><input type="radio" name="q3"> Nada na tela e o código de saída 1.</label>
+<label><input type="radio" name="q3"> O código de saída 0.</label>
+<label><input type="radio" name="q3"> A lista de todos os processos.</label>
+</div>
+
+<div class="mc" data-answer="4">
+<p class="mc-q">4. Por que as abas do Firefox aparecem como <code>Isolated Web Co</code>?</p>
+<label><input type="radio" name="q4"> É um vírus.</label>
+<label><input type="radio" name="q4"> O Debian renomeia processos do Firefox.</label>
+<label><input type="radio" name="q4"> É o nome do pacote.</label>
+<label><input type="radio" name="q4"> O nome curto é cortado em 15 caracteres ("Isolated Web Content").</label>
+</div>
+
+<hr>
+
+<h2>Resumo</h2>
+<ul>
+  <li><code>ps</code> sozinho mostra só o seu terminal; <code>ps aux</code> mostra tudo.</li>
+  <li><code>pgrep</code> procura no nome curto (até 15 caracteres); <code>pgrep -af</code>, na linha inteira.</li>
+  <li>No Debian, o Firefox é <code>firefox-esr</code> e as abas são <code>Isolated Web Co</code>.</li>
+  <li>Sem resultado, o <code>pgrep</code> fica calado e devolve 1. Confira com <code>echo $?</code>.</li>
+  <li><code>top</code> mostra tudo ao vivo; saia com <kbd>q</kbd>.</li>
+</ul>
+
+<div class="pager"></div>
+
+</div>
+</main>
+</div>
+<script src="assets/site.js"></script>
+</body>
+</html>

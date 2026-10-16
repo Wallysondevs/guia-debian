@@ -1,0 +1,213 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Debian Projetos — como usar os laboratórios | Guia Debian</title>
+<meta name="description" content="Como fazer os projetos do Guia Debian: montar uma VM Debian 13 no VirtualBox com a ISO netinst, usar snapshots antes de cada laboratório e seguir a ordem sugerida.">
+<link rel="stylesheet" href="assets/style.css">
+<script>try{var t=localStorage.getItem("tema");if(t)document.documentElement.setAttribute("data-theme",t)}catch(e){}</script>
+</head>
+<body>
+<div class="layout">
+<nav class="sidebar" id="sidebar" aria-label="Tópicos"></nav>
+<main class="main">
+<div class="content">
+
+<div class="pager"></div>
+
+<h1>Debian <span class="hl">Como Usar os Projetos</span></h1>
+
+<p class="intro">As aulas ensinam cada comando separado. Nos projetos você junta tudo para construir algo que funciona de verdade: um servidor web, um backup que se testa sozinho, um servidor de arquivos. E, no projeto "Quebre e Conserte", você estraga o sistema de propósito para aprender a salvá-lo.</p>
+
+<div class="note">
+<strong>Você vai aprender</strong>
+<ul>
+  <li>Por que os projetos rodam numa máquina virtual, e nunca no seu computador principal.</li>
+  <li>Como instalar um Debian 13 de laboratório no VirtualBox com a ISO <code>netinst</code>.</li>
+  <li>Como tirar um <strong>snapshot</strong> antes de cada projeto e voltar no tempo quando algo der errado.</li>
+  <li>Em que ordem fazer os projetos.</li>
+</ul>
+</div>
+
+<hr>
+
+<h2>A regra de ouro: sempre numa máquina virtual</h2>
+<p>Uma <strong>máquina virtual</strong> (VM) é um computador de mentira que roda dentro do seu. Ela tem disco, memória e rede próprios. Se você apagar a pasta errada ou travar o boot dentro dela, o seu computador de verdade nem percebe.</p>
+
+<div class="warning">
+<strong>Nunca faça os projetos na sua máquina principal</strong>
+<p>Vários passos mexem em firewall, em serviços, no <code>/etc/fstab</code> e na senha do root. Num laboratório isso é aprendizado. No seu notebook de trabalho, pode ser uma tarde perdida.</p>
+</div>
+
+<p>Os projetos foram escritos para uma VM chamada <strong>lab</strong>, com a usuária <strong>ana</strong>. Nas sessões de terminal você verá o prompt <code>ana@lab</code> para a usuária comum e <code>root@lab</code> para o administrador.</p>
+
+<hr>
+
+<h2>Montar a VM de laboratório</h2>
+<p>Você precisa de três coisas: o <strong>VirtualBox</strong> (gratuito, para Linux, Windows e macOS), a <strong>ISO netinst</strong> do Debian 13 (cerca de 800 MB, baixada em <code>debian.org</code>) e uns 25 GB livres no disco.</p>
+
+<ol class="passo">
+<li>
+<h3>Criar a VM</h3>
+<p>No VirtualBox, clique em <strong>Novo</strong>. Dê o nome <code>lab</code>, escolha a ISO <code>debian-13.x.x-amd64-netinst.iso</code> e marque <strong>Pular instalação desassistida</strong> (assim você vê o instalador do Debian de verdade). Reserve 2 GB de memória, 2 processadores e um disco de 20 GB.</p>
+</li>
+<li>
+<h3>Instalar o Debian</h3>
+<p>Escolha <strong>Install</strong> (modo texto) ou <strong>Graphical install</strong>. As respostas recomendadas para o laboratório:</p>
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Pergunta do instalador</th><th>Resposta no laboratório</th><th>Por quê</th></tr>
+<tr><td>Idioma / país / teclado</td><td>Português do Brasil / Brasil / Português Brasileiro</td><td>Mensagens em pt-BR, iguais às do guia.</td></tr>
+<tr><td>Nome da máquina</td><td><code>lab</code></td><td>Aparece no prompt: <code>ana@lab</code>.</td></tr>
+<tr><td>Senha do root</td><td>Defina uma senha</td><td>É o jeito clássico do Debian: o root tem senha e você usa <code>su -</code>. O projeto do servidor web mostra como instalar o <code>sudo</code>.</td></tr>
+<tr><td>Usuário comum</td><td><code>ana</code></td><td>Igual aos exemplos.</td></tr>
+<tr><td>Particionamento</td><td>Assistido, disco inteiro, tudo numa partição</td><td>O mais simples para começar.</td></tr>
+<tr><td>Seleção de software (tasksel)</td><td>Desmarque o ambiente de área de trabalho; marque <strong>servidor SSH</strong> e <strong>utilitários de sistema padrão</strong></td><td>Os projetos são de servidor. Sem interface gráfica a VM fica leve.</td></tr>
+</table>
+</div>
+</li>
+<li>
+<h3>Liberar o SSH para o seu computador</h3>
+<p>Com a VM <strong>desligada</strong>, configure um redirecionamento de porta na placa de rede NAT: porta 2222 do seu computador para a porta 22 da VM. No terminal do seu computador (não da VM):</p>
+<pre class="term" data-host="notebook">$ VBoxManage modifyvm lab --natpf1 "ssh,tcp,127.0.0.1,2222,,22"
+$ VBoxManage startvm lab --type headless
+Waiting for VM "lab" to power on...
+VM "lab" has been successfully started.
+$ ssh -p 2222 ana@127.0.0.1</pre>
+<p>Assim você trabalha pelo seu terminal, com copiar e colar funcionando. Veja <a href="ssh.html">SSH</a>.</p>
+</li>
+</ol>
+
+<hr>
+
+<h2>Snapshot: o botão de "voltar no tempo"</h2>
+<p>Um <strong>snapshot</strong> (fotografia) guarda o estado exato da VM: disco, configurações e, se ela estiver ligada, até a memória. Depois você restaura e tudo volta como estava, inclusive um sistema que não inicia mais.</p>
+
+<dl class="anatomy">
+  <dt>VBoxManage snapshot</dt><dd>A ferramenta de linha de comando do VirtualBox, na parte de snapshots.</dd>
+  <dt>lab</dt><dd>O nome da VM.</dd>
+  <dt>take</dt><dd>"Tirar" um snapshot novo.</dd>
+  <dt>antes-do-projeto</dt><dd>O nome que você dá à fotografia.</dd>
+</dl>
+
+<pre class="term" data-host="notebook">$ VBoxManage snapshot lab take antes-do-projeto
+0%...10%...20%...30%...40%...50%...60%...70%...80%...90%...100%
+Snapshot taken. UUID: 3f1c2a9e-5b7d-4e8a-9c21-7d4e5f6a8b90
+$ VBoxManage snapshot lab list
+   Name: antes-do-projeto (UUID: 3f1c2a9e-5b7d-4e8a-9c21-7d4e5f6a8b90) *</pre>
+
+<p>Para voltar, a VM precisa estar desligada:</p>
+<pre class="term" data-host="notebook">$ VBoxManage controlvm lab poweroff
+$ VBoxManage snapshot lab restore antes-do-projeto
+Restoring snapshot 'antes-do-projeto' (3f1c2a9e-5b7d-4e8a-9c21-7d4e5f6a8b90)
+0%...10%...20%...30%...40%...50%...60%...70%...80%...90%...100%
+$ VBoxManage startvm lab --type headless</pre>
+
+<div class="tip">
+<strong>Pela janela do VirtualBox</strong>
+<p>Selecione a VM, abra o menu da direita (ícone de lista) e escolha <strong>Snapshots</strong>. Os botões <strong>Tirar</strong> e <strong>Restaurar</strong> fazem o mesmo que os comandos acima.</p>
+</div>
+
+<div class="warning">
+<strong>Snapshot não é backup</strong>
+<p>O snapshot vive no mesmo disco da VM. Se o arquivo da VM se perder, os snapshots vão junto. Para dados importantes, siga o projeto <a href="projeto-backup.html">Backup Automático</a>.</p>
+</div>
+
+<hr>
+
+<h2>Como cada projeto está organizado</h2>
+<p>Todos seguem o mesmo roteiro, para você saber sempre onde está:</p>
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Parte</th><th>O que traz</th></tr>
+<tr><td>Ao terminar você terá</td><td>O resultado final, em poucas linhas.</td></tr>
+<tr><td>Pré-requisitos</td><td>As aulas que você deveria ter feito antes, com links.</td></tr>
+<tr><td>Etapas numeradas</td><td>Cada etapa explica <strong>o que</strong> e <strong>por que</strong>, mostra os comandos com a saída esperada, um comando para <strong>conferir</strong> e um quadro <strong>"se deu errado"</strong>.</td></tr>
+<tr><td>Checklist e desafios</td><td>O que você aprendeu e ideias para ir além.</td></tr>
+<tr><td>Limpeza</td><td>Como desfazer tudo (ou restaurar o snapshot).</td></tr>
+</table>
+</div>
+
+<hr>
+
+<h2>Ordem sugerida</h2>
+<div class="table-wrap">
+<table class="ref">
+<tr><th>#</th><th>Projeto</th><th>Tempo</th><th>Você vai praticar</th></tr>
+<tr><td>1</td><td><a href="projeto-servidor-web.html">Servidor Web do Zero</a></td><td>1h30</td><td><code>su -</code>, instalar o <code>sudo</code>, SSH por chave, nftables, Apache, HTTPS</td></tr>
+<tr><td>2</td><td><a href="projeto-backup.html">Backup Automático</a></td><td>1h</td><td>rsync, shell script, systemd timer, restauração</td></tr>
+<tr><td>3</td><td><a href="projeto-servidor-arquivos.html">Servidor de Arquivos</a></td><td>45 min</td><td>Samba, usuários, permissões, firewall</td></tr>
+<tr><td>4</td><td><a href="projeto-docker.html">App com Docker</a></td><td>1h</td><td>Containers, Compose, volumes, atualização</td></tr>
+<tr><td>5</td><td><a href="projeto-quebre-conserte.html">Quebre e Conserte</a></td><td>2h</td><td>Modo de emergência, GRUB, recuperação de senha, disco cheio, rede</td></tr>
+</table>
+</div>
+
+<p>Deixe o "Quebre e Conserte" por último: ele usa um pouco de tudo e fica muito mais tranquilo quando você já confia nos comandos.</p>
+
+<hr>
+
+<h2>Quando não funciona</h2>
+
+<div class="cenario">
+<strong>"VT-x is disabled in the BIOS" ao ligar a VM</strong>
+<p><strong>O que aconteceu:</strong> a virtualização do processador está desligada no firmware do computador.</p>
+<p><strong>Como resolver:</strong> reinicie, entre na configuração do firmware (geralmente <kbd>F2</kbd>, <kbd>Del</kbd> ou <kbd>F10</kbd>) e ative <strong>Intel VT-x</strong> ou <strong>AMD-V / SVM</strong>.</p>
+</div>
+
+<div class="cenario">
+<strong>"Connection refused" no <code>ssh -p 2222</code></strong>
+<p><strong>O que aconteceu:</strong> faltou o redirecionamento de porta, a VM ainda está iniciando ou o servidor SSH não foi marcado no tasksel.</p>
+<p><strong>Como resolver:</strong> confira com <code>VBoxManage showvminfo lab | grep Rule</code>. Dentro da VM, pelo console, rode <code>su -</code> e depois <code>apt install openssh-server</code>.</p>
+</div>
+
+<div class="cenario">
+<strong>"Kernel driver not installed (rc=-1908)" no Linux</strong>
+<p><strong>O que aconteceu:</strong> o módulo do VirtualBox não foi compilado para o seu kernel, comum depois de uma atualização do kernel.</p>
+<p><strong>Como resolver:</strong> rode <code>sudo /sbin/vboxconfig</code> no seu computador (não na VM). Se o Secure Boot estiver ligado, o módulo também precisa ser assinado.</p>
+</div>
+
+<hr>
+
+<h2>Exercícios</h2>
+
+<div class="mc" data-answer="3">
+<p class="mc-q">1. Você vai mexer no <code>/etc/fstab</code> da VM. O que fazer antes?</p>
+<label><input type="radio" name="q1"> Copiar o arquivo para a área de trabalho.</label>
+<label><input type="radio" name="q1"> Reiniciar a VM.</label>
+<label><input type="radio" name="q1"> Tirar um snapshot da VM.</label>
+<label><input type="radio" name="q1"> Desligar o SSH.</label>
+</div>
+
+<div class="mc" data-answer="2">
+<p class="mc-q">2. No laboratório, por que definir uma senha para o root na instalação?</p>
+<label><input type="radio" name="q2"> Porque sem ela o Debian não instala.</label>
+<label><input type="radio" name="q2"> Para viver o jeito clássico do Debian: administrar com <code>su -</code> e depois aprender a instalar o <code>sudo</code>.</label>
+<label><input type="radio" name="q2"> Porque o SSH só aceita o root.</label>
+<label><input type="radio" name="q2"> Para desativar o sudo.</label>
+</div>
+
+<div class="exercise">
+<h3>3. Voltar no tempo</h3>
+<p>Complete o comando que restaura o snapshot <code>limpo</code> da VM <code>lab</code>:</p>
+<div class="ex-code">VBoxManage snapshot lab <input data-answer="restore limpo" aria-label="subcomando e nome"></div>
+</div>
+
+<hr>
+
+<h2>Resumo</h2>
+<ul>
+  <li>Faça os projetos numa VM Debian 13 instalada com a ISO <code>netinst</code>, nunca no computador principal.</li>
+  <li>Tire um snapshot antes de cada projeto: <code>VBoxManage snapshot lab take nome</code>.</li>
+  <li>Para voltar: desligue a VM e rode <code>VBoxManage snapshot lab restore nome</code>.</li>
+  <li>Comece pelo servidor web e deixe o "Quebre e Conserte" para o fim.</li>
+</ul>
+
+<div class="pager"></div>
+
+</div>
+</main>
+</div>
+<script src="assets/site.js"></script>
+</body>
+</html>

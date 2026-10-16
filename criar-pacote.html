@@ -1,0 +1,384 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Debian — criar um pacote .deb passo a passo | Guia Debian</title>
+<meta name="description" content="Empacote um script como .deb no Debian: estrutura DEBIAN/control explicada campo por campo, dpkg-deb --build, inspecionar, instalar e remover, lintian e o caminho oficial com debhelper.">
+<link rel="stylesheet" href="assets/style.css">
+<script>try{var t=localStorage.getItem("tema");if(t)document.documentElement.setAttribute("data-theme",t)}catch(e){}</script>
+</head>
+<body>
+<div class="layout">
+<nav class="sidebar" id="sidebar" aria-label="Tópicos"></nav>
+<main class="main">
+<div class="content">
+
+<div class="pager"></div>
+
+<h1>Debian <span class="hl">Criar um Pacote .deb</span></h1>
+
+<p class="intro">Todo programa que o <code>apt</code> instala chega num arquivo <code>.deb</code>. Você também pode criar o seu: um script que a equipe toda usa, uma configuração padrão, uma ferramenta interna. Empacotado, ele instala, atualiza e remove com os mesmos comandos de qualquer outro programa, e o sistema sabe exatamente quais arquivos são dele.</p>
+
+<div class="note">
+<strong>Você vai aprender</strong>
+<ul>
+  <li>O que existe dentro de um <code>.deb</code>.</li>
+  <li>Montar um pacote à mão: a pasta, o arquivo <code>DEBIAN/control</code> e o <code>dpkg-deb --build</code>.</li>
+  <li>Inspecionar, instalar, conferir e remover o pacote.</li>
+  <li>Revisar o pacote com o <code>lintian</code>.</li>
+  <li>Quando sair do "à mão" e usar o caminho oficial do Debian (<code>debhelper</code>, <code>dpkg-buildpackage</code>).</li>
+</ul>
+</div>
+
+<p>Pré-requisitos: <a href="dpkg.html">dpkg e .deb</a> e <a href="chmod.html">chmod</a>. As saídas abaixo vêm de um Debian 13 real.</p>
+
+<hr>
+
+<h2>Conceito: um .deb é uma "caixa" com duas partes</h2>
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Parte</th><th>O que tem</th><th>Exemplo</th></tr>
+<tr><td><strong>Dados</strong></td><td>Os arquivos que vão para o sistema, com os caminhos finais</td><td><code>/usr/bin/ola</code></td></tr>
+<tr><td><strong>Controle</strong></td><td>Informações sobre o pacote: nome, versão, dependências, descrição e scripts de instalação</td><td><code>Package: ola</code></td></tr>
+</table>
+</div>
+
+<p>Para criar os dois, você monta uma pasta que imita a raiz do sistema (<code>/</code>) e acrescenta uma subpasta especial chamada <code>DEBIAN</code> com a parte de controle. O <code>dpkg-deb</code> transforma a pasta em <code>.deb</code>.</p>
+
+<hr>
+
+<h2>Passo 1: o programa</h2>
+<p>Nosso exemplo é um script de uma linha, o <code>ola</code>. Ele vai morar em <code>/usr/bin</code>, então dentro da pasta do pacote ele fica em <code>usr/bin/ola</code>:</p>
+
+<pre class="term">$ mkdir -p ~/pacote/ola_1.0-1_all/DEBIAN ~/pacote/ola_1.0-1_all/usr/bin
+$ cd ~/pacote
+$ nano ola_1.0-1_all/usr/bin/ola</pre>
+
+<pre class="file" data-file="ola_1.0-1_all/usr/bin/ola">#!/bin/sh
+echo "Olá, ${1:-mundo}! Hoje é $(date +%d/%m/%Y)."</pre>
+
+<pre class="term" data-cwd="~/pacote">$ chmod 755 ola_1.0-1_all/usr/bin/ola
+$ chmod 755 ola_1.0-1_all ola_1.0-1_all/usr ola_1.0-1_all/usr/bin   « pastas com 755 (o umask 0002 da ana criaria 775)</pre>
+
+<p>O nome da pasta segue a convenção do Debian, <code>nome_versão_arquitetura</code>. Não é obrigatório, mas ajuda.</p>
+
+<hr>
+
+<h2>Passo 2: o arquivo <code>DEBIAN/control</code></h2>
+<p>É a "etiqueta" do pacote. Cada linha é <code>Campo: valor</code>.</p>
+
+<pre class="file" data-file="ola_1.0-1_all/DEBIAN/control">Package: ola
+Version: 1.0-1
+Architecture: all
+Maintainer: Ana &lt;ana@example.com&gt;
+Description: diz olá no terminal
+ Um script de exemplo do Guia Debian, empacotado à mão.</pre>
+
+<dl class="anatomy">
+  <dt>Package: ola</dt><dd>O nome do pacote: letras minúsculas, números e <code>+ - .</code>. É o que você usa em <code>apt remove ola</code>.</dd>
+  <dt>Version: 1.0-1</dt><dd>A versão: <code>1.0</code> é a do programa e <code>-1</code> é a revisão do pacote. Precisa começar com um número.</dd>
+  <dt>Architecture: all</dt><dd><code>all</code> = roda em qualquer processador (scripts). Programas compilados usam <code>amd64</code>, <code>arm64</code>…</dd>
+  <dt>Maintainer</dt><dd>Quem cuida do pacote, com e-mail.</dd>
+  <dt>Description</dt><dd>A primeira linha é o resumo curto. As linhas seguintes, que começam com um espaço, são a descrição longa.</dd>
+</dl>
+
+<p>Outros campos comuns:</p>
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Campo</th><th>Para quê</th><th>Exemplo</th></tr>
+<tr><td><code>Depends</code></td><td>Pacotes que precisam estar instalados</td><td><code>Depends: curl, jq (&gt;= 1.6)</code></td></tr>
+<tr><td><code>Recommends</code></td><td>Instalados junto por padrão, mas não obrigatórios</td><td><code>Recommends: bash-completion</code></td></tr>
+<tr><td><code>Section</code></td><td>Categoria</td><td><code>Section: utils</code></td></tr>
+<tr><td><code>Priority</code></td><td>Importância</td><td><code>Priority: optional</code></td></tr>
+<tr><td><code>Homepage</code></td><td>Site do projeto</td><td><code>Homepage: https://exemplo.com</code></td></tr>
+</table>
+</div>
+
+<hr>
+
+<h2>Passo 3: construir com <code>dpkg-deb</code></h2>
+
+<dl class="anatomy">
+  <dt>dpkg-deb</dt><dd>A ferramenta que monta e desmonta arquivos <code>.deb</code>. Já vem no Debian.</dd>
+  <dt>--build</dt><dd>Constrói um pacote a partir de uma pasta.</dd>
+  <dt>--root-owner-group</dt><dd>Grava os arquivos como pertencentes ao <code>root</code>, mesmo que você tenha montado a pasta como <code>ana</code>. É o certo para arquivos que vão para <code>/usr</code>.</dd>
+  <dt>ola_1.0-1_all</dt><dd>A pasta.</dd>
+</dl>
+
+<pre class="term" data-cwd="~/pacote">$ find ola_1.0-1_all
+ola_1.0-1_all
+ola_1.0-1_all/DEBIAN
+ola_1.0-1_all/DEBIAN/control
+ola_1.0-1_all/usr
+ola_1.0-1_all/usr/bin
+ola_1.0-1_all/usr/bin/ola
+$ dpkg-deb --build --root-owner-group ola_1.0-1_all
+dpkg-deb: construindo o pacote 'ola' em 'ola_1.0-1_all.deb'.
+$ ls -l *.deb
+-rw-r--r-- 1 ana ana 816 out 15 21:31 ola_1.0-1_all.deb          « 816 bytes</pre>
+
+<h3>O que acontece sem o <code>--root-owner-group</code></h3>
+<pre class="term" data-cwd="~/pacote">$ dpkg-deb --build ola_1.0-1_all
+dpkg-deb: aviso: diretório raiz ola_1.0-1_all tem proprietário ou grupo incomum 1000:1000
+dpkg-deb: dica: talvez você precise passar --root-owner-group, veja &lt;https://wiki.debian.org/Teams/Dpkg/RootlessBuilds&gt; para mais detalhes
+dpkg-deb: aviso: ignorando 1 aviso sobre o(s) arquivo(s) de controle
+dpkg-deb: construindo o pacote 'ola' em 'ola_1.0-1_all.deb'.</pre>
+<p>O pacote é criado, mas os arquivos ficariam com o dono 1000 (a ana). Use sempre a opção.</p>
+
+<hr>
+
+<h2>Passo 4: olhar dentro antes de instalar</h2>
+
+<pre class="term" data-cwd="~/pacote">$ dpkg-deb --info ola_1.0-1_all.deb
+ novo pacote Debian, versão 2.0.
+ tamanho 816 bytes: arquivo de controle= 348 bytes.
+     172 bytes,     6 linhas      control
+ Package: ola
+ Version: 1.0-1
+ Architecture: all
+ Maintainer: Ana &lt;ana@example.com&gt;
+ Description: diz olá no terminal
+  Um script de exemplo do Guia Debian, empacotado à mão.
+$ dpkg-deb --contents ola_1.0-1_all.deb
+drwxr-xr-x root/root         0 2026-10-15 21:31 ./
+drwxr-xr-x root/root         0 2026-10-15 21:31 ./usr/
+drwxr-xr-x root/root         0 2026-10-15 21:31 ./usr/bin/
+-rwxr-xr-x root/root        63 2026-10-15 21:31 ./usr/bin/ola    « dono root, executável</pre>
+
+<p><code>--info</code> mostra a etiqueta e <code>--contents</code> mostra os arquivos, como o <code>tar -tvf</code>. Faça isso com qualquer <code>.deb</code> baixado da internet antes de instalar.</p>
+
+<hr>
+
+<h2>Passo 5: instalar, usar e remover</h2>
+<p>Instalar mexe no sistema, então precisa de root (veja <a href="root-su-sudo.html">root, su e sudo</a>).</p>
+
+<pre class="term">$ su -
+Senha:</pre>
+<pre class="term" data-user="root" data-cwd="/root">#> apt install /home/ana/pacote/ola_1.0-1_all.deb
+…
+Instalando:
+  ola
+
+Resumo:
+  Atualizando: 0, Instalando: 1, Removendo: 0, Não atualizando: 0
+  Tamanho de download: 0 B / 816 B
+  Espaço necessário: 0 B / 18,1 GB disponível
+…
+Desempacotando ola (1.0-1) ...
+Configurando ola (1.0-1) ...
+Nota: O download é executado sem isolamento e como root, pois o arquivo '/home/ana/pacote/ola_1.0-1_all.deb' não pôde ser acessado pelo usuário '_apt'. - pkgAcquire::Run (13: Permissão negada)
+#> exit</pre>
+
+<p>A "Nota" do fim é inofensiva. O apt prefere ler os arquivos com um usuário sem poderes, o <code>_apt</code>, mas a pasta pessoal da ana tem permissão 700 e ele não entra. Para evitar o aviso, copie o <code>.deb</code> para <code>/tmp</code> antes de instalar.</p>
+
+<p>De volta como ana, o comando novo funciona e o sistema sabe que ele pertence ao pacote:</p>
+<pre class="term">$ ola Ana
+Olá, Ana! Hoje é 15/10/2026.
+$ dpkg -l ola | tail -1
+ii  ola            1.0-1        all          diz olá no terminal     « ii = instalado
+$ dpkg -L ola
+/.
+/usr
+/usr/bin
+/usr/bin/ola</pre>
+
+<p>E para remover:</p>
+<pre class="term" data-user="root" data-cwd="/root">#> apt remove ola
+REMOVENDO:
+  ola
+
+Resumo:
+  Atualizando: 0, Instalando: 0, Removendo: 1, Não atualizando: 0
+  Espaço necessário: 0 B / 18,1 GB disponível
+
+Removendo ola (1.0-1) ...</pre>
+
+<p>Repare que o <code>apt</code> trata o seu pacote como qualquer outro: ele aparece no <code>dpkg -l</code>, o <code>dpkg -L</code> lista os arquivos, e o <code>apt remove</code> apaga exatamente o que ele instalou.</p>
+
+<div class="tip">
+<strong>apt install ./arquivo.deb ou dpkg -i?</strong>
+<p>Prefira <code>apt install ./ola_1.0-1_all.deb</code> (com o <code>./</code>): ele instala também as dependências do campo <code>Depends</code>. O <code>dpkg -i</code> só instala o arquivo e reclama se faltar algo.</p>
+</div>
+
+<hr>
+
+<h2>Passo 6: revisar com o <code>lintian</code></h2>
+<p>O <strong>lintian</strong> confere o pacote contra as regras do Debian e aponta problemas. Cada aviso tem uma letra: <code>E</code> (erro), <code>W</code> (aviso), <code>I</code> (informação).</p>
+
+<pre class="term" data-cwd="~/pacote">$ lintian ola_1.0-1_all.deb
+E: ola: no-changelog usr/share/doc/ola/changelog.Debian.gz (non-native package)
+E: ola: no-copyright-file
+W: ola: no-manual-page [usr/bin/ola]
+W: ola: recommended-field ola_1.0-1_all.deb Priority
+W: ola: recommended-field ola_1.0-1_all.deb Section
+$ echo $?
+2</pre>
+
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Aviso</th><th>O que pede</th></tr>
+<tr><td><code>no-changelog</code></td><td>Um histórico de mudanças em <code>/usr/share/doc/ola/changelog.Debian.gz</code></td></tr>
+<tr><td><code>no-copyright-file</code></td><td>A licença em <code>/usr/share/doc/ola/copyright</code></td></tr>
+<tr><td><code>no-manual-page</code></td><td>Um <code>man ola</code> (página de manual)</td></tr>
+<tr><td><code>recommended-field … Priority/Section</code></td><td>Os campos <code>Priority:</code> e <code>Section:</code> no <code>control</code></td></tr>
+</table>
+</div>
+
+<div class="cenario">
+<strong>"wrong-file-owner-uid-or-gid" e "non-standard-dir-perm"</strong>
+<pre class="term" data-cwd="~/pacote">$ lintian ola_1.0-1_all.deb
+…
+E: ola: wrong-file-owner-uid-or-gid 1000/1000 [usr/bin/ola]
+W: ola: non-standard-dir-perm 0775 != 0755 [usr/bin/]</pre>
+<p><strong>O que aconteceu:</strong> o pacote foi construído sem <code>--root-owner-group</code> (dono 1000 = ana), e as pastas ficaram com 0775 porque o <code>umask</code> da ana no Debian é <code>0002</code>.</p>
+<p><strong>Como resolver:</strong> <code>chmod 755</code> nas pastas do pacote e construa com <code>--root-owner-group</code>.</p>
+</div>
+
+<p>Para um pacote interno, alguns avisos são aceitáveis. Para mandar algo para o Debian oficial, o pacote precisa estar limpo.</p>
+
+<hr>
+
+<h2>Scripts de instalação: <code>postinst</code> e companhia</h2>
+<p>Dentro de <code>DEBIAN/</code> podem existir scripts que o <code>dpkg</code> roda em momentos certos:</p>
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Arquivo</th><th>Quando roda</th><th>Uso típico</th></tr>
+<tr><td><code>preinst</code></td><td>Antes de copiar os arquivos</td><td>Parar um serviço antigo</td></tr>
+<tr><td><code>postinst</code></td><td>Depois de copiar</td><td>Criar usuário, ativar serviço</td></tr>
+<tr><td><code>prerm</code></td><td>Antes de remover</td><td>Parar o serviço</td></tr>
+<tr><td><code>postrm</code></td><td>Depois de remover</td><td>Limpar dados (no <code>purge</code>)</td></tr>
+<tr><td><code>conffiles</code></td><td>(lista) arquivos de configuração</td><td>Arquivos em <code>/etc</code> que o <code>apt</code> não sobrescreve sem perguntar</td></tr>
+</table>
+</div>
+<p>Os scripts precisam ter permissão <code>755</code> e começar com <code>#!/bin/sh</code>.</p>
+
+<hr>
+
+<h2>Formas diferentes de criar um .deb</h2>
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Forma</th><th>Como</th><th>Melhor quando…</th></tr>
+<tr><td>À mão (esta aula)</td><td>Pasta + <code>DEBIAN/control</code> + <code>dpkg-deb --build</code></td><td>Scripts e arquivos internos da sua equipe</td></tr>
+<tr><td>Oficial do Debian</td><td>Pasta <code>debian/</code> no código-fonte + <code>dh</code> (debhelper) + <code>dpkg-buildpackage</code> ou <code>debuild</code></td><td>Programas com código-fonte, pacotes para o Debian, repositórios sérios</td></tr>
+<tr><td>Começar pelo oficial</td><td><code>dh_make</code> cria os arquivos de <code>debian/</code> de modelo</td><td>Primeiro contato com o empacotamento oficial</td></tr>
+<tr><td>Ferramentas externas</td><td><code>fpm</code>, <code>nfpm</code>, <code>checkinstall</code></td><td>Gerar <code>.deb</code> e <code>.rpm</code> a partir do mesmo projeto</td></tr>
+</table>
+</div>
+
+<h3>Uma olhada no caminho oficial</h3>
+<p>No empacotamento oficial, você não monta a pasta final: descreve como <strong>compilar e instalar</strong> o programa, e as ferramentas fazem o resto. Os arquivos mínimos em <code>debian/</code>:</p>
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Arquivo</th><th>O que é</th></tr>
+<tr><td><code>debian/control</code></td><td>Pacote-fonte e pacotes binários (parecido com o <code>DEBIAN/control</code>)</td></tr>
+<tr><td><code>debian/changelog</code></td><td>Histórico de versões, num formato rígido (use o <code>dch</code>)</td></tr>
+<tr><td><code>debian/rules</code></td><td>Um Makefile; com debhelper, quase sempre só <code>%: dh $@</code></td></tr>
+<tr><td><code>debian/copyright</code></td><td>Licenças</td></tr>
+<tr><td><code>debian/source/format</code></td><td>Normalmente <code>3.0 (quilt)</code></td></tr>
+</table>
+</div>
+<p>Depois, <code>dpkg-buildpackage -us -uc</code> (pacotes <code>dpkg-dev</code> e <code>debhelper</code>) gera o <code>.deb</code>. O guia oficial é o <a href="https://www.debian.org/doc/manuals/debmake-doc/">Guide for Debian Maintainers</a>.</p>
+
+<hr>
+
+<h2>Quando não funciona</h2>
+
+<div class="cenario">
+<strong>"número da versão não começa com dígito"</strong>
+<pre class="term" data-cwd="~/pacote">$ dpkg-deb --build --root-owner-group ola_1.0-1_all
+dpkg-deb: erro: processando arquivo 'ola_1.0-1_all/DEBIAN/control' próximo à linha 2 do pacote 'ola':
+ o valor do campo 'Version' 'um': número da versão não começa com dígito</pre>
+<p><strong>O que aconteceu:</strong> o campo <code>Version</code> tem texto (<code>um</code>). <strong>Como resolver:</strong> use números: <code>1.0-1</code>.</p>
+</div>
+
+<div class="cenario">
+<strong>"campo 'Description' faltando"</strong>
+<pre class="term" data-cwd="~/pacote">$ dpkg-deb --build --root-owner-group ola_1.0-1_all
+dpkg-deb: aviso: processando arquivo 'ola_1.0-1_all/DEBIAN/control' próximo à linha 5 do pacote 'ola':
+ campo 'Description' faltando
+dpkg-deb: aviso: ignorando 1 aviso sobre o(s) arquivo(s) de controle
+dpkg-deb: construindo o pacote 'ola' em 'ola_1.0-1_all.deb'.</pre>
+<p>É só um aviso: o pacote sai, mas incompleto. Acrescente a descrição.</p>
+</div>
+
+<div class="cenario">
+<strong>"diretório de controle possui permissões ruins"</strong>
+<pre class="term" data-cwd="~/pacote">$ dpkg-deb --build --root-owner-group ola_1.0-1_all
+dpkg-deb: erro: diretório de controle possui permissões ruins 777 (devem ser &gt;=0755 e &lt;=0755)</pre>
+<p><strong>Como resolver:</strong> <code>chmod 755 ola_1.0-1_all/DEBIAN</code>. Isso acontece muito quando a pasta foi copiada de um pendrive ou de outro sistema.</p>
+</div>
+
+<div class="cenario">
+<strong>Instalou, mas o comando "não existe"</strong>
+<p><strong>O que aconteceu:</strong> o arquivo foi para o lugar errado (por exemplo, <code>ola_1.0-1_all/ola</code> em vez de <code>ola_1.0-1_all/usr/bin/ola</code>) ou não tem permissão de execução.</p>
+<p><strong>Como confirmar:</strong> <code>dpkg -L ola</code> mostra para onde os arquivos foram. <strong>Como resolver:</strong> corrija a pasta, aumente a revisão (<code>1.0-2</code>) e construa de novo.</p>
+</div>
+
+<hr>
+
+<h2>Referência</h2>
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Comando</th><th>O que faz</th></tr>
+<tr><td><code>dpkg-deb --build --root-owner-group pasta</code></td><td>Constrói o <code>.deb</code></td></tr>
+<tr><td><code>dpkg-deb --info arq.deb</code></td><td>Mostra o controle</td></tr>
+<tr><td><code>dpkg-deb --contents arq.deb</code></td><td>Lista os arquivos</td></tr>
+<tr><td><code>dpkg-deb -x arq.deb pasta</code></td><td>Extrai os arquivos sem instalar</td></tr>
+<tr><td><code>apt install ./arq.deb</code></td><td>Instala com dependências</td></tr>
+<tr><td><code>dpkg -L nome</code></td><td>Arquivos que o pacote instalou</td></tr>
+<tr><td><code>lintian arq.deb</code></td><td>Revisa o pacote</td></tr>
+</table>
+</div>
+
+<hr>
+
+<h2>Exercícios</h2>
+
+<div class="exercise">
+<h3>1. Construir</h3>
+<p>Complete o comando que constrói o pacote com os arquivos pertencendo ao root:</p>
+<div class="ex-code">dpkg-deb --build <input data-answer="--root-owner-group" aria-label="opção"> ola_1.0-1_all</div>
+</div>
+
+<div class="exercise">
+<h3>2. Onde fica a etiqueta</h3>
+<p>Qual é o caminho do arquivo de controle dentro da pasta do pacote?</p>
+<div class="ex-code">ola_1.0-1_all/<input data-answer="DEBIAN/control" aria-label="caminho"></div>
+</div>
+
+<div class="mc" data-answer="2">
+<p class="mc-q">3. Seu script precisa do <code>curl</code>. O que você acrescenta ao <code>control</code>?</p>
+<label><input type="radio" name="q3"> <code>Recommends: curl</code></label>
+<label><input type="radio" name="q3"> <code>Depends: curl</code></label>
+<label><input type="radio" name="q3"> <code>Package: curl</code></label>
+<label><input type="radio" name="q3"> <code>Architecture: curl</code></label>
+</div>
+
+<div class="mc" data-answer="4">
+<p class="mc-q">4. Você corrigiu um erro no script já empacotado como <code>1.0-1</code>. Qual versão usar no pacote novo?</p>
+<label><input type="radio" name="q4"> <code>1.0-1</code> de novo</label>
+<label><input type="radio" name="q4"> <code>um-ponto-zero</code></label>
+<label><input type="radio" name="q4"> <code>0.9-1</code></label>
+<label><input type="radio" name="q4"> <code>1.0-2</code></label>
+</div>
+
+<hr>
+
+<h2>Resumo</h2>
+<ul>
+  <li>Um <code>.deb</code> = arquivos com os caminhos finais + a pasta <code>DEBIAN</code> com o <code>control</code>.</li>
+  <li><code>dpkg-deb --build --root-owner-group pasta</code> cria o pacote.</li>
+  <li><code>--info</code> e <code>--contents</code> mostram o que tem dentro, antes de instalar.</li>
+  <li><code>apt install ./arquivo.deb</code> instala com dependências; <code>apt remove</code> desfaz.</li>
+  <li>O <code>lintian</code> revisa; para projetos sérios, use <code>debhelper</code> e <code>dpkg-buildpackage</code>.</li>
+</ul>
+
+<div class="pager"></div>
+
+</div>
+</main>
+</div>
+<script src="assets/site.js"></script>
+</body>
+</html>

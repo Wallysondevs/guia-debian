@@ -1,0 +1,424 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Debian Conceitos de Rede — IP, máscara, gateway, DNS e portas | Guia Debian</title>
+<meta name="description" content="Entenda IP, máscara, gateway, DNS e portas com analogias simples, veja tudo isso no Debian 13 com ip, hostname, dig e resolv.conf, e siga um roteiro para descobrir por que a internet não funciona.">
+<link rel="stylesheet" href="assets/style.css">
+<script>try{var t=localStorage.getItem("tema");if(t)document.documentElement.setAttribute("data-theme",t)}catch(e){}</script>
+</head>
+<body>
+<div class="layout">
+<nav class="sidebar" id="sidebar" aria-label="Tópicos"></nav>
+<main class="main">
+<div class="content">
+
+<div class="pager"></div>
+
+<h1>Debian <span class="hl">Conceitos de Rede</span></h1>
+
+<p class="intro">Antes de usar comandos de rede, vale entender as peças: <strong>IP</strong>, <strong>máscara</strong>, <strong>gateway</strong>, <strong>DNS</strong> e <strong>porta</strong>. Com elas na cabeça, as saídas do <code>ip</code>, do <code>ping</code> e do <code>ssh</code> deixam de ser sopa de números. No fim, você terá um roteiro para descobrir por que "a internet não funciona".</p>
+
+<div class="note">
+<strong>Você vai aprender</strong>
+<ul>
+  <li>O que são IP, máscara, gateway, DNS e porta, comparando com endereços de correio.</li>
+  <li>A diferença entre IP privado (da sua casa) e IP público (da internet).</li>
+  <li>Onde o Debian guarda e mostra cada uma dessas informações.</li>
+  <li>Um roteiro de 6 passos para achar onde a conexão quebrou.</li>
+</ul>
+</div>
+
+<p>Os exemplos usam a máquina <strong>notebook</strong>, da usuária <strong>ana</strong>, com um Debian 13 instalado como servidor e ligado por cabo. As saídas foram tiradas de um Debian real; só os endereços foram trocados pelos de uma rede de casa típica. No seu computador, os números e os nomes das placas serão outros.</p>
+
+<hr>
+
+<h2>A rede como um sistema de correio</h2>
+<p>Uma rede de computadores funciona como o correio de uma cidade. Cada peça técnica tem um equivalente do dia a dia:</p>
+
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Termo</th><th>Analogia</th><th>Exemplo</th></tr>
+<tr><td>Endereço IP</td><td>O endereço da casa. Sem ele, ninguém sabe para onde mandar a carta.</td><td><code>192.168.0.15</code></td></tr>
+<tr><td>Máscara de rede</td><td>Diz qual parte do endereço é o "bairro". Quem está no mesmo bairro se fala direto.</td><td><code>/24</code> ou <code>255.255.255.0</code></td></tr>
+<tr><td>Gateway</td><td>A agência do correio do bairro. Tudo que vai para fora do bairro passa por ela.</td><td><code>192.168.0.1</code> (o roteador)</td></tr>
+<tr><td>DNS</td><td>A agenda de contatos: troca o nome pelo endereço.</td><td><code>debian.org</code> → <code>151.101.2.132</code></td></tr>
+<tr><td>Porta</td><td>O número do apartamento dentro do prédio. Cada serviço mora num número.</td><td><code>22</code> (SSH), <code>443</code> (sites com HTTPS)</td></tr>
+<tr><td>Placa de rede (interface)</td><td>A caixa de correio da casa. Uma máquina pode ter várias: cabo e Wi-Fi.</td><td><code>enp1s0</code> (cabo), <code>wlp2s0</code> (Wi-Fi)</td></tr>
+</table>
+</div>
+
+<div class="tip">
+<strong>De onde vêm nomes como <code>enp1s0</code>?</strong>
+<p>O Linux dá nomes que descrevem onde a placa está ligada: <code>en</code> = <em>ethernet</em> (cabo), <code>wl</code> = <em>wireless</em> (Wi-Fi), <code>p1s0</code> = barramento PCI 1, slot 0. O <code>lo</code> é a placa "de mentira" do próprio computador (<em>loopback</em>).</p>
+</div>
+
+<hr>
+
+<h2>Endereço IP</h2>
+<p>IP vem de <em>Internet Protocol</em>, "protocolo de internet". O endereço IPv4 tem 4 números de 0 a 255, separados por pontos. O jeito mais rápido de ver o seu é o <code>hostname -I</code>:</p>
+
+<dl class="anatomy">
+  <dt>hostname</dt><dd>O programa que mostra o nome da máquina.</dd>
+  <dt>-I</dt><dd>Com i <strong>maiúsculo</strong>: em vez do nome, mostra todos os endereços IP.</dd>
+</dl>
+
+<pre class="term">$ hostname -I
+192.168.0.15 2804:14c:5b80:8a1f:a00:27ff:fe90:fbde       « o primeiro é o IPv4; o segundo, IPv6</pre>
+
+<h3>IP privado e IP público</h3>
+<p>O <code>192.168.0.15</code> é um <strong>IP privado</strong>: só vale dentro da sua casa, como "apartamento 15" só faz sentido dentro do prédio. Para a internet, toda a sua casa aparece com um único <strong>IP público</strong>, o do roteador. Para descobri-lo, é preciso perguntar a um site de fora. O <code>wget</code> já vem no Debian (o <code>curl</code>, não):</p>
+
+<pre class="term">$ wget -qO- -4 ifconfig.me
+177.92.48.203                                « ilustrativo: o endereço da sua casa vista de fora</pre>
+
+<p>Três faixas são reservadas para redes privadas. Se o seu IP começa assim, ele é privado:</p>
+
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Faixa</th><th>Onde costuma aparecer</th></tr>
+<tr><td><code>192.168.x.x</code></td><td>Roteadores de casa e de pequenos escritórios</td></tr>
+<tr><td><code>10.x.x.x</code></td><td>Empresas, VPNs, nuvem e máquinas virtuais (o VirtualBox usa <code>10.0.2.x</code>)</td></tr>
+<tr><td><code>172.16.x.x</code> a <code>172.31.x.x</code></td><td>Empresas e o Docker</td></tr>
+<tr><td><code>127.0.0.1</code></td><td>Não é rede: é o próprio computador (<em>localhost</em>)</td></tr>
+</table>
+</div>
+
+<div class="tip">
+<strong>localhost: o computador falando com ele mesmo</strong>
+<p><code>127.0.0.1</code>, ou o nome <code>localhost</code>, sempre aponta para a própria máquina. Funciona até sem internet:</p>
+<pre class="term">$ ping -c 2 127.0.0.1
+PING 127.0.0.1 (127.0.0.1) 56(84) bytes of data.
+64 bytes from 127.0.0.1: icmp_seq=1 ttl=64 time=0.029 ms
+64 bytes from 127.0.0.1: icmp_seq=2 ttl=64 time=0.040 ms
+
+--- 127.0.0.1 ping statistics ---
+2 packets transmitted, 2 received, 0% packet loss, time 1042ms
+rtt min/avg/max/mdev = 0.029/0.034/0.040/0.005 ms</pre>
+</div>
+
+<hr>
+
+<h2>Máscara de rede: qual é o seu "bairro"</h2>
+<p>A máscara diz quantos números do começo do IP formam o endereço da rede (o bairro). Ela aparece depois de uma barra, no formato chamado <strong>CIDR</strong>: <code>192.168.0.15/24</code>.</p>
+<p>O <code>/24</code> quer dizer que os 24 primeiros bits, ou seja, os três primeiros números (<code>192.168.0</code>), são o bairro. O último número muda de casa para casa. Por isso <code>192.168.0.15</code> e <code>192.168.0.30</code> se falam direto, mas <code>192.168.1.7</code> já está em outro bairro.</p>
+
+<div class="table-wrap">
+<table class="ref">
+<tr><th>CIDR</th><th>Máscara por extenso</th><th>Parte fixa</th><th>Endereços para máquinas</th></tr>
+<tr><td><code>/8</code></td><td><code>255.0.0.0</code></td><td><code>10</code>.x.x.x</td><td>cerca de 16 milhões</td></tr>
+<tr><td><code>/16</code></td><td><code>255.255.0.0</code></td><td><code>172.16</code>.x.x</td><td>65.534</td></tr>
+<tr><td><code>/24</code></td><td><code>255.255.255.0</code></td><td><code>192.168.0</code>.x</td><td>254</td></tr>
+<tr><td><code>/32</code></td><td><code>255.255.255.255</code></td><td>o endereço inteiro</td><td>1 (uma máquina só)</td></tr>
+</table>
+</div>
+
+<p>Para o dia a dia, basta lembrar: em casa, quase sempre é <code>/24</code>.</p>
+
+<hr>
+
+<h2>Gateway: a porta de saída</h2>
+<p>Para falar com algo fora do bairro (um site, por exemplo), o computador entrega o pacote ao <strong>gateway</strong>, quase sempre o roteador. O comando <code>ip r</code> mostra as rotas:</p>
+
+<dl class="anatomy">
+  <dt>ip</dt><dd>A ferramenta de rede do Linux (pacote <code>iproute2</code>, sempre instalado).</dd>
+  <dt>r</dt><dd>Abreviação de <code>route</code>: a tabela de rotas, ou seja, por onde cada destino sai.</dd>
+</dl>
+
+<pre class="term">$ ip r
+default via 192.168.0.1 dev enp1s0 proto dhcp src 192.168.0.15 metric 1002      « para qualquer outro lugar, vá pelo roteador
+192.168.0.0/24 dev enp1s0 proto dhcp scope link src 192.168.0.15 metric 1002    « o "bairro": entrega direto</pre>
+
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Pedaço</th><th>Significado</th></tr>
+<tr><td><code>default</code></td><td>"Qualquer destino que não esteja nas outras linhas."</td></tr>
+<tr><td><code>via 192.168.0.1</code></td><td>Mande pelo gateway, o roteador.</td></tr>
+<tr><td><code>dev enp1s0</code></td><td>Pela placa de cabo.</td></tr>
+<tr><td><code>proto dhcp</code></td><td>Essa rota veio do <strong>DHCP</strong>: o roteador entregou IP e gateway automaticamente.</td></tr>
+<tr><td><code>src 192.168.0.15</code></td><td>Usando o seu IP como remetente.</td></tr>
+<tr><td><code>metric 1002</code></td><td>Prioridade: com duas rotas iguais, vence a de número menor. O cliente DHCP do Debian (<code>dhcpcd</code>) usa 1000 + o número da placa.</td></tr>
+</table>
+</div>
+
+<hr>
+
+<h2>DNS: a agenda de nomes</h2>
+<p>Computadores só entendem números, mas pessoas lembram nomes. O <strong>DNS</strong> (<em>Domain Name System</em>, "sistema de nomes de domínio") traduz <code>debian.org</code> para um IP. No Debian com o "sistema padrão" instalado, o <code>dig</code> e o <code>host</code> já vêm prontos:</p>
+
+<dl class="anatomy">
+  <dt>dig</dt><dd>Pergunta ao DNS (de <em>domain information groper</em>).</dd>
+  <dt>+short</dt><dd>Mostra só a resposta, sem os detalhes técnicos.</dd>
+  <dt>debian.org</dt><dd>O nome a traduzir.</dd>
+</dl>
+
+<pre class="term">$ dig +short debian.org
+151.101.130.132
+151.101.66.132
+151.101.2.132
+151.101.194.132                              « um nome pode ter vários IPs
+$ host debian.org
+debian.org has address 151.101.194.132
+debian.org has address 151.101.130.132
+debian.org has address 151.101.2.132</pre>
+
+<h3>Quem responde as perguntas de DNS?</h3>
+<p>No Debian, a resposta está num arquivo de texto simples, o <code>/etc/resolv.conf</code>:</p>
+
+<pre class="term">$ cat /etc/resolv.conf
+# Generated by dhcpcd from enp1s0.dhcp, enp1s0.ra       « escrito automaticamente pelo DHCP
+# /etc/resolv.conf.head can replace this line
+domain lan
+nameserver 192.168.0.1                                   « o servidor DNS: o próprio roteador
+# /etc/resolv.conf.tail can replace this line</pre>
+
+<div class="note">
+<strong>Diferença para o Ubuntu</strong>
+<p>No Ubuntu, quem responde é um serviço local, o <code>systemd-resolved</code>, e o comando é <code>resolvectl status</code>. Num Debian servidor ele não vem instalado (<code>resolvectl</code> dá "comando não encontrado"): o <code>dhcpcd</code> escreve o servidor de DNS direto no <code>/etc/resolv.conf</code>. No Debian com GNOME, quem cuida disso é o NetworkManager. Os detalhes de configuração estão em <a href="configurar-rede.html">Configurar a Rede</a>.</p>
+</div>
+
+<div class="note">
+<strong>Quando "a internet caiu", muitas vezes é só o DNS</strong>
+<p>Se você alcança um IP mas não abre nenhum nome, a internet está funcionando: quem falhou foi a agenda. O roteiro abaixo mostra como distinguir os dois casos.</p>
+</div>
+
+<hr>
+
+<h2>Portas, TCP e UDP</h2>
+<p>Um computador roda vários serviços ao mesmo tempo. A <strong>porta</strong> é o número que diz para qual deles o pacote vai, como o número do apartamento num prédio. O IP leva até o prédio, a porta leva até o apartamento.</p>
+
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Porta</th><th>Protocolo</th><th>Serviço</th></tr>
+<tr><td><code>22</code></td><td>TCP</td><td>SSH: acesso remoto pelo terminal (<a href="ssh.html">SSH</a>)</td></tr>
+<tr><td><code>53</code></td><td>UDP e TCP</td><td>DNS</td></tr>
+<tr><td><code>80</code></td><td>TCP</td><td>HTTP: sites sem criptografia</td></tr>
+<tr><td><code>443</code></td><td>TCP (e UDP no HTTP/3)</td><td>HTTPS: sites com cadeado</td></tr>
+<tr><td><code>25</code></td><td>TCP</td><td>Envio de e-mail entre servidores (SMTP)</td></tr>
+<tr><td><code>123</code></td><td>UDP</td><td>NTP: acerto do relógio</td></tr>
+<tr><td><code>67</code>, <code>68</code></td><td>UDP</td><td>DHCP: entrega de IP automático</td></tr>
+</table>
+</div>
+
+<p>O próprio Debian tem uma lista oficial de portas e nomes, em <code>/etc/services</code>:</p>
+<pre class="term">$ grep -w ssh /etc/services
+ssh		22/tcp				# SSH Remote Login Protocol</pre>
+
+<p>Existem dois "tipos de entrega":</p>
+<ul>
+  <li><strong>TCP</strong>: como uma carta registrada. Confirma o recebimento e reenvia o que se perder. Usado por sites, SSH e e-mail.</li>
+  <li><strong>UDP</strong>: como um panfleto. Mais rápido, sem confirmação. Usado por DNS, chamadas de vídeo e jogos.</li>
+</ul>
+
+<p>Para ver quais portas a máquina escuta, use o <code>ss</code>. Num Debian servidor recém-instalado, só o SSH (porta 22) espera conexões:</p>
+<pre class="term">$ ss -tln
+State  Recv-Q Send-Q Local Address:Port Peer Address:Port
+LISTEN 0      128          0.0.0.0:22        0.0.0.0:*      « SSH em todos os endereços IPv4
+LISTEN 0      128             [::]:22           [::]:*      « e em todos os IPv6</pre>
+<p>Os detalhes do <code>ss</code> estão em <a href="ip.html">ip, ping, ss</a>.</p>
+
+<hr>
+
+<h2>IPv4 e IPv6</h2>
+<p>Os endereços IPv4 (4 números) estão acabando: são só cerca de 4 bilhões. O <strong>IPv6</strong> resolve isso com endereços enormes, em hexadecimal e separados por dois-pontos, como <code>2804:14c:5b80:8a1f:a00:27ff:fe90:fbde</code>. Os dois convivem, e o Debian configura os dois automaticamente.</p>
+<ul>
+  <li><code>::</code> é uma abreviação para "um monte de zeros".</li>
+  <li>Endereços que começam com <code>fe80:</code> são locais e só valem dentro da rede.</li>
+  <li>Endereços que começam com <code>fd</code> são privados, como o <code>192.168</code> do IPv4.</li>
+  <li><code>::1</code> é o localhost do IPv6.</li>
+</ul>
+
+<hr>
+
+<h2>Onde ver tudo isso no seu Debian</h2>
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Quero ver…</th><th>Comando</th><th>Arquivo de configuração</th></tr>
+<tr><td>Meu IP</td><td><code>hostname -I</code> ou <code>ip -br a</code></td><td><code>/etc/network/interfaces</code> (servidor)</td></tr>
+<tr><td>Meu gateway</td><td><code>ip r</code></td><td>Entregue pelo DHCP, ou <code>gateway</code> no mesmo arquivo</td></tr>
+<tr><td>Meu DNS</td><td><code>cat /etc/resolv.conf</code></td><td>Gerado pelo <code>dhcpcd</code> ou pelo NetworkManager</td></tr>
+<tr><td>Nomes locais</td><td><code>cat /etc/hosts</code></td><td><code>/etc/hosts</code></td></tr>
+<tr><td>Meu IP público</td><td><code>wget -qO- -4 ifconfig.me</code></td><td>—</td></tr>
+<tr><td>Portas abertas</td><td><code>ss -tuln</code></td><td>—</td></tr>
+</table>
+</div>
+
+<p>O <code>/etc/hosts</code> é uma "agenda local", consultada antes do DNS. Num Debian recém-instalado ele tem o próprio nome da máquina:</p>
+<pre class="term">$ cat /etc/hosts
+127.0.0.1	localhost
+127.0.1.1	notebook.lan	notebook               « o nome da máquina aponta para ela mesma
+
+# The following lines are desirable for IPv6 capable hosts
+::1     localhost ip6-localhost ip6-loopback
+ff02::1 ip6-allnodes
+ff02::2 ip6-allrouters</pre>
+
+<hr>
+
+<h2>Roteiro: "a internet não funciona"</h2>
+<p>Siga os passos em ordem. Cada passo testa uma peça do correio; o primeiro que falhar mostra onde está o problema.</p>
+
+<ol class="passo">
+  <li>
+    <p><strong>A placa de rede está ligada e tem IP?</strong> Use <code>ip -br a</code> (<code>-br</code> = <em>brief</em>, "resumido"):</p>
+    <pre class="term">$ ip -br a
+lo               UNKNOWN        127.0.0.1/8 ::1/128
+enp1s0           UP             192.168.0.15/24 2804:14c:5b80:8a1f:a00:27ff:fe90:fbde/64 fe80::ae13:e729:e153:39c/64   « ligada, com IP</pre>
+    <p>Se a placa está <code>DOWN</code>, ou <code>UP</code> mas sem endereço IPv4, o problema é a conexão física (cabo solto, Wi-Fi desligado) ou o DHCP. Veja <a href="configurar-rede.html">Configurar a Rede</a>.</p>
+  </li>
+  <li>
+    <p><strong>Existe um gateway?</strong></p>
+    <pre class="term">$ ip r
+default via 192.168.0.1 dev enp1s0 proto dhcp src 192.168.0.15 metric 1002
+192.168.0.0/24 dev enp1s0 proto dhcp scope link src 192.168.0.15 metric 1002</pre>
+    <p>Sem a linha <code>default</code>, o computador não sabe sair do bairro.</p>
+  </li>
+  <li>
+    <p><strong>O roteador responde?</strong> O <code>ping</code> manda um "você está aí?" e espera a resposta. <code>-c 3</code> limita a 3 tentativas; sem isso, ele só para com <kbd>Ctrl</kbd>+<kbd>C</kbd>.</p>
+    <pre class="term">$ ping -c 3 192.168.0.1
+PING 192.168.0.1 (192.168.0.1) 56(84) bytes of data.
+64 bytes from 192.168.0.1: icmp_seq=1 ttl=64 time=3.12 ms
+64 bytes from 192.168.0.1: icmp_seq=2 ttl=64 time=2.87 ms
+64 bytes from 192.168.0.1: icmp_seq=3 ttl=64 time=4.05 ms
+
+--- 192.168.0.1 ping statistics ---
+3 packets transmitted, 3 received, 0% packet loss, time 2003ms     « 0% de perda: o roteador está ok</pre>
+    <p>Se aparecer <code>100% packet loss</code>, o problema está entre você e o roteador.</p>
+  </li>
+  <li>
+    <p><strong>A internet responde por IP?</strong> Teste um IP conhecido, como o DNS público <code>8.8.8.8</code>. Assim você testa a saída para a internet sem depender do DNS:</p>
+    <pre class="term">$ ping -c 3 8.8.8.8</pre>
+    <p>Se o roteador responde mas o <code>8.8.8.8</code> não, a internet do provedor caiu.</p>
+  </li>
+  <li>
+    <p><strong>A internet responde por nome?</strong></p>
+    <pre class="term">$ ping -c 3 debian.org
+PING debian.org (151.101.66.132) 56(84) bytes of data.        « o nome virou IP: DNS funcionando
+64 bytes from 151.101.66.132: icmp_seq=1 ttl=64 time=365 ms</pre>
+    <p>Se o <code>ping 8.8.8.8</code> funcionou mas o nome deu "Nome ou serviço desconhecido", o problema é o <strong>DNS</strong>.</p>
+  </li>
+  <li>
+    <p><strong>Qual DNS está em uso?</strong></p>
+    <pre class="term">$ cat /etc/resolv.conf
+nameserver 192.168.0.1
+$ dig +short debian.org @1.1.1.1            « pergunte a outro servidor de DNS, direto
+151.101.2.132</pre>
+    <p>Se o DNS público (<code>@1.1.1.1</code>) responde e o do roteador não, configure outro DNS na conexão (veja <a href="configurar-rede.html">Configurar a Rede</a>).</p>
+  </li>
+</ol>
+
+<div class="tip">
+<strong>Resumo do roteiro</strong>
+<p>Placa com IP → gateway → ping no roteador → ping num IP da internet → ping num nome → DNS. O primeiro passo que falha diz onde está o defeito.</p>
+</div>
+
+<hr>
+
+<h2>Quando não funciona</h2>
+
+<div class="cenario">
+<strong>"Nome ou serviço desconhecido"</strong>
+<pre class="term">$ ping -c 1 nao-existe.invalid
+ping: nao-existe.invalid: Nome ou serviço desconhecido</pre>
+<p><strong>O que aconteceu:</strong> o DNS não conseguiu traduzir o nome. Ou o nome está errado (confira a digitação), ou o DNS não está respondendo.</p>
+<p><strong>Como confirmar:</strong> <code>ping -c 3 8.8.8.8</code>. Se esse funcionar, a internet está ok e o problema é só o DNS.</p>
+</div>
+
+<div class="cenario">
+<strong>"A rede está fora de alcance"</strong>
+<pre class="term">$ ping -c 1 8.8.8.8
+ping: connect: A rede está fora de alcance</pre>
+<p><strong>O que aconteceu:</strong> o computador nem tentou enviar, porque não tem rota para fora: não há gateway, ou a placa está sem IP.</p>
+<p><strong>Como resolver:</strong> volte aos passos 1 e 2 do roteiro.</p>
+</div>
+
+<div class="cenario">
+<strong>"100% packet loss"</strong>
+<pre class="term">$ ping -c 2 -W 1 192.168.0.250
+...
+2 packets transmitted, 0 received, 100% packet loss, time 1012ms</pre>
+<p><strong>O que aconteceu:</strong> o pacote saiu, mas ninguém respondeu. O endereço pode não existir, a máquina pode estar desligada, ou um firewall bloqueia o ping.</p>
+<p><strong>Como resolver:</strong> confira o IP. Lembre que muitos servidores bloqueiam o ping de propósito: não responder ao ping não prova que a máquina está fora do ar.</p>
+</div>
+
+<div class="cenario">
+<strong>"curl: comando não encontrado" / "resolvectl: comando não encontrado"</strong>
+<p><strong>O que aconteceu:</strong> esses comandos, comuns em tutoriais de Ubuntu, não vêm num Debian servidor.</p>
+<p><strong>Como resolver:</strong> use os que já vêm (<code>wget</code>, <code>cat /etc/resolv.conf</code>, <code>dig</code>) ou instale o <code>curl</code> como root: <code>apt install curl</code>.</p>
+</div>
+
+<hr>
+
+<h2>Referência rápida</h2>
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Termo</th><th>Em uma frase</th></tr>
+<tr><td>IP</td><td>Endereço da máquina na rede</td></tr>
+<tr><td>Máscara / CIDR</td><td>Quanto do IP é a rede (o bairro): <code>/24</code></td></tr>
+<tr><td>Gateway</td><td>O roteador, por onde sai tudo que não é da rede local</td></tr>
+<tr><td>DNS</td><td>Traduz nomes em IPs; no Debian, listado em <code>/etc/resolv.conf</code></td></tr>
+<tr><td>DHCP</td><td>O roteador entregando IP, gateway e DNS automaticamente</td></tr>
+<tr><td>Porta</td><td>Número do serviço dentro da máquina: 22 SSH, 443 HTTPS</td></tr>
+<tr><td>localhost</td><td>A própria máquina: <code>127.0.0.1</code> ou <code>::1</code></td></tr>
+</table>
+</div>
+
+<hr>
+
+<h2>Exercícios</h2>
+
+<div class="exercise">
+<h3>1. Meu IP</h3>
+<p>Complete para mostrar todos os IPs da máquina (atenção à letra maiúscula):</p>
+<div class="ex-code">hostname <input data-answer="-I|--all-ip-addresses" aria-label="opção"></div>
+</div>
+
+<div class="exercise">
+<h3>2. O DNS do Debian</h3>
+<p>Qual arquivo mostra o servidor de DNS em uso num Debian servidor?</p>
+<div class="ex-code">cat <input data-answer="/etc/resolv.conf" aria-label="arquivo"></div>
+</div>
+
+<div class="mc" data-answer="3">
+<p class="mc-q">3. <code>ping 8.8.8.8</code> funciona, mas <code>ping debian.org</code> dá "Nome ou serviço desconhecido". Onde está o problema?</p>
+<label><input type="radio" name="q3"> No cabo de rede.</label>
+<label><input type="radio" name="q3"> No gateway.</label>
+<label><input type="radio" name="q3"> No DNS.</label>
+<label><input type="radio" name="q3"> No servidor do debian.org.</label>
+</div>
+
+<div class="mc" data-answer="2">
+<p class="mc-q">4. Na rota <code>default via 192.168.0.1 dev enp1s0</code>, o que é o <code>192.168.0.1</code>?</p>
+<label><input type="radio" name="q4"> O IP da sua máquina.</label>
+<label><input type="radio" name="q4"> O gateway (o roteador).</label>
+<label><input type="radio" name="q4"> O servidor de DNS público.</label>
+<label><input type="radio" name="q4"> A máscara de rede.</label>
+</div>
+
+<div class="mc" data-answer="1">
+<p class="mc-q">5. <code>192.168.0.15</code> e <code>192.168.0.30</code>, ambos com <code>/24</code>, estão…</p>
+<label><input type="radio" name="q5"> Na mesma rede: se falam direto.</label>
+<label><input type="radio" name="q5"> Em redes diferentes: precisam do gateway.</label>
+<label><input type="radio" name="q5"> Um é público e o outro privado.</label>
+<label><input type="radio" name="q5"> Nenhum dos dois é válido.</label>
+</div>
+
+<hr>
+
+<h2>Resumo</h2>
+<ul>
+  <li>IP é o endereço; a máscara (<code>/24</code>) diz qual parte é a rede; o gateway é a saída; o DNS traduz nomes; a porta escolhe o serviço.</li>
+  <li><code>hostname -I</code> e <code>ip -br a</code> mostram o IP; <code>ip r</code> mostra o gateway.</li>
+  <li>No Debian servidor, o DNS está em <code>/etc/resolv.conf</code> (gerado pelo <code>dhcpcd</code>); não há <code>resolvectl</code> nem <code>curl</code>, mas há <code>dig</code>, <code>host</code> e <code>wget</code>.</li>
+  <li>Roteiro: placa → gateway → roteador → IP da internet → nome → DNS.</li>
+</ul>
+
+<div class="pager"></div>
+
+</div>
+</main>
+</div>
+<script src="assets/site.js"></script>
+</body>
+</html>

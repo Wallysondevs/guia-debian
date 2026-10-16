@@ -1,0 +1,268 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Debian Atalhos de Teclado — terminal, GNOME, emergência, nano e mais | Guia Debian</title>
+<meta name="description" content="Atalhos de teclado do Debian 13: bash, gnome-terminal, GNOME, emergência (TTY e SysRq 438), less e man, nano, Vim mínimo e tmux, conferidos no sistema.">
+<link rel="stylesheet" href="assets/style.css">
+<script>try{var t=localStorage.getItem("tema");if(t)document.documentElement.setAttribute("data-theme",t)}catch(e){}</script>
+</head>
+<body>
+<div class="layout">
+<nav class="sidebar" id="sidebar" aria-label="Tópicos"></nav>
+<main class="main">
+<div class="content">
+
+<div class="pager"></div>
+
+<h1>Debian <span class="hl">Atalhos de Teclado</span></h1>
+
+<p class="intro">Uma página para consultar e imprimir: os atalhos do terminal, da área de trabalho GNOME, dos programas que você mais vai usar e, principalmente, os de emergência, para quando tudo trava. Os atalhos do GNOME e do terminal foram conferidos nas configurações padrão do Debian 13.</p>
+
+<div class="note">
+<strong>Como ler</strong>
+<p><kbd>Ctrl</kbd>+<kbd>C</kbd> quer dizer "segure Ctrl e aperte C". <kbd>Super</kbd> é a tecla com o logotipo do Windows. <code>Ctrl+B D</code>, no tmux, quer dizer "aperte Ctrl+B, solte, e depois aperte D".</p>
+</div>
+
+<p class="indice-letras"><a href="#emergencia">!</a> · <a href="#bash">B</a> · <a href="#terminal">T</a> · <a href="#gnome">G</a> · <a href="#less">L</a> · <a href="#nano">N</a> · <a href="#vim">V</a> · <a href="#tmux">X</a></p>
+
+<hr>
+
+<h2 id="emergencia">Emergência: quando o sistema trava</h2>
+<p>Tente na ordem. A aula completa, com o passo a passo, está em <a href="travamentos.html">Quando o Sistema Trava</a>.</p>
+
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Atalho</th><th>O que faz</th><th>Quando usar</th></tr>
+<tr><td><kbd>Ctrl</kbd>+<kbd>Alt</kbd>+<kbd>F3</kbd> … <kbd>F6</kbd></td><td>Abre um console de texto (TTY) fora da interface gráfica</td><td>A tela congelou, mas o computador ainda responde</td></tr>
+<tr><td><kbd>Ctrl</kbd>+<kbd>Alt</kbd>+<kbd>F2</kbd></td><td>Volta para a sessão gráfica (às vezes é <kbd>F1</kbd>)</td><td>Depois de resolver no TTY</td></tr>
+<tr><td><kbd>Alt</kbd>+<kbd>SysRq</kbd>+<kbd>R</kbd> <kbd>S</kbd> <kbd>U</kbd> <kbd>B</kbd></td><td>Retoma o teclado, grava os discos, protege e reinicia</td><td>Nem o TTY responde</td></tr>
+<tr><td>Botão de energia (5 a 10 s)</td><td>Desliga na marra</td><td>Último recurso</td></tr>
+</table>
+</div>
+
+<h3>SysRq no Debian: o valor 438</h3>
+<p>As "teclas mágicas" falam direto com o kernel. O Debian liga uma parte delas com <code>kernel.sysrq = 438</code> (arquivo <code>/usr/lib/sysctl.d/50-default.conf</code>). O número é uma soma de permissões:</p>
+
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Tecla (com Alt+SysRq)</th><th>Faz</th><th>No Debian (438)</th></tr>
+<tr><td><kbd>R</kbd></td><td>Tira o teclado do controle da interface gráfica</td><td>Funciona (valor 4)</td></tr>
+<tr><td><kbd>E</kbd></td><td>Pede para os processos fecharem (sinal TERM)</td><td><strong>Bloqueada</strong> (valor 64 não incluso)</td></tr>
+<tr><td><kbd>I</kbd></td><td>Mata os processos (sinal KILL)</td><td><strong>Bloqueada</strong></td></tr>
+<tr><td><kbd>S</kbd></td><td>Grava nos discos o que está na memória</td><td>Funciona (valor 16)</td></tr>
+<tr><td><kbd>U</kbd></td><td>Remonta os discos como só leitura</td><td>Funciona (valor 32)</td></tr>
+<tr><td><kbd>B</kbd></td><td>Reinicia na hora</td><td>Funciona (valor 128)</td></tr>
+</table>
+</div>
+
+<pre class="term">$ cat /proc/sys/kernel/sysrq
+438</pre>
+
+<p>A tecla <kbd>SysRq</kbd> costuma ser a mesma do <kbd>PrtSc</kbd>; em notebooks pode precisar de <kbd>Fn</kbd>. Aperte as letras devagar, com um ou dois segundos entre elas. No Ubuntu o padrão é 176, que bloqueia também o R.</p>
+
+<hr>
+
+<h2 id="bash">No terminal (bash)</h2>
+<p>Valem em qualquer terminal, inclusive nos consoles TTY. Aula: <a href="terminal.html">O Terminal</a>.</p>
+
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Atalho</th><th>O que faz</th></tr>
+<tr><td><kbd>Tab</kbd></td><td>Completa o nome do comando ou do arquivo; <kbd>Tab</kbd> duas vezes mostra as opções</td></tr>
+<tr><td><kbd>↑</kbd> / <kbd>↓</kbd></td><td>Comandos anteriores / seguintes</td></tr>
+<tr><td><kbd>Ctrl</kbd>+<kbd>R</kbd></td><td>Busca no histórico (digite um pedaço; <kbd>Ctrl</kbd>+<kbd>R</kbd> de novo procura o anterior)</td></tr>
+<tr><td><kbd>Ctrl</kbd>+<kbd>A</kbd> / <kbd>Ctrl</kbd>+<kbd>E</kbd></td><td>Começo / fim da linha</td></tr>
+<tr><td><kbd>Alt</kbd>+<kbd>B</kbd> / <kbd>Alt</kbd>+<kbd>F</kbd></td><td>Volta / avança uma palavra</td></tr>
+<tr><td><kbd>Ctrl</kbd>+<kbd>U</kbd></td><td>Apaga do cursor até o começo da linha</td></tr>
+<tr><td><kbd>Ctrl</kbd>+<kbd>K</kbd></td><td>Apaga do cursor até o fim da linha</td></tr>
+<tr><td><kbd>Ctrl</kbd>+<kbd>W</kbd></td><td>Apaga a palavra antes do cursor</td></tr>
+<tr><td><kbd>Ctrl</kbd>+<kbd>L</kbd></td><td>Limpa a tela (o mesmo que <code>clear</code>)</td></tr>
+<tr><td><kbd>Ctrl</kbd>+<kbd>C</kbd></td><td>Cancela a linha ou interrompe o programa</td></tr>
+<tr><td><kbd>Ctrl</kbd>+<kbd>Z</kbd></td><td>Pausa o programa e devolve o prompt (volte com <code>fg</code>)</td></tr>
+<tr><td><kbd>Ctrl</kbd>+<kbd>D</kbd></td><td>Numa linha vazia, sai do shell (como <code>exit</code>)</td></tr>
+<tr><td><code>!!</code></td><td>Repete o último comando</td></tr>
+<tr><td><code>!42</code></td><td>Repete o comando número 42 do <code>history</code></td></tr>
+</table>
+</div>
+
+<div class="try" data-goal="cwd:~/Documentos/projetos/site">
+<p class="try-task"><strong>Missão:</strong> entre na pasta <code>Documentos/projetos/site</code> digitando o mínimo possível. Digite <code>cd Doc</code>, aperte <kbd>Tab</kbd>, continue com <code>pr</code> + <kbd>Tab</kbd> e <code>s</code> + <kbd>Tab</kbd>.</p>
+</div>
+
+<hr>
+
+<h2 id="terminal">Janela do terminal (gnome-terminal)</h2>
+<p>No terminal, <kbd>Ctrl</kbd>+<kbd>C</kbd> já é "interromper", por isso copiar e colar usam <kbd>Shift</kbd>.</p>
+
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Atalho</th><th>O que faz</th></tr>
+<tr><td><kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>C</kbd></td><td>Copia o texto selecionado</td></tr>
+<tr><td><kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>V</kbd></td><td>Cola</td></tr>
+<tr><td><kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>T</kbd></td><td>Nova aba</td></tr>
+<tr><td><kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>N</kbd></td><td>Nova janela</td></tr>
+<tr><td><kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>W</kbd></td><td>Fecha a aba</td></tr>
+<tr><td><kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>F</kbd></td><td>Procura texto na tela</td></tr>
+<tr><td><kbd>Ctrl</kbd>+<kbd>PgUp</kbd> / <kbd>PgDn</kbd></td><td>Aba anterior / próxima</td></tr>
+<tr><td><kbd>Ctrl</kbd>+<kbd>+</kbd> / <kbd>Ctrl</kbd>+<kbd>-</kbd></td><td>Aumenta / diminui a letra</td></tr>
+<tr><td><kbd>F11</kbd></td><td>Tela cheia</td></tr>
+</table>
+</div>
+
+<hr>
+
+<h2 id="gnome">Área de trabalho GNOME</h2>
+<p>Aula: <a href="desktop.html">O Desktop</a>.</p>
+
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Atalho</th><th>O que faz</th></tr>
+<tr><td><kbd>Super</kbd></td><td>Abre e fecha a visão geral (Atividades)</td></tr>
+<tr><td><kbd>Super</kbd>+<kbd>A</kbd></td><td>Grade de aplicativos</td></tr>
+<tr><td><kbd>Alt</kbd>+<kbd>Tab</kbd> ou <kbd>Super</kbd>+<kbd>Tab</kbd></td><td>Alterna entre programas</td></tr>
+<tr><td><kbd>Alt</kbd>+<kbd>F4</kbd></td><td>Fecha a janela</td></tr>
+<tr><td><kbd>Super</kbd>+<kbd>↑</kbd></td><td>Maximiza a janela</td></tr>
+<tr><td><kbd>Super</kbd>+<kbd>H</kbd></td><td>Minimiza (esconde) a janela</td></tr>
+<tr><td><kbd>Super</kbd>+<kbd>L</kbd></td><td>Bloqueia a tela</td></tr>
+<tr><td><kbd>Super</kbd>+<kbd>V</kbd></td><td>Notificações e calendário</td></tr>
+<tr><td><kbd>Super</kbd>+<kbd>S</kbd></td><td>Configurações rápidas (rede, som, energia)</td></tr>
+<tr><td><kbd>PrtSc</kbd></td><td>Ferramenta de captura de tela</td></tr>
+<tr><td><kbd>Shift</kbd>+<kbd>PrtSc</kbd></td><td>Captura a tela inteira na hora</td></tr>
+<tr><td><kbd>Alt</kbd>+<kbd>F2</kbd></td><td>Caixa "Executar um comando"</td></tr>
+<tr><td><kbd>Ctrl</kbd>+<kbd>Alt</kbd>+<kbd>←</kbd> / <kbd>→</kbd></td><td>Muda de área de trabalho virtual</td></tr>
+<tr><td><kbd>Ctrl</kbd>+<kbd>Alt</kbd>+<kbd>Delete</kbd></td><td>Sair da sessão</td></tr>
+</table>
+</div>
+
+<div class="warning">
+<strong>Ctrl+Alt+T não abre o terminal no Debian</strong>
+<p>Esse atalho é uma configuração do Ubuntu. No GNOME do Debian ele não existe: a lista de atalhos do GNOME 48 (pacote <code>gnome-settings-daemon-common</code>) não tem nenhuma tecla para o terminal. Para abrir o terminal, aperte <kbd>Super</kbd> e digite "terminal". Se quiser o atalho, crie em <strong>Configurações → Teclado → Atalhos de teclado → Atalhos personalizados</strong>, com o comando <code>gnome-terminal</code> e a tecla <kbd>Ctrl</kbd>+<kbd>Alt</kbd>+<kbd>T</kbd>.</p>
+</div>
+
+<hr>
+
+<h2 id="less">less e man</h2>
+<p>O <code>man</code> usa o <code>less</code> para mostrar o manual, então as teclas são as mesmas. Aulas: <a href="ver-arquivos.html">cat, less, head, tail</a> e <a href="ajuda.html">Obtendo Ajuda</a>.</p>
+
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Tecla</th><th>Faz</th></tr>
+<tr><td><kbd>Espaço</kbd> ou <kbd>f</kbd></td><td>Desce uma página</td></tr>
+<tr><td><kbd>b</kbd></td><td>Sobe uma página</td></tr>
+<tr><td><kbd>↓</kbd> <kbd>↑</kbd> ou <kbd>j</kbd> <kbd>k</kbd></td><td>Desce ou sobe uma linha</td></tr>
+<tr><td><kbd>g</kbd> / <kbd>G</kbd></td><td>Começo / fim</td></tr>
+<tr><td><code>/texto</code> <kbd>Enter</kbd></td><td>Procura "texto" para baixo</td></tr>
+<tr><td><kbd>n</kbd> / <kbd>N</kbd></td><td>Próxima / anterior ocorrência</td></tr>
+<tr><td><kbd>h</kbd></td><td>Ajuda</td></tr>
+<tr><td><kbd>q</kbd></td><td>Sai</td></tr>
+</table>
+</div>
+
+<hr>
+
+<h2 id="nano">nano (o editor padrão do Debian)</h2>
+<p>Na barra de baixo do nano, <code>^</code> quer dizer <kbd>Ctrl</kbd> e <code>M-</code> quer dizer <kbd>Alt</kbd>. Aula: <a href="editores.html">nano e vim</a>.</p>
+
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Atalho</th><th>Na tela</th><th>Faz</th></tr>
+<tr><td><kbd>Ctrl</kbd>+<kbd>O</kbd></td><td>Gravar</td><td>Salva</td></tr>
+<tr><td><kbd>Ctrl</kbd>+<kbd>X</kbd></td><td>Sair</td><td>Sai (pergunta se há mudanças)</td></tr>
+<tr><td><kbd>Ctrl</kbd>+<kbd>F</kbd></td><td>Onde está?</td><td>Procura; <kbd>Alt</kbd>+<kbd>W</kbd> vai para a próxima</td></tr>
+<tr><td><kbd>Ctrl</kbd>+<kbd>\</kbd></td><td>Substituir</td><td>Procura e troca</td></tr>
+<tr><td><kbd>Ctrl</kbd>+<kbd>K</kbd></td><td>Recortar</td><td>Recorta a linha inteira</td></tr>
+<tr><td><kbd>Ctrl</kbd>+<kbd>U</kbd></td><td>Colar</td><td>Cola o que foi recortado</td></tr>
+<tr><td><kbd>Ctrl</kbd>+<kbd>/</kbd></td><td>Ir p/ linha</td><td>Pula para uma linha</td></tr>
+<tr><td><kbd>Alt</kbd>+<kbd>U</kbd></td><td>—</td><td>Desfaz</td></tr>
+<tr><td><kbd>Ctrl</kbd>+<kbd>G</kbd></td><td>Ajuda</td><td>Lista todos os atalhos</td></tr>
+</table>
+</div>
+
+<hr>
+
+<h2 id="vim">Vim: o mínimo para sobreviver</h2>
+<p>O <code>vi</code> do Debian abre o <code>vim.tiny</code>. Se ele abrir sem querer (num <code>crontab -e</code>, por exemplo), estas teclas resolvem. Para aprender de verdade, veja o <a href="https://wallysondevs.github.io/guia-vim/">Guia Vim</a>.</p>
+
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Teclas</th><th>Faz</th></tr>
+<tr><td><kbd>i</kbd></td><td>Começa a digitar (modo de inserção)</td></tr>
+<tr><td><kbd>Esc</kbd></td><td>Para de digitar (volta ao modo normal)</td></tr>
+<tr><td><code>:wq</code> <kbd>Enter</kbd></td><td>Salva e sai</td></tr>
+<tr><td><code>:q!</code> <kbd>Enter</kbd></td><td>Sai sem salvar</td></tr>
+<tr><td><kbd>u</kbd></td><td>Desfaz</td></tr>
+<tr><td><kbd>d</kbd><kbd>d</kbd></td><td>Apaga a linha</td></tr>
+<tr><td><code>/texto</code> <kbd>Enter</kbd></td><td>Procura</td></tr>
+</table>
+</div>
+
+<hr>
+
+<h2 id="tmux">tmux</h2>
+<p>Todo atalho começa com o prefixo <kbd>Ctrl</kbd>+<kbd>B</kbd>. O tmux não vem instalado: <code>su -c "apt install tmux"</code>. Aula: <a href="jobs.html">Jobs, nohup, tmux</a>.</p>
+
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Atalho</th><th>O que faz</th></tr>
+<tr><td><code>Ctrl+B D</code></td><td>Desanexa (sai e deixa rodando)</td></tr>
+<tr><td><code>Ctrl+B C</code></td><td>Nova janela</td></tr>
+<tr><td><code>Ctrl+B N</code> / <code>P</code></td><td>Próxima / janela anterior</td></tr>
+<tr><td><code>Ctrl+B %</code></td><td>Divide a tela lado a lado</td></tr>
+<tr><td><code>Ctrl+B "</code></td><td>Divide em cima e embaixo</td></tr>
+<tr><td><code>Ctrl+B</code> setas</td><td>Muda de painel</td></tr>
+<tr><td><code>Ctrl+B [</code></td><td>Modo de rolagem (sai com <kbd>q</kbd>)</td></tr>
+<tr><td><code>Ctrl+B ?</code></td><td>Lista todos os atalhos</td></tr>
+</table>
+</div>
+
+<hr>
+
+<h2>Exercícios</h2>
+
+<div class="exercise">
+<h3>1. Copiar no terminal</h3>
+<p>Qual atalho copia o texto selecionado na janela do terminal?</p>
+<div class="ex-code"><input data-answer="Ctrl+Shift+C|ctrl+shift+c|Ctrl+Shift+c" aria-label="atalho"></div>
+</div>
+
+<div class="exercise">
+<h3>2. Sair do Vim sem salvar</h3>
+<div class="ex-code"><input data-answer=":q!" aria-label="comando"> e Enter</div>
+</div>
+
+<div class="mc" data-answer="3">
+<p class="mc-q">3. A interface gráfica do Debian congelou. Qual atalho tentar primeiro?</p>
+<label><input type="radio" name="q3"> Alt+SysRq+B</label>
+<label><input type="radio" name="q3"> Segurar o botão de energia</label>
+<label><input type="radio" name="q3"> Ctrl+Alt+F3, para abrir um console de texto</label>
+<label><input type="radio" name="q3"> Ctrl+Alt+T</label>
+</div>
+
+<div class="mc" data-answer="2">
+<p class="mc-q">4. Com o padrão do Debian (<code>kernel.sysrq = 438</code>), qual letra do REISUB <strong>não</strong> funciona?</p>
+<label><input type="radio" name="q4"> R</label>
+<label><input type="radio" name="q4"> E</label>
+<label><input type="radio" name="q4"> S</label>
+<label><input type="radio" name="q4"> B</label>
+</div>
+
+<hr>
+
+<h2>Resumo</h2>
+<ul>
+  <li>Travou? <kbd>Ctrl</kbd>+<kbd>Alt</kbd>+<kbd>F3</kbd>; se nada responder, <kbd>Alt</kbd>+<kbd>SysRq</kbd>+<kbd>R</kbd> <kbd>S</kbd> <kbd>U</kbd> <kbd>B</kbd>.</li>
+  <li>No terminal, copiar e colar levam <kbd>Shift</kbd>: <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>C</kbd> / <kbd>V</kbd>.</li>
+  <li><kbd>Tab</kbd> completa, <kbd>Ctrl</kbd>+<kbd>R</kbd> busca no histórico.</li>
+  <li>No Debian não há <kbd>Ctrl</kbd>+<kbd>Alt</kbd>+<kbd>T</kbd> pronto; crie o atalho nas Configurações se quiser.</li>
+</ul>
+
+<div class="pager"></div>
+
+</div>
+</main>
+</div>
+<script src="assets/site.js"></script>
+</body>
+</html>

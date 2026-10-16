@@ -1,0 +1,300 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Debian Estrutura de Diretórios — onde fica cada coisa | Guia Debian</title>
+<meta name="description" content="A árvore de pastas do Debian 13 explicada: /, /home, /etc, /var, /usr, /tmp em tmpfs, os atalhos /bin → usr/bin e os links vmlinuz na raiz, com saídas reais.">
+<link rel="stylesheet" href="assets/style.css">
+<script>try{var t=localStorage.getItem("tema");if(t)document.documentElement.setAttribute("data-theme",t)}catch(e){}</script>
+</head>
+<body>
+<div class="layout">
+<nav class="sidebar" id="sidebar" aria-label="Tópicos"></nav>
+<main class="main">
+<div class="content">
+
+<div class="pager"></div>
+
+<h1>Debian <span class="hl">Estrutura de Diretórios</span></h1>
+
+<p class="intro">No Windows existem o <code>C:</code>, o <code>D:</code> e cada disco tem a sua árvore. No Debian existe <strong>uma árvore só</strong>, que começa numa pasta chamada <code>/</code> (a "raiz"). Tudo fica pendurado nela: seus arquivos, os programas, as configurações e até os pendrives.</p>
+
+<div class="note">
+<strong>Você vai aprender</strong>
+<ul>
+  <li>O que é a raiz <code>/</code> e como ver o que existe nela.</li>
+  <li>Para que serve cada pasta principal: <code>/home</code>, <code>/etc</code>, <code>/var</code>, <code>/usr</code>, <code>/tmp</code>…</li>
+  <li>Por que <code>/bin</code> é só um atalho para <code>/usr/bin</code> no Debian 13.</li>
+  <li>Por que o que você põe em <code>/tmp</code> some ao reiniciar.</li>
+  <li>Por que ninguém além de você consegue abrir a sua pasta pessoal.</li>
+</ul>
+</div>
+
+<p>Os exemplos acontecem na máquina <strong>notebook</strong>, com a usuária <strong>ana</strong>, rodando Debian 13 "trixie". As saídas foram copiadas de um Debian 13 real.</p>
+
+<hr>
+
+<h2>A raiz: <code>/</code></h2>
+<p>A barra sozinha, <code>/</code>, é a pasta de cima de todas. Para ver o que há nela, liste-a com <code>ls</code>:</p>
+
+<dl class="anatomy">
+  <dt>ls</dt><dd>O programa que lista o conteúdo de uma pasta (de <em>list</em>).</dd>
+  <dt>/</dt><dd>O argumento: a pasta a listar. Aqui, a raiz.</dd>
+</dl>
+
+<pre class="term">$ ls /
+bin   etc         initrd.img.old  lost+found  opt   run   sys  var
+boot  home        lib             media       proc  sbin  tmp  vmlinuz
+dev   initrd.img  lib64           mnt         root  srv   usr  vmlinuz.old</pre>
+
+<p>São cerca de 25 itens. Você não precisa decorar todos: no dia a dia você vai usar <code>/home</code>, <code>/etc</code>, <code>/var/log</code> e <code>/tmp</code>. Os outros aparecem quando você for administrar a máquina.</p>
+
+<div class="tip">
+<strong>Árvore de cabeça para baixo</strong>
+<p>Pense numa árvore genealógica: a raiz <code>/</code> fica em cima e as pastas se ramificam para baixo. <code>/home/ana/Documentos</code> é lido como "a pasta Documentos, dentro de ana, dentro de home, dentro da raiz".</p>
+</div>
+
+<hr>
+
+<h2>O mapa das pastas</h2>
+<p>Essa organização segue um padrão chamado FHS (<em>Filesystem Hierarchy Standard</em>, "padrão da hierarquia do sistema de arquivos"). Por isso ela é quase igual em qualquer Linux.</p>
+
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Pasta</th><th>O que guarda</th><th>Exemplo real no Debian</th></tr>
+<tr><td><code>/home</code></td><td>As pastas pessoais de cada usuário</td><td><code>/home/ana</code></td></tr>
+<tr><td><code>/root</code></td><td>A pasta pessoal do administrador (root)</td><td>Só o root entra</td></tr>
+<tr><td><code>/etc</code></td><td>Configurações do sistema, em arquivos de texto</td><td><code>/etc/apt/sources.list</code>, <code>/etc/hostname</code></td></tr>
+<tr><td><code>/var</code></td><td>Dados que mudam: logs, filas, caches, bancos</td><td><code>/var/log</code>, <code>/var/cache/apt</code></td></tr>
+<tr><td><code>/usr</code></td><td>Os programas e as bibliotecas instalados</td><td><code>/usr/bin/ls</code>, <code>/usr/share/doc</code></td></tr>
+<tr><td><code>/usr/local</code></td><td>Programas que você instala à mão, fora do apt</td><td><code>/usr/local/bin</code></td></tr>
+<tr><td><code>/opt</code></td><td>Programas grandes de terceiros, cada um na sua pasta</td><td>Costuma vir vazia</td></tr>
+<tr><td><code>/tmp</code></td><td>Arquivos temporários de qualquer usuário</td><td>Apagada ao reiniciar</td></tr>
+<tr><td><code>/boot</code></td><td>O kernel e os arquivos de inicialização</td><td><code>vmlinuz-6.12.111+deb13-amd64</code></td></tr>
+<tr><td><code>/dev</code></td><td>Dispositivos (discos, terminais) vistos como arquivos</td><td><code>/dev/sda</code></td></tr>
+<tr><td><code>/proc</code>, <code>/sys</code></td><td>Informações do kernel em tempo real (não ocupam disco)</td><td><code>/proc/cpuinfo</code></td></tr>
+<tr><td><code>/media</code></td><td>Onde aparecem pendrives e CDs montados</td><td><code>/media/cdrom</code></td></tr>
+<tr><td><code>/mnt</code></td><td>Ponto livre para montar discos à mão</td><td>Vazia por padrão</td></tr>
+<tr><td><code>/srv</code></td><td>Dados servidos por servidores (site, FTP)</td><td>Vazia por padrão</td></tr>
+<tr><td><code>/lost+found</code></td><td>Pedaços recuperados por uma verificação de disco</td><td>Só o root vê</td></tr>
+</table>
+</div>
+
+<div class="try" data-goal="cwd:/etc/apt,ran:cat .*sources\.list">
+<p class="try-task"><strong>Missão:</strong> vá até a pasta onde o Debian guarda a lista de repositórios (<code>/etc/apt</code>) e mostre o arquivo <code>sources.list</code> com <code>cat</code>. Use <code>cd</code> para entrar e <code>ls</code> para olhar em volta.</p>
+</div>
+
+<hr>
+
+<h2>/bin, /lib e /sbin são atalhos</h2>
+<p>Na listagem da raiz aparecem <code>bin</code>, <code>lib</code> e <code>sbin</code>. No Debian 13 eles não são pastas de verdade: são <strong>links simbólicos</strong>, atalhos para pastas dentro de <code>/usr</code>. O <code>-l</code> do <code>ls</code> mostra para onde cada um aponta, e o <code>-d</code> mostra o próprio item, não o conteúdo dele:</p>
+
+<pre class="term">$ ls -ld /bin /lib /lib64 /sbin
+lrwxrwxrwx 1 root root 7 out 15 20:11 /bin -> usr/bin        « l = link; a seta mostra o destino
+lrwxrwxrwx 1 root root 7 out 15 20:11 /lib -> usr/lib
+lrwxrwxrwx 1 root root 9 out 15 20:11 /lib64 -> usr/lib64
+lrwxrwxrwx 1 root root 8 out 15 20:11 /sbin -> usr/sbin</pre>
+
+<p>Essa mudança se chama <strong>usrmerge</strong> ("juntar no /usr"). Antigamente, os programas básicos ficavam em <code>/bin</code> e os outros em <code>/usr/bin</code>. Hoje tudo mora em <code>/usr/bin</code>, e o <code>/bin</code> continua existindo só para que scripts antigos, que chamam <code>/bin/bash</code>, sigam funcionando.</p>
+
+<p>Você pode confirmar com o <code>pwd</code>: o <code>-P</code> mostra o caminho físico, já resolvido.</p>
+
+<pre class="term">$ cd /bin
+$ pwd
+/bin
+$ pwd -P
+/usr/bin                       « o lugar de verdade</pre>
+
+<hr>
+
+<h2>/sbin e /usr/sbin: programas do administrador</h2>
+<p>Os programas de administração (<code>reboot</code>, <code>adduser</code>, <code>fdisk</code>…) ficam em <code>/usr/sbin</code>. No Debian, essa pasta <strong>não está no caminho de busca</strong> de usuários comuns. Por isso a Ana recebe "comando não encontrado" mesmo com o programa instalado:</p>
+
+<pre class="term">$ reboot
+bash: reboot: comando não encontrado
+$ echo $PATH
+/usr/local/bin:/usr/bin:/bin:/usr/local/games:/usr/games       « sem nenhum sbin</pre>
+
+<p>Como root, esses programas aparecem normalmente. Você vai entender o porquê em <a href="root-su-sudo.html">root, su e sudo</a>.</p>
+
+<hr>
+
+<h2>/home: a sua casa, trancada</h2>
+<p>Cada usuário tem uma pasta dentro de <code>/home</code>. A da Ana é <code>/home/ana</code>, e o til (<code>~</code>) é um apelido para ela. Veja as permissões:</p>
+
+<pre class="term">$ ls -ld /home/ana
+drwx------ 10 ana ana 4096 out 15 08:47 /home/ana</pre>
+
+<p>O <code>drwx------</code> quer dizer que só a dona (ana) pode ler, escrever e entrar. Outros usuários da mesma máquina não conseguem nem listar o que há lá dentro. É o padrão do Debian 13: a pasta pessoal nasce com permissão <strong>700</strong>, mais fechada que a de outras distribuições. Você vai ler essas letras com calma em <a href="permissoes.html">Entendendo Permissões</a>.</p>
+
+<p>A pasta do administrador, <code>/root</code>, segue a mesma ideia:</p>
+
+<pre class="term">$ ls /root
+ls: não foi possível abrir o diretório '/root': Permissão negada</pre>
+
+<div class="try" data-goal="ran:ls -l?d.*(~|/home/ana)">
+<p class="try-task"><strong>Missão:</strong> confira as permissões da sua própria pasta pessoal com <code>ls -ld ~</code> e depois tente entrar em <code>/root</code> com <code>cd /root</code> para ver a resposta.</p>
+</div>
+
+<hr>
+
+<h2>/tmp: o que está lá some ao reiniciar</h2>
+<p>No Debian 13, a pasta <code>/tmp</code> fica na <strong>memória RAM</strong>, não no disco. O comando <code>findmnt</code> mostra de onde vem cada pasta montada:</p>
+
+<pre class="term">$ findmnt /tmp
+TARGET SOURCE FSTYPE OPTIONS
+/tmp   tmpfs  tmpfs  rw,nosuid,nodev,nr_inodes=1048576,inode64      « tmpfs = sistema de arquivos na memória</pre>
+
+<p>Isso deixa o <code>/tmp</code> rápido, mas tem uma consequência: <strong>tudo o que estiver lá desaparece quando o computador reinicia</strong>.</p>
+
+<div class="warning">
+<strong>Atenção</strong>
+<p>Nunca guarde em <code>/tmp</code> nada que você queira manter. Baixou um arquivo para lá? Mova para a sua pasta pessoal antes de desligar. Até o Debian 12 o <code>/tmp</code> ficava no disco; quem vem de versões antigas costuma se surpreender.</p>
+</div>
+
+<hr>
+
+<h2>/var/log: cadê o syslog?</h2>
+<p>Quem vem de tutoriais antigos procura o arquivo <code>/var/log/syslog</code> e não encontra:</p>
+
+<pre class="term">$ ls /var/log
+alternatives.log  btmp      installer  lastlog  README  wtmp
+apt               dpkg.log  journal    private  runit   wtmp.db</pre>
+
+<p>No Debian 13 os registros do sistema ficam no <strong>journal</strong> do systemd (a pasta <code>journal</code> acima), e se leem com o comando <code>journalctl</code>. O próprio Debian deixa um aviso no arquivo <code>README</code>:</p>
+
+<pre class="term">$ head -4 /var/log/README
+You are looking for the traditional text log files in /var/log, and they are
+gone?
+
+Here's an explanation on what's going on:</pre>
+
+<p>Os detalhes ficam para a aula <a href="journalctl.html">Logs (journalctl)</a>.</p>
+
+<hr>
+
+<h2>Os links vmlinuz e initrd.img na raiz</h2>
+<p>Na raiz aparecem <code>vmlinuz</code>, <code>initrd.img</code> e versões <code>.old</code>. São atalhos para o kernel (o núcleo do sistema) que está em <code>/boot</code>:</p>
+
+<pre class="term">$ ls -l /vmlinuz /vmlinuz.old
+lrwxrwxrwx 1 root root 33 out 15 20:39 /vmlinuz -> boot/vmlinuz-6.12.111+deb13-amd64
+lrwxrwxrwx 1 root root 32 out 15 20:32 /vmlinuz.old -> boot/vmlinuz-6.12.86+deb13-amd64</pre>
+
+<p>Quando o Debian atualiza o kernel, ele guarda o anterior e aponta o <code>.old</code> para ele. Se o kernel novo der problema, o anterior continua disponível no menu de boot. Você não precisa mexer nesses links.</p>
+
+<hr>
+
+<h2>Arquivos que contam sobre o sistema</h2>
+<p>Como as configurações ficam em <code>/etc</code> como texto, dá para descobrir muita coisa só lendo arquivos:</p>
+
+<pre class="term">$ cat /etc/debian_version
+13.7
+$ cat /etc/hostname
+notebook
+$ grep PRETTY /etc/os-release
+PRETTY_NAME="Debian GNU/Linux 13 (trixie)"</pre>
+
+<div class="try" data-goal="ran:cat .*(debian_version|os-release)">
+<p class="try-task"><strong>Missão:</strong> descubra a versão do Debian desta máquina lendo um arquivo de <code>/etc</code>. Dica: um deles tem "debian" no nome.</p>
+</div>
+
+<hr>
+
+<h2>Formas diferentes de explorar a árvore</h2>
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Forma</th><th>Exemplo</th><th>Quando usar</th></tr>
+<tr><td><code>ls</code> na pasta</td><td><code>ls /etc</code></td><td>Ver o que há em uma pasta</td></tr>
+<tr><td><code>cd</code> e <code>ls</code></td><td><code>cd /var/log</code> e <code>ls</code></td><td>Explorar com calma, pasta por pasta</td></tr>
+<tr><td><code>tree</code></td><td><code>tree -L 1 /</code></td><td>Desenhar a árvore (instale com <code>apt install tree</code> como root)</td></tr>
+<tr><td><code>findmnt</code></td><td><code>findmnt /tmp</code></td><td>Saber em que disco ou memória uma pasta está</td></tr>
+<tr><td>Gerenciador de arquivos</td><td>Arquivos → Outros locais → Computador</td><td>No desktop, para olhar sem digitar</td></tr>
+</table>
+</div>
+
+<hr>
+
+<h2>Quando não funciona</h2>
+
+<div class="cenario">
+<strong>"Permissão negada" ao entrar numa pasta</strong>
+<pre class="term">$ cd /root
+bash: cd: /root: Permissão negada</pre>
+<p><strong>O que aconteceu:</strong> a pasta pertence a outro usuário e está fechada para você.</p>
+<p><strong>Como resolver:</strong> se for mesmo necessário, vire administrador com <code>su -</code> (veja <a href="root-su-sudo.html">root, su e sudo</a>). Para a pasta pessoal de outra pessoa, peça a ela que compartilhe o arquivo.</p>
+</div>
+
+<div class="cenario">
+<strong>Salvei um arquivo em /tmp e ele sumiu</strong>
+<p><strong>O que aconteceu:</strong> no Debian 13 o <code>/tmp</code> fica na memória e é esvaziado a cada reinício.</p>
+<p><strong>Como resolver:</strong> guarde arquivos que importam em <code>~/</code> (sua pasta pessoal). Para temporários que precisam sobreviver a um reinício, existe <code>/var/tmp</code>.</p>
+</div>
+
+<div class="cenario">
+<strong>"Arquivo ou diretório inexistente" no /var/log/syslog</strong>
+<pre class="term">$ tail /var/log/syslog
+tail: não foi possível abrir '/var/log/syslog' para leitura: Arquivo ou diretório inexistente</pre>
+<p><strong>O que aconteceu:</strong> o Debian 13 não instala o rsyslog; os logs estão no journal.</p>
+<p><strong>Como resolver:</strong> use <code>journalctl</code>. Se você precisa mesmo do arquivo de texto, o root pode instalar o pacote <code>rsyslog</code>.</p>
+</div>
+
+<div class="cenario">
+<strong>"comando não encontrado" para um programa que existe</strong>
+<pre class="term">$ adduser teste
+bash: adduser: comando não encontrado</pre>
+<p><strong>O que aconteceu:</strong> o programa está em <code>/usr/sbin</code>, que não faz parte do PATH de usuários comuns no Debian.</p>
+<p><strong>Como resolver:</strong> rode como root, com <code>su -</code>. O traço importa: <code>su -</code> carrega o PATH do root, que inclui as pastas <code>sbin</code>.</p>
+</div>
+
+<hr>
+
+<h2>Exercícios</h2>
+
+<div class="exercise">
+<h3>1. Onde ficam as configurações?</h3>
+<p>Complete com a pasta onde o Debian guarda as configurações do sistema:</p>
+<div class="ex-code">ls <input data-answer="/etc|/etc/" aria-label="pasta"></div>
+</div>
+
+<div class="exercise">
+<h3>2. Para onde aponta?</h3>
+<p>Complete para ver para onde o atalho <code>/bin</code> aponta, sem listar o conteúdo dele:</p>
+<div class="ex-code">ls <input data-answer="-ld|-dl|-l -d|-d -l" aria-label="opções"> /bin</div>
+</div>
+
+<div class="mc" data-answer="3">
+<p class="mc-q">3. Você baixou <code>relatorio.pdf</code> para <code>/tmp</code> e reiniciou o Debian 13. O que acontece com o arquivo?</p>
+<label><input type="radio" name="q3"> Continua lá, como qualquer arquivo.</label>
+<label><input type="radio" name="q3"> Vai para a lixeira.</label>
+<label><input type="radio" name="q3"> Some, porque o <code>/tmp</code> fica na memória (tmpfs).</label>
+<label><input type="radio" name="q3"> É movido para <code>/var/tmp</code>.</label>
+</div>
+
+<div class="mc" data-answer="2">
+<p class="mc-q">4. Por que a usuária <code>joao</code> não consegue listar <code>/home/ana</code>?</p>
+<label><input type="radio" name="q4"> Porque a pasta está vazia.</label>
+<label><input type="radio" name="q4"> Porque ela tem permissão 700: só a dona entra.</label>
+<label><input type="radio" name="q4"> Porque <code>/home</code> é só para o root.</label>
+<label><input type="radio" name="q4"> Porque falta instalar o sudo.</label>
+</div>
+
+<hr>
+
+<h2>Resumo</h2>
+<ul>
+  <li>Há uma árvore só, que começa em <code>/</code>.</li>
+  <li>Seus arquivos ficam em <code>/home/ana</code> (o <code>~</code>), que no Debian 13 é fechada (700).</li>
+  <li>Configurações em <code>/etc</code>, programas em <code>/usr</code>, logs no journal (<code>journalctl</code>).</li>
+  <li><code>/bin</code>, <code>/lib</code> e <code>/sbin</code> são atalhos para dentro de <code>/usr</code> (usrmerge).</li>
+  <li><code>/tmp</code> fica na memória e é esvaziado ao reiniciar.</li>
+</ul>
+
+<div class="pager"></div>
+
+</div>
+</main>
+</div>
+<script src="assets/site.js"></script>
+</body>
+</html>

@@ -1,0 +1,543 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Debian Docker — containers explicados parte por parte | Guia Debian</title>
+<meta name="description" content="Docker no Debian 13: docker.io do Debian x docker-ce oficial, instalação com su, grupo docker, docker run explicado, portas, volumes, Dockerfile, Compose e os erros mais comuns.">
+<link rel="stylesheet" href="assets/style.css">
+<script>try{var t=localStorage.getItem("tema");if(t)document.documentElement.setAttribute("data-theme",t)}catch(e){}</script>
+</head>
+<body>
+<div class="layout">
+<nav class="sidebar" id="sidebar" aria-label="Tópicos"></nav>
+<main class="main">
+<div class="content">
+
+<div class="pager"></div>
+
+<h1>Debian <span class="hl">Docker</span></h1>
+
+<p class="intro">O <strong>Docker</strong> roda programas dentro de <strong>containers</strong>: caixas isoladas que já trazem tudo o que o programa precisa. Com ele você sobe um servidor web, um banco de dados ou um app inteiro com um comando, sem bagunçar o seu Debian, e apaga tudo com outro comando.</p>
+
+<div class="note">
+<strong>Você vai aprender</strong>
+<ul>
+  <li>A diferença entre container, imagem e máquina virtual.</li>
+  <li>As duas formas de instalar o Docker no Debian (<code>docker.io</code> e <code>docker-ce</code>), e qual escolher.</li>
+  <li>Como liberar o Docker para a sua usuária sem <code>sudo</code>, do jeito Debian.</li>
+  <li>O que cada parte de <code>docker run -d -p 8080:80 --name web nginx</code> faz.</li>
+  <li>Volumes, <code>Dockerfile</code>, Compose e os erros mais comuns.</li>
+</ul>
+</div>
+
+<p>As saídas desta página vêm do Debian 13 de laboratório (usuária <strong>ana</strong>, máquina <strong>notebook</strong>). IDs, tamanhos e horários mudam a cada execução.</p>
+
+<div class="tip">
+<strong>Prefere sem daemon e sem root?</strong>
+<p>O Debian também empacota o <a href="podman.html">Podman</a>, que usa os mesmos comandos do Docker e roda como usuário comum. Vale ler as duas aulas.</p>
+</div>
+
+<hr>
+
+<h2>Conceito: imagem, container e VM</h2>
+<p>Três palavras aparecem o tempo todo. Pense numa receita de bolo:</p>
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Palavra</th><th>Analogia</th><th>O que é de verdade</th></tr>
+<tr><td><strong>Imagem</strong></td><td>A receita</td><td>Um pacote somente-leitura com o programa e tudo de que ele precisa. Ex.: <code>nginx</code>, <code>postgres</code>, <code>debian:trixie</code>.</td></tr>
+<tr><td><strong>Container</strong></td><td>O bolo feito</td><td>Uma imagem <em>rodando</em>. Da mesma imagem saem quantos containers você quiser.</td></tr>
+<tr><td><strong>Registro</strong></td><td>O livro de receitas</td><td>Onde as imagens ficam. O padrão é o <a href="https://hub.docker.com/">Docker Hub</a>.</td></tr>
+</table>
+</div>
+
+<div class="table-wrap">
+<table class="ref">
+<tr><th></th><th>Container (Docker, Podman)</th><th>Máquina virtual (<a href="kvm.html">KVM</a>, VirtualBox)</th></tr>
+<tr><td>Kernel</td><td>Usa o kernel do próprio Debian</td><td>Tem kernel próprio</td></tr>
+<tr><td>Sobe em</td><td>Menos de 1 segundo</td><td>Dezenas de segundos</td></tr>
+<tr><td>Tamanho típico</td><td>Dezenas a centenas de MB</td><td>Vários GB</td></tr>
+<tr><td>Roda outro sistema?</td><td>Só Linux (outra distribuição, sim)</td><td>Qualquer um, até Windows</td></tr>
+<tr><td>Melhor para</td><td>Rodar apps e serviços</td><td>Rodar um sistema inteiro</td></tr>
+</table>
+</div>
+
+<hr>
+
+<h2>Instalar: duas formas</h2>
+<div class="table-wrap">
+<table class="ref">
+<tr><th></th><th><code>docker.io</code> (do Debian)</th><th><code>docker-ce</code> (oficial da Docker Inc.)</th></tr>
+<tr><td>De onde vem</td><td>Repositório <code>main</code> do próprio Debian</td><td><code>download.docker.com/linux/debian</code></td></tr>
+<tr><td>Versão no Debian 13</td><td>26.1.5 (fica nessa linha durante toda a vida do Debian 13, só com correções)</td><td>Sempre a mais nova</td></tr>
+<tr><td>Segurança</td><td>Atualizada pela equipe de segurança do Debian, junto com o sistema</td><td>Atualizada pela Docker</td></tr>
+<tr><td>Compose</td><td>Pacote <code>docker-compose</code> (versão 2, comando <code>docker compose</code>)</td><td>Pacote <code>docker-compose-plugin</code></td></tr>
+<tr><td>Para quem</td><td>Quem está aprendendo e servidores que preferem o ritmo estável do Debian</td><td>Quem precisa de um recurso recente</td></tr>
+</table>
+</div>
+
+<p>Não instale os dois juntos: eles brigam pelos mesmos arquivos.</p>
+
+<h3>Forma 1: pacote do Debian</h3>
+<p>No Debian instalado com senha de root, a <code>ana</code> não tem <code>sudo</code>. Por isso, primeiro viramos root com <code>su -</code> (veja <a href="root-su-sudo.html">root, su e sudo</a>).</p>
+
+<dl class="anatomy">
+  <dt>su -</dt><dd>Vira root, pedindo a senha do root.</dd>
+  <dt>apt install</dt><dd>Instala pacotes (veja <a href="apt.html">apt</a>).</dd>
+  <dt>docker.io</dt><dd>O motor do Docker (o <em>daemon</em> <code>dockerd</code>) e o comando <code>docker</code>.</dd>
+  <dt>docker-compose</dt><dd>O Compose versão 2, para vários containers.</dd>
+</dl>
+
+<pre class="term">$ su -
+Senha:</pre>
+<pre class="term" data-user="root" data-cwd="/root">#> apt install docker.io docker-compose
+…
+Configurando docker.io (26.1.5+dfsg1-9+deb13u1) ...
+Created symlink '/etc/systemd/system/multi-user.target.wants/docker.service' → '/usr/lib/systemd/system/docker.service'.
+Created symlink '/etc/systemd/system/sockets.target.wants/docker.socket' → '/usr/lib/systemd/system/docker.socket'.
+…
+#> systemctl is-active docker
+active                                          « o serviço já está rodando
+#> docker --version
+Docker version 26.1.5+dfsg1, build a72d7cd      « o "+dfsg1" indica a versão empacotada pelo Debian</pre>
+<p>O pacote <code>docker.io</code> também puxa o <code>iptables</code>, que o Docker usa para publicar portas, e cria o grupo <code>docker</code>.</p>
+
+<h3>Forma 2: repositório oficial da Docker</h3>
+<p>O passo a passo atual fica em <a href="https://docs.docker.com/engine/install/debian/">docs.docker.com/engine/install/debian</a>. A ideia, como root: baixar a chave da Docker para <code>/etc/apt/keyrings</code>, criar o arquivo do repositório apontando para ela com <code>signed-by</code> e instalar.</p>
+
+<pre class="term" data-user="root" data-cwd="/root">#> apt install ca-certificates curl
+#> install -m 0755 -d /etc/apt/keyrings
+#> curl -fsSL https://download.docker.com/linux/debian/gpg -o /etc/apt/keyrings/docker.asc
+#> chmod a+r /etc/apt/keyrings/docker.asc
+#> nano /etc/apt/sources.list.d/docker.sources</pre>
+
+<pre class="file" data-file="/etc/apt/sources.list.d/docker.sources">Types: deb
+URIs: https://download.docker.com/linux/debian
+Suites: trixie
+Components: stable
+Signed-By: /etc/apt/keyrings/docker.asc</pre>
+
+<pre class="term" data-user="root" data-cwd="/root">#> apt update
+#> apt install docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin</pre>
+
+<dl class="anatomy">
+  <dt>Signed-By</dt><dd>Diz ao apt que <strong>só</strong> esta chave vale para este repositório. Assim, a chave da Docker não pode assinar pacotes de outros repositórios. Veja <a href="repositorios.html">Repositórios</a>.</dd>
+  <dt>Suites: trixie</dt><dd>O codinome do Debian 13. Num Debian 12, seria <code>bookworm</code>.</dd>
+</dl>
+
+<hr>
+
+<h2>Usar sem root: o grupo <code>docker</code></h2>
+<p>O comando <code>docker</code> conversa com o serviço por um arquivo especial, o <em>socket</em> <code>/var/run/docker.sock</code>. Só o root e quem está no grupo <code>docker</code> podem usá-lo. A ana, logo depois da instalação:</p>
+
+<pre class="term">$ docker ps
+permission denied while trying to connect to the Docker daemon socket at unix:///var/run/docker.sock: Get "http://%2Fvar%2Frun%2Fdocker.sock/v1.45/containers/json": dial unix /var/run/docker.sock: connect: permission denied
+$ echo $?
+1
+$ groups
+ana cdrom floppy audio dip video plugdev users netdev     « nada de docker</pre>
+
+<p>Para liberar, o root coloca a ana no grupo. Repare que o <code>usermod</code> está em <code>/usr/sbin</code>, fora do PATH da ana; por isso ele roda na sessão de root:</p>
+
+<dl class="anatomy">
+  <dt>usermod</dt><dd>Altera uma conta (veja <a href="usuarios.html">Usuários e Grupos</a>).</dd>
+  <dt>-aG docker</dt><dd><code>-a</code> = acrescentar, <code>-G docker</code> = ao grupo docker. Sem o <code>-a</code>, a ana sairia de todos os outros grupos.</dd>
+  <dt>ana</dt><dd>A usuária.</dd>
+</dl>
+
+<pre class="term" data-user="root" data-cwd="/root">#> usermod -aG docker ana
+#> groups ana
+ana : ana cdrom floppy audio dip video plugdev users netdev docker</pre>
+<p>Depois de sair e entrar de novo, na sessão da ana:</p>
+<pre class="term">$ groups
+ana cdrom floppy audio dip video plugdev users netdev docker
+$ docker ps
+CONTAINER ID   IMAGE     COMMAND   CREATED   STATUS    PORTS     NAMES     « funcionou (lista vazia)</pre>
+
+<p>O grupo novo só vale em sessões novas: saia e entre de novo (ou use <code>newgrp docker</code> no terminal atual).</p>
+
+<div class="warning">
+<strong>Atenção: grupo docker = poder de root</strong>
+<p>Quem está no grupo <code>docker</code> consegue montar o disco inteiro dentro de um container e mexer em qualquer arquivo do sistema. É o mesmo que dar a senha de root. Num Debian em que a ana propositalmente não tem sudo, pense duas vezes; o <a href="podman.html">Podman</a> sem root é a alternativa segura.</p>
+</div>
+
+<hr>
+
+<h2>O primeiro container: <code>hello-world</code></h2>
+
+<dl class="anatomy">
+  <dt>docker</dt><dd>O cliente: só pede coisas ao serviço.</dd>
+  <dt>run</dt><dd>Cria um container a partir de uma imagem e o roda.</dd>
+  <dt>hello-world</dt><dd>A imagem. Sem <code>:versão</code>, vale <code>:latest</code>.</dd>
+</dl>
+
+<pre class="term">$ docker run hello-world
+Unable to find image 'hello-world:latest' locally         « não tinha a imagem aqui…
+latest: Pulling from library/hello-world                  « …então baixou do Docker Hub
+4f55086f7dd0: Pull complete
+Digest: sha256:11a3eb1597e864c51b3f56733cb2e8a90bf0c284bfc05f9444d81c558bc848aa
+Status: Downloaded newer image for hello-world:latest
+
+Hello from Docker!                                         « daqui para baixo é o programa rodando
+This message shows that your installation appears to be working correctly.
+
+To generate this message, Docker took the following steps:
+ 1. The Docker client contacted the Docker daemon.
+ 2. The Docker daemon pulled the "hello-world" image from the Docker Hub.
+    (amd64)
+ 3. The Docker daemon created a new container from that image which runs the
+    executable that produces the output you are currently reading.
+ 4. The Docker daemon streamed that output to the Docker client, which sent it
+    to your terminal.
+…</pre>
+
+<p>Leia em duas partes: as primeiras linhas são o Docker <strong>baixando a imagem</strong> (só na primeira vez); o resto é o programa de dentro do container, que imprime a mensagem e termina. Quando ele termina, o container para.</p>
+
+<h3>O que o comando devolve</h3>
+<p><code>docker run</code> devolve o código de saída do programa de dentro do container, então dá para usar containers em scripts:</p>
+<pre class="term">$ docker run --rm debian:trixie true
+$ echo $?
+0
+$ docker run --rm debian:trixie false
+$ echo $?
+1                              « o "false" de dentro do container falhou
+$ docker run --rm debian:trixie comando-que-nao-existe
+docker: Error response from daemon: failed to create task for container: failed to create shim task: OCI runtime create failed: runc create failed: unable to start container process: exec: "comando-que-nao-existe": executable file not found in $PATH: unknown.
+$ echo $?
+127</pre>
+
+<hr>
+
+<h2>Um servidor de verdade: nginx</h2>
+
+<dl class="anatomy">
+  <dt>-d</dt><dd><em>detached</em>: roda em segundo plano e devolve o terminal.</dd>
+  <dt>-p 8080:80</dt><dd>A porta 8080 do <strong>Debian</strong> leva à porta 80 do <strong>container</strong> (<code>host:container</code>).</dd>
+  <dt>--name web</dt><dd>Um nome fácil. Sem ele, o Docker inventa um.</dd>
+  <dt>nginx</dt><dd>A imagem.</dd>
+</dl>
+
+<pre class="term">$ docker run -d -p 8080:80 --name web nginx
+Unable to find image 'nginx:latest' locally
+latest: Pulling from library/nginx
+…
+Status: Downloaded newer image for nginx:latest
+dd1d366d3daa96fbb668e1b70569caf018b4267e8cb3882d9d919c351e4038b9   « o ID completo do container novo
+$ curl -s localhost:8080 | head -4
+&lt;!DOCTYPE html&gt;
+&lt;html&gt;
+&lt;head&gt;
+&lt;title&gt;Welcome to nginx!&lt;/title&gt;           « o nginx respondeu pela porta 8080</pre>
+<p>O <code>curl</code> não vem instalado no Debian mínimo; instale com <code>apt install curl</code> como root, ou abra <code>http://localhost:8080</code> no navegador.</p>
+
+<h3>Ver os containers: <code>docker ps</code></h3>
+<pre class="term">$ docker ps
+CONTAINER ID   IMAGE     COMMAND                  CREATED          STATUS         PORTS                                   NAMES
+dd1d366d3daa   nginx     "/docker-entrypoint.…"   20 seconds ago   Up 2 seconds   0.0.0.0:8080->80/tcp, :::8080->80/tcp   web</pre>
+
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Coluna</th><th>Significado</th></tr>
+<tr><td>CONTAINER ID</td><td>Os 12 primeiros caracteres do ID. Serve no lugar do nome.</td></tr>
+<tr><td>IMAGE</td><td>De qual imagem ele nasceu.</td></tr>
+<tr><td>COMMAND</td><td>O programa que roda dentro.</td></tr>
+<tr><td>CREATED / STATUS</td><td>Quando foi criado e se está <code>Up</code> (rodando) ou <code>Exited</code> (parado).</td></tr>
+<tr><td>PORTS</td><td><code>0.0.0.0:8080-&gt;80/tcp</code> = porta 8080 do Debian → porta 80 do container.</td></tr>
+<tr><td>NAMES</td><td>O nome dado com <code>--name</code>.</td></tr>
+</table>
+</div>
+
+<h3>Entrar, parar e apagar</h3>
+<dl class="anatomy">
+  <dt>docker exec</dt><dd>Roda um comando <strong>dentro</strong> de um container que já está rodando.</dd>
+  <dt>-it</dt><dd><code>-i</code> mantém a entrada aberta e <code>-t</code> cria um terminal: juntos, deixam você digitar lá dentro.</dd>
+  <dt>web bash</dt><dd>O container e o programa a rodar (um shell).</dd>
+</dl>
+
+<pre class="term">$ docker logs --tail 2 web
+2026/10/16 01:30:54 [notice] 1#1: start worker process 30
+172.17.0.1 - - [16/Oct/2026:01:30:57 +0000] "GET / HTTP/1.1" 200 896 "-" "curl/8.14.1" "-"
+$ docker exec -it web bash</pre>
+<p>O prompt muda: agora você está dentro do container, como o root <em>dele</em> (não do Debian).</p>
+<pre class="term" data-user="root" data-host="dd1d366d3daa" data-cwd="/">#> cat /etc/os-release | head -1
+PRETTY_NAME="Debian GNU/Linux 13 (trixie)"     « a imagem oficial do nginx também é baseada em Debian
+#> ls /usr/share/nginx/html
+50x.html  index.html
+#> exit
+exit</pre>
+<pre class="term">$ docker stop web
+web
+$ docker ps -a
+CONTAINER ID   IMAGE     COMMAND                  CREATED          STATUS                     PORTS     NAMES
+dd1d366d3daa   nginx     "/docker-entrypoint.…"   5 minutes ago    Exited (0) 6 seconds ago             web
+$ docker start web
+web
+$ docker rm -f web
+web                                        « -f para e apaga de uma vez</pre>
+
+<div class="tip">
+<strong>Container descartável: <code>--rm</code></strong>
+<p><code>docker run --rm -it debian:trixie bash</code> abre um Debian 13 limpo e apaga tudo quando você sair. Ótimo para testar um comando sem medo.</p>
+</div>
+
+<hr>
+
+<h2>Imagens</h2>
+<pre class="term">$ docker images
+REPOSITORY    TAG       IMAGE ID       CREATED        SIZE
+nginx         latest    ca5e66f340c7   31 hours ago   163MB
+debian        trixie    99339bdd341a   11 days ago    120MB
+hello-world   latest    e2ac70e7319a   6 months ago   10.1kB
+$ docker rmi hello-world
+Untagged: hello-world:latest
+…</pre>
+<p>A <strong>tag</strong> é a versão: <code>postgres:17</code>, <code>debian:trixie</code>. Em servidores, fixe a tag; com <code>latest</code>, a versão muda sozinha e pode quebrar o app.</p>
+
+<hr>
+
+<h2>Guardar dados: volumes</h2>
+<p>Tudo o que um programa grava <strong>dentro</strong> do container some quando o container é apagado. Para guardar dados, ligue uma pasta de fora a uma de dentro:</p>
+
+<dl class="anatomy">
+  <dt>-v ~/site:/usr/share/nginx/html</dt><dd><code>pasta-do-debian:pasta-do-container</code>. O que você muda em <code>~/site</code> aparece na hora no container.</dd>
+  <dt>:ro</dt><dd><em>read-only</em>: o container só lê.</dd>
+</dl>
+
+<pre class="term">$ mkdir ~/site
+$ echo "&lt;h1&gt;Site da Ana&lt;/h1&gt;" &gt; ~/site/index.html
+$ docker run -d -p 8080:80 --name web -v ~/site:/usr/share/nginx/html:ro nginx
+$ curl -s localhost:8080
+&lt;h1&gt;Site da Ana&lt;/h1&gt;                         « o nginx serve o arquivo da sua pasta
+$ docker volume create dados-db
+dados-db
+$ docker volume ls
+DRIVER    VOLUME NAME
+local     dados-db
+$ docker volume inspect dados-db --format "{{.Mountpoint}}"
+/var/lib/docker/volumes/dados-db/_data</pre>
+
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Forma</th><th>Exemplo</th><th>Melhor quando…</th></tr>
+<tr><td>Pasta do Debian (<em>bind mount</em>)</td><td><code>-v ~/site:/dados</code></td><td>Você edita os arquivos (código, site, configurações).</td></tr>
+<tr><td>Volume nomeado</td><td><code>-v dados-db:/dados</code></td><td>Os dados são do programa (banco de dados). Ficam em <code>/var/lib/docker/volumes</code>.</td></tr>
+<tr><td>Sem volume</td><td>(nada)</td><td>Os dados podem sumir (testes).</td></tr>
+</table>
+</div>
+
+<hr>
+
+<h2>Sua própria imagem: <code>Dockerfile</code></h2>
+<pre class="file" data-file="Dockerfile"># Parte de uma imagem pronta: o próprio Debian 13
+FROM debian:trixie-slim
+
+# Instala o programa (como num Debian normal, mas sem sudo/su: aqui já é root)
+RUN apt-get update &amp;&amp; apt-get install -y --no-install-recommends cowsay \
+    &amp;&amp; rm -rf /var/lib/apt/lists/*
+
+# O comando que roda quando o container sobe
+CMD ["/usr/games/cowsay", "Oi do Debian!"]</pre>
+
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Instrução</th><th>O que faz</th></tr>
+<tr><td><code>FROM</code></td><td>Imagem base. <code>debian:trixie-slim</code> é um Debian 13 enxuto.</td></tr>
+<tr><td><code>RUN</code></td><td>Roda um comando durante a construção.</td></tr>
+<tr><td><code>COPY</code></td><td>Copia arquivos do projeto para dentro da imagem.</td></tr>
+<tr><td><code>WORKDIR</code> / <code>ENV</code></td><td>Pasta de trabalho e variáveis de ambiente.</td></tr>
+<tr><td><code>EXPOSE</code></td><td>Documenta a porta (quem publica é o <code>-p</code>).</td></tr>
+<tr><td><code>CMD</code></td><td>O comando de partida.</td></tr>
+</table>
+</div>
+
+<dl class="anatomy">
+  <dt>docker build</dt><dd>Constrói uma imagem a partir de um Dockerfile.</dd>
+  <dt>-t vaca:1.0</dt><dd><em>tag</em>: nome e versão da imagem nova.</dd>
+  <dt>.</dt><dd>O "contexto": a pasta atual, onde está o <code>Dockerfile</code>.</dd>
+</dl>
+
+<pre class="term" data-cwd="~/vaca">$ docker build -t vaca:1.0 .
+#1 [internal] load build definition from Dockerfile
+#2 [internal] load metadata for docker.io/library/debian:trixie-slim
+#4 [1/2] FROM docker.io/library/debian:trixie-slim@sha256:a29215f6a35e…
+#5 [2/2] RUN apt-get update &amp;&amp; apt-get install -y --no-install-recommends cowsay     &amp;&amp; rm -rf /var/lib/apt/lists/*
+#5 DONE 81.5s                                  « o apt de dentro da imagem baixou o cowsay
+#6 exporting to image
+#6 naming to docker.io/library/vaca:1.0
+#6 DONE 10.7s
+$ docker run --rm vaca:1.0
+ _______________
+&lt; Oi do Debian! &gt;
+ ---------------
+        \   ^__^
+         \  (oo)\_______
+            (__)\       )\/\
+                ||----w |
+                ||     ||
+$ docker images vaca
+REPOSITORY   TAG       IMAGE ID       CREATED              SIZE
+vaca         1.0       82b55220eb47   About a minute ago   130MB</pre>
+
+<p>O Docker do Debian 13 já constrói com o <strong>BuildKit</strong> (pacote <code>docker-buildx</code>): cada etapa aparece numerada (<code>#1</code>, <code>#2</code>…) com o tempo que levou.</p>
+
+<hr>
+
+<h2>Vários containers: Compose</h2>
+<p>Com o pacote <code>docker-compose</code> do Debian, você descreve vários containers num arquivo <code>compose.yaml</code> e sobe tudo com <code>docker compose up -d</code>:</p>
+
+<pre class="file" data-file="compose.yaml">services:
+  web:
+    image: nginx
+    ports:
+      - "8080:80"
+    volumes:
+      - ./site:/usr/share/nginx/html:ro
+    restart: unless-stopped</pre>
+
+<pre class="term" data-cwd="~/projeto">$ docker compose up -d
+[+] Running 2/2
+ ✔ Network projeto_default  Created                « uma rede só para este projeto
+ ✔ Container projeto-web-1  Started
+$ docker compose ps
+NAME            IMAGE     COMMAND                  SERVICE   CREATED          STATUS         PORTS
+projeto-web-1   nginx     "/docker-entrypoint.…"   web       14 seconds ago   Up 2 seconds   0.0.0.0:8080->80/tcp, :::8080->80/tcp
+$ docker compose down
+[+] Running 2/2
+ ✔ Container projeto-web-1  Removed
+ ✔ Network projeto_default  Removed</pre>
+<p>O pacote do Debian instala o Compose versão 2 (<code>Docker Compose version 2.26.1-4</code>), que funciona tanto como <code>docker compose</code> quanto como <code>docker-compose</code>.</p>
+
+<hr>
+
+<h2>Formas de manter um app rodando</h2>
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Forma</th><th>Exemplo</th><th>Melhor quando…</th></tr>
+<tr><td><code>docker run</code> à mão</td><td><code>docker run -d …</code></td><td>Testes e um container só.</td></tr>
+<tr><td>Política de reinício</td><td><code>--restart unless-stopped</code></td><td>Um container que deve voltar depois de reiniciar o Debian.</td></tr>
+<tr><td>Compose</td><td><code>docker compose up -d</code></td><td>Vários containers juntos (site + banco).</td></tr>
+<tr><td>Sem container</td><td><code>apt install nginx</code> + <a href="systemctl.html">systemctl</a></td><td>O Debian já empacota o programa: é mais simples e recebe as correções de segurança do Debian.</td></tr>
+</table>
+</div>
+
+<hr>
+
+<h2>Quando não funciona</h2>
+
+<div class="cenario">
+<strong>"permission denied while trying to connect to the Docker daemon socket"</strong>
+<p><strong>O que aconteceu:</strong> a usuária não está no grupo <code>docker</code>, ou entrou nele e ainda não abriu sessão nova.</p>
+<p><strong>Como confirmar:</strong> <code>groups</code> não mostra <code>docker</code>.</p>
+<p><strong>Como resolver:</strong> como root, <code>usermod -aG docker ana</code>; depois saia e entre de novo.</p>
+</div>
+
+<div class="cenario">
+<strong>"sudo: comando não encontrado" ao seguir um tutorial</strong>
+<p><strong>O que aconteceu:</strong> a maioria dos tutoriais da internet supõe Ubuntu, com <code>sudo docker …</code>. No Debian instalado com senha de root, não há sudo.</p>
+<p><strong>Como resolver:</strong> rode o comando numa sessão de root (<code>su -</code>), sem o <code>sudo</code> na frente; ou instale e configure o sudo (veja <a href="root-su-sudo.html">root, su e sudo</a>).</p>
+</div>
+
+<div class="cenario">
+<strong>"Cannot connect to the Docker daemon … Is the docker daemon running?"</strong>
+<p><strong>Como confirmar:</strong> <code>systemctl is-active docker</code> mostra <code>inactive</code> ou <code>failed</code>.</p>
+<p><strong>Como resolver:</strong> como root, <code>systemctl enable --now docker</code>; se não subir, <code>journalctl -u docker -n 30</code> mostra o motivo (veja <a href="journalctl.html">Logs</a>).</p>
+</div>
+
+<div class="cenario">
+<strong>"port is already allocated"</strong>
+<p><strong>O que aconteceu:</strong> outra coisa já usa a porta do Debian (outro container ou um nginx instalado pelo apt).</p>
+<p><strong>Como confirmar:</strong> <code>ss -tlnp | grep 8080</code> como root (veja <a href="ip.html">ip, ping, ss</a>). <strong>Como resolver:</strong> use outra porta (<code>-p 8081:80</code>) ou pare o que está ocupando.</p>
+</div>
+
+<div class="cenario">
+<strong>"TLS handshake timeout" ao baixar uma imagem</strong>
+<pre class="term" data-cwd="~/vaca">$ docker build -t vaca:1.0 .
+…
+ERROR: failed to solve: debian:trixie-slim: failed to resolve source metadata for docker.io/library/debian:trixie-slim: failed to authorize: failed to fetch anonymous token: Get "https://auth.docker.io/token?scope=repository%3Alibrary%2Fdebian%3Apull&amp;service=registry.docker.io": net/http: TLS handshake timeout</pre>
+<p><strong>O que aconteceu:</strong> a conexão com o Docker Hub demorou demais. É um problema de rede, não do seu <code>Dockerfile</code>.</p>
+<p><strong>Como resolver:</strong> tente de novo. Se repetir, teste a rede com <code>curl -I https://registry-1.docker.io</code> e veja <a href="redes.html">Conceitos de Rede</a>.</p>
+</div>
+
+<div class="cenario">
+<strong>O container sai logo depois de subir</strong>
+<p><strong>O que aconteceu:</strong> o programa de dentro terminou ou deu erro. Um container só vive enquanto o programa principal vive.</p>
+<p><strong>Como confirmar:</strong> <code>docker ps -a</code> mostra <code>Exited (1)</code> e <code>docker logs nome</code> mostra o erro.</p>
+</div>
+
+<div class="cenario">
+<strong>As regras de firewall "sumiram" ou o container ignora o firewall</strong>
+<p><strong>O que aconteceu:</strong> o Docker cria regras próprias de <code>iptables</code> (no Debian 13, traduzidas para o nftables) para publicar portas. Uma porta com <code>-p</code> fica acessível mesmo que o seu firewall pareça bloqueá-la.</p>
+<p><strong>Como resolver:</strong> publique só para a máquina local quando não precisar de acesso de fora: <code>-p 127.0.0.1:8080:80</code>. Veja <a href="nftables.html">nftables</a>.</p>
+</div>
+
+<hr>
+
+<h2>Referência</h2>
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Comando</th><th>O que faz</th></tr>
+<tr><td><code>docker run [opções] imagem [comando]</code></td><td>Cria e roda um container</td></tr>
+<tr><td><code>docker ps</code> / <code>docker ps -a</code></td><td>Containers rodando / todos</td></tr>
+<tr><td><code>docker logs [-f] nome</code></td><td>Saída do container</td></tr>
+<tr><td><code>docker exec -it nome bash</code></td><td>Shell dentro do container</td></tr>
+<tr><td><code>docker stop</code> / <code>start</code> / <code>restart nome</code></td><td>Controla o container</td></tr>
+<tr><td><code>docker rm [-f] nome</code></td><td>Apaga o container</td></tr>
+<tr><td><code>docker images</code> / <code>pull</code> / <code>rmi</code></td><td>Lista, baixa, apaga imagens</td></tr>
+<tr><td><code>docker build -t nome:tag .</code></td><td>Constrói uma imagem</td></tr>
+<tr><td><code>docker volume ls</code> / <code>create</code></td><td>Volumes</td></tr>
+<tr><td><code>docker system df</code> / <code>prune</code></td><td>Espaço usado / limpeza</td></tr>
+<tr><td><code>docker compose up -d</code> / <code>down</code></td><td>Sobe e desce um projeto Compose</td></tr>
+</table>
+</div>
+
+<hr>
+
+<h2>Exercícios</h2>
+
+<div class="exercise">
+<h3>1. Publicar a porta</h3>
+<p>Complete para que a porta 8081 do Debian leve à porta 80 do container:</p>
+<div class="ex-code">docker run -d <input data-answer="-p 8081:80|--publish 8081:80" aria-label="opção"> nginx</div>
+</div>
+
+<div class="exercise">
+<h3>2. O grupo certo</h3>
+<p>Como root, complete para colocar a ana no grupo do Docker sem tirá-la dos outros grupos:</p>
+<div class="ex-code">usermod <input data-answer="-aG" aria-label="opções"> docker ana</div>
+</div>
+
+<div class="mc" data-answer="3">
+<p class="mc-q">3. Um tutorial manda rodar <code>sudo docker ps</code>, mas no seu Debian aparece "bash: sudo: comando não encontrado". O que fazer?</p>
+<label><input type="radio" name="q3"> Reinstalar o Docker.</label>
+<label><input type="radio" name="q3"> Trocar para <code>docker.io</code>.</label>
+<label><input type="radio" name="q3"> Rodar <code>docker ps</code> numa sessão de root (<code>su -</code>) ou colocar a usuária no grupo docker.</label>
+<label><input type="radio" name="q3"> Apagar o <code>/var/run/docker.sock</code>.</label>
+</div>
+
+<div class="mc" data-answer="1">
+<p class="mc-q">4. Qual pacote traz o Docker mantido pela equipe de segurança do Debian?</p>
+<label><input type="radio" name="q4"> <code>docker.io</code></label>
+<label><input type="radio" name="q4"> <code>docker-ce</code></label>
+<label><input type="radio" name="q4"> <code>containerd.io</code></label>
+<label><input type="radio" name="q4"> <code>docker-desktop</code></label>
+</div>
+
+<hr>
+
+<h2>Resumo</h2>
+<ul>
+  <li>Imagem é a receita; container é a imagem rodando.</li>
+  <li><code>docker.io</code> vem do Debian; <code>docker-ce</code> vem da Docker, com repositório e <code>Signed-By</code>.</li>
+  <li>Sem sudo no Debian: instale com <code>su -</code> e, se quiser, coloque a usuária no grupo <code>docker</code> (que equivale a root).</li>
+  <li><code>docker run -d -p 8080:80 --name web nginx</code>: segundo plano, porta, nome, imagem.</li>
+  <li>Dados que importam vão em volumes; vários containers, em Compose.</li>
+</ul>
+
+<div class="pager"></div>
+
+</div>
+</main>
+</div>
+<script src="assets/site.js"></script>
+</body>
+</html>

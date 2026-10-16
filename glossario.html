@@ -1,0 +1,359 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Debian Glossário — termos do Linux e do Debian explicados | Guia Debian</title>
+<meta name="description" content="Glossário do Guia Debian: 114 termos do Linux e do Debian (DFSG, stable, sid, backports, debconf, preseed, nftables, journal…) explicados em português simples, com link para a aula.">
+<link rel="stylesheet" href="assets/style.css">
+<script>try{var t=localStorage.getItem("tema");if(t)document.documentElement.setAttribute("data-theme",t)}catch(e){}</script>
+</head>
+<body>
+<div class="layout">
+<nav class="sidebar" id="sidebar" aria-label="Tópicos"></nav>
+<main class="main">
+<div class="content">
+
+<div class="pager"></div>
+
+<h1>Debian <span class="hl">Glossário</span></h1>
+
+<p class="intro">Os 114 termos que aparecem no guia, em ordem alfabética, explicados em uma ou duas frases. Cada um tem o link para a aula em que é explicado com calma. Termos próprios do Debian, como DFSG, sid e FrankenDebian, estão aqui também.</p>
+
+<div class="tip">
+<strong>Dica</strong>
+<p>Use <kbd>Ctrl</kbd>+<kbd>F</kbd> no navegador para achar um termo, ou o índice de letras abaixo.</p>
+</div>
+
+<p class="indice-letras"><a href="#g-A">A</a> · <a href="#g-B">B</a> · <a href="#g-C">C</a> · <a href="#g-D">D</a> · <a href="#g-E">E</a> · <a href="#g-F">F</a> · <a href="#g-G">G</a> · <a href="#g-H">H</a> · <a href="#g-I">I</a> · <a href="#g-J">J</a> · <a href="#g-K">K</a> · <a href="#g-L">L</a> · <a href="#g-M">M</a> · <a href="#g-N">N</a> · <a href="#g-O">O</a> · <a href="#g-P">P</a> · <a href="#g-R">R</a> · <a href="#g-S">S</a> · <a href="#g-T">T</a> · <a href="#g-U">U</a> · <a href="#g-V">V</a> · <a href="#g-Z">Z</a></p>
+<h2 id="g-A">A</h2>
+<dl class="glossario">
+<dt><strong>Alias (apelido)</strong></dt>
+<dd>Um nome curto que o shell troca por um comando maior. No Debian, só o <code>ls --color=auto</code> vem ativo; o <code>ll</code> vem comentado no <code>~/.bashrc</code>. Veja: <a href="bashrc.html">.bashrc, alias, PATH</a>.</dd>
+<dt><strong>AppArmor</strong></dt>
+<dd>Sistema de segurança que limita o que cada programa pode acessar. Vem ativo no Debian; <code>aa-status</code> mostra os perfis. Veja: <a href="seguranca.html">Segurança do Servidor</a>.</dd>
+<dt><strong>apt</strong></dt>
+<dd>O gerenciador de pacotes do Debian: instala, atualiza e remove programas, resolvendo as dependências. Veja: <a href="apt.html">apt</a>.</dd>
+<dt><strong>Argumento</strong></dt>
+<dd>O que vem depois do comando e das opções: o arquivo, a pasta ou o texto sobre o qual ele age. Veja: <a href="sintaxe.html">Sintaxe dos Comandos</a>.</dd>
+</dl>
+<h2 id="g-B">B</h2>
+<dl class="glossario">
+<dt><strong>Backports</strong></dt>
+<dd>Repositório com versões mais novas de alguns programas, recompiladas para a stable (<code>trixie-backports</code>). Veja: <a href="backports.html">Backports e Pinning</a>.</dd>
+<dt><strong>Backup</strong></dt>
+<dd>Cópia de segurança dos seus arquivos, guardada em outro lugar. Só vale se você já testou restaurar. Veja: <a href="backup.html">Backup</a>.</dd>
+<dt><strong>Bash</strong></dt>
+<dd>O shell padrão do Debian: o programa que lê o que você digita no terminal. Veja: <a href="terminal.html">O Terminal</a>.</dd>
+<dt><strong>Bookworm</strong></dt>
+<dd>Codinome do Debian 12, hoje a oldstable. Veja: <a href="versoes.html">Versões do Debian</a>.</dd>
+<dt><strong>Branch</strong></dt>
+<dd>Uma linha de desenvolvimento separada num repositório Git. Veja: <a href="git.html">Git</a>.</dd>
+<dt><strong>Buster, Bullseye</strong></dt>
+<dd>Codinomes do Debian 10 e 11, já sem suporte gratuito. Veja: <a href="versoes.html">Versões do Debian</a>.</dd>
+</dl>
+<h2 id="g-C">C</h2>
+<dl class="glossario">
+<dt><strong>Caminho absoluto</strong></dt>
+<dd>Caminho que começa na raiz <code>/</code>, como <code>/home/ana/Documentos</code>. Funciona de qualquer pasta. Veja: <a href="caminhos.html">Caminhos</a>.</dd>
+<dt><strong>Caminho relativo</strong></dt>
+<dd>Caminho que parte da pasta atual, como <code>Documentos/notas.txt</code> ou <code>../fotos</code>. Veja: <a href="caminhos.html">Caminhos</a>.</dd>
+<dt><strong>Certificado</strong></dt>
+<dd>Arquivo que prova a identidade de um site e permite o HTTPS. Veja: <a href="https.html">HTTPS (Let&#x27;s Encrypt)</a>.</dd>
+<dt><strong>chroot</strong></dt>
+<dd>Entrar num sistema instalado a partir de outro (um pendrive live, por exemplo), para consertá-lo. Veja: <a href="recuperacao.html">Recuperar um Sistema</a>.</dd>
+<dt><strong>Codinome</strong></dt>
+<dd>Nome de personagem do Toy Story que cada versão do Debian recebe: trixie (13), forky (14). Veja: <a href="versoes.html">Versões do Debian</a>.</dd>
+<dt><strong>Commit</strong></dt>
+<dd>Uma foto do projeto salva no histórico do Git, com mensagem e autor. Veja: <a href="git.html">Git</a>.</dd>
+<dt><strong>Container</strong></dt>
+<dd>Programa isolado com seus próprios arquivos, que divide o kernel com o sistema. Docker e Podman criam containers. Veja: <a href="docker.html">Docker</a>.</dd>
+<dt><strong>Contrato Social</strong></dt>
+<dd>Compromisso público do Projeto Debian: o sistema será 100% livre e os usuários vêm em primeiro lugar. Veja: <a href="introducao.html">Introdução</a>.</dd>
+<dt><strong>contrib</strong></dt>
+<dd>Componente com programas livres que dependem de algo fora da main (o ZFS está aqui). Veja: <a href="repositorios.html">Repositórios (sources)</a>.</dd>
+<dt><strong>cron</strong></dt>
+<dd>Serviço que roda comandos em horários agendados. Veja: <a href="cron.html">Agendar Tarefas (cron)</a>.</dd>
+<dt><strong>Curinga (glob)</strong></dt>
+<dd>Caracteres como <code>*</code> e <code>?</code> que o shell troca pelos nomes de arquivos que combinam. Veja: <a href="curingas.html">Curingas</a>.</dd>
+</dl>
+<h2 id="g-D">D</h2>
+<dl class="glossario">
+<dt><strong>Daemon</strong></dt>
+<dd>Programa que roda em segundo plano, como o <code>sshd</code> e o <code>cron</code>. Veja: <a href="systemctl.html">systemctl</a>.</dd>
+<dt><strong>.deb</strong></dt>
+<dd>Arquivo de pacote do Debian, instalado pelo <code>apt</code> ou pelo <code>dpkg</code>. Veja: <a href="dpkg.html">dpkg e .deb</a>.</dd>
+<dt><strong>deb822</strong></dt>
+<dd>Formato de arquivo de repositório em blocos (<code>.sources</code>). O Debian aceita, mas instala o <code>sources.list</code> de uma linha. Veja: <a href="repositorios.html">Repositórios (sources)</a>.</dd>
+<dt><strong>debconf</strong></dt>
+<dd>Sistema que faz as perguntas de configuração na instalação de pacotes; <code>dpkg-reconfigure</code> repete as perguntas. Veja: <a href="dpkg.html">dpkg e .deb</a>.</dd>
+<dt><strong>Debian</strong></dt>
+<dd>Sistema operacional livre mantido por uma comunidade de voluntários desde 1993. Veja: <a href="introducao.html">Introdução</a>.</dd>
+<dt><strong>Dependência</strong></dt>
+<dd>Outro pacote de que um programa precisa para funcionar. O <code>apt</code> instala as dependências sozinho. Veja: <a href="apt.html">apt</a>.</dd>
+<dt><strong>DFSG</strong></dt>
+<dd>Debian Free Software Guidelines: as regras que dizem se um programa é livre o suficiente para a main. Veja: <a href="introducao.html">Introdução</a>.</dd>
+<dt><strong>DHCP</strong></dt>
+<dd>Protocolo que entrega o endereço IP automaticamente. No Debian 13, o <code>dhcpcd</code> cuida disso. Veja: <a href="configurar-rede.html">Configurar a Rede</a>.</dd>
+<dt><strong>DNS</strong></dt>
+<dd>O "catálogo" que traduz nomes como <code>debian.org</code> em endereços IP. Veja: <a href="redes.html">Conceitos de Rede</a>.</dd>
+<dt><strong>dpkg</strong></dt>
+<dd>A ferramenta de baixo nível que instala arquivos <code>.deb</code>. O <code>apt</code> usa o dpkg por baixo. Veja: <a href="dpkg.html">dpkg e .deb</a>.</dd>
+<dt><strong>DSA</strong></dt>
+<dd>Debian Security Advisory: o aviso oficial de uma correção de segurança. Veja: <a href="seguranca.html">Segurança do Servidor</a>.</dd>
+</dl>
+<h2 id="g-E">E</h2>
+<dl class="glossario">
+<dt><strong>ELTS</strong></dt>
+<dd>Extended LTS: suporte pago (Freexian) que estende versões antigas até cerca de 10 anos. Veja: <a href="versoes.html">Versões do Debian</a>.</dd>
+<dt><strong>Exit code (código de saída)</strong></dt>
+<dd>Número que o comando devolve ao terminar: 0 é sucesso, outro número é falha. Veja com <code>echo $?</code>. Veja: <a href="script-condicionais.html">Condicionais</a>.</dd>
+<dt><strong>ext4</strong></dt>
+<dd>O sistema de arquivos padrão do Debian. Veja: <a href="particionar.html">Particionar e Formatar</a>.</dd>
+</dl>
+<h2 id="g-F">F</h2>
+<dl class="glossario">
+<dt><strong>Firewall</strong></dt>
+<dd>Filtro que decide quais conexões de rede entram e saem. No Debian, o nativo é o nftables. Veja: <a href="nftables.html">Firewall (nftables)</a>.</dd>
+<dt><strong>Flatpak</strong></dt>
+<dd>Formato de aplicativos que funciona em várias distribuições. É a alternativa ao snap no Debian. Veja: <a href="flatpak.html">Flatpak</a>.</dd>
+<dt><strong>Forky</strong></dt>
+<dd>Codinome do Debian 14, hoje a testing. Veja: <a href="versoes.html">Versões do Debian</a>.</dd>
+<dt><strong>FrankenDebian</strong></dt>
+<dd>Sistema que mistura pacotes de versões diferentes (stable com testing, por exemplo) e quebra nas atualizações. Veja: <a href="backports.html">Backports e Pinning</a>.</dd>
+<dt><strong>fstab</strong></dt>
+<dd>Arquivo <code>/etc/fstab</code> que diz quais discos montar no boot e onde. Veja: <a href="montar.html">mount e fstab</a>.</dd>
+</dl>
+<h2 id="g-G">G</h2>
+<dl class="glossario">
+<dt><strong>GNOME</strong></dt>
+<dd>A área de trabalho padrão do Debian, sem a dock fixa do Ubuntu. Veja: <a href="desktop.html">O Desktop</a>.</dd>
+<dt><strong>GRUB</strong></dt>
+<dd>O programa que aparece ao ligar o computador e escolhe qual sistema e qual kernel iniciar. Veja: <a href="boot-grub.html">Boot, GRUB e Kernel</a>.</dd>
+<dt><strong>Grupo</strong></dt>
+<dd>Conjunto de usuários que recebem as mesmas permissões, como <code>sudo</code> e <code>adm</code>. Veja: <a href="usuarios.html">Usuários e Grupos</a>.</dd>
+</dl>
+<h2 id="g-H">H</h2>
+<dl class="glossario">
+<dt><strong>Home (pasta pessoal)</strong></dt>
+<dd>A pasta de cada usuário, <code>/home/ana</code>, representada por <code>~</code>. No Debian vem com permissão 700. Veja: <a href="estrutura-diretorios.html">Estrutura de Diretórios</a>.</dd>
+</dl>
+<h2 id="g-I">I</h2>
+<dl class="glossario">
+<dt><strong>ifupdown</strong></dt>
+<dd>O sistema de rede clássico do Debian, configurado em <code>/etc/network/interfaces</code>. Veja: <a href="configurar-rede.html">Configurar a Rede</a>.</dd>
+<dt><strong>Imagem (container)</strong></dt>
+<dd>Modelo a partir do qual se criam containers, como <code>debian:trixie</code> ou <code>nginx</code>. Veja: <a href="docker.html">Docker</a>.</dd>
+<dt><strong>Incus</strong></dt>
+<dd>Gerenciador de containers e VMs de sistema; continuação comunitária do LXD. Veja: <a href="incus.html">Incus (containers de sistema)</a>.</dd>
+<dt><strong>initramfs</strong></dt>
+<dd>Pequeno sistema carregado antes do principal, que prepara os discos para o boot. Veja: <a href="boot-grub.html">Boot, GRUB e Kernel</a>.</dd>
+<dt><strong>Inode</strong></dt>
+<dd>Registro interno do sistema de arquivos com os dados de um arquivo (dono, permissões, onde estão os blocos). Veja: <a href="links.html">Links (ln)</a>.</dd>
+<dt><strong>IP</strong></dt>
+<dd>Endereço de uma máquina na rede, como <code>192.168.0.15</code>. Veja: <a href="redes.html">Conceitos de Rede</a>.</dd>
+</dl>
+<h2 id="g-J">J</h2>
+<dl class="glossario">
+<dt><strong>Job</strong></dt>
+<dd>Programa iniciado pelo seu terminal, que pode ir para segundo plano (<code>bg</code>) e voltar (<code>fg</code>). Veja: <a href="jobs.html">Jobs, nohup, tmux</a>.</dd>
+<dt><strong>journal</strong></dt>
+<dd>O registro de logs do systemd, lido com <code>journalctl</code>. No Debian 13 não há <code>/var/log/syslog</code>. Veja: <a href="journalctl.html">Logs (journalctl)</a>.</dd>
+</dl>
+<h2 id="g-K">K</h2>
+<dl class="glossario">
+<dt><strong>Kernel</strong></dt>
+<dd>O núcleo do sistema, que conversa com o hardware. No Debian 13: Linux 6.12. Veja: <a href="boot-grub.html">Boot, GRUB e Kernel</a>.</dd>
+<dt><strong>KVM</strong></dt>
+<dd>Recurso do Linux que permite rodar máquinas virtuais com a velocidade do processador. Veja: <a href="kvm.html">KVM e virt-manager</a>.</dd>
+</dl>
+<h2 id="g-L">L</h2>
+<dl class="glossario">
+<dt><strong>Link simbólico</strong></dt>
+<dd>Atalho que aponta para outro arquivo ou pasta, criado com <code>ln -s</code>. Veja: <a href="links.html">Links (ln)</a>.</dd>
+<dt><strong>LTS</strong></dt>
+<dd>Long Term Support: depois do fim do suporte normal, a equipe Debian LTS cuida da versão até cerca de 5 anos. Veja: <a href="versoes.html">Versões do Debian</a>.</dd>
+<dt><strong>LVM</strong></dt>
+<dd>Camada que junta discos e permite redimensionar partições com o sistema ligado. Veja: <a href="lvm.html">LVM</a>.</dd>
+</dl>
+<h2 id="g-M">M</h2>
+<dl class="glossario">
+<dt><strong>main</strong></dt>
+<dd>Componente principal do repositório, só com software livre. Veja: <a href="repositorios.html">Repositórios (sources)</a>.</dd>
+<dt><strong>Montar</strong></dt>
+<dd>Ligar um disco a uma pasta para acessar os arquivos dele. Veja: <a href="montar.html">mount e fstab</a>.</dd>
+</dl>
+<h2 id="g-N">N</h2>
+<dl class="glossario">
+<dt><strong>netinst</strong></dt>
+<dd>A ISO pequena do Debian, que baixa o resto da internet durante a instalação. Veja: <a href="instalacao.html">Instalação</a>.</dd>
+<dt><strong>nftables</strong></dt>
+<dd>O firewall nativo do Linux e do Debian, controlado pelo comando <code>nft</code>. Veja: <a href="nftables.html">Firewall (nftables)</a>.</dd>
+<dt><strong>non-free</strong></dt>
+<dd>Componente com programas que não seguem a DFSG. Veja: <a href="repositorios.html">Repositórios (sources)</a>.</dd>
+<dt><strong>non-free-firmware</strong></dt>
+<dd>Componente com firmwares fechados (Wi-Fi, placas de vídeo). Vem ativo desde o Debian 12. Veja: <a href="repositorios.html">Repositórios (sources)</a>.</dd>
+</dl>
+<h2 id="g-O">O</h2>
+<dl class="glossario">
+<dt><strong>oldstable</strong></dt>
+<dd>A versão anterior à stable (hoje o Debian 12). Veja: <a href="versoes.html">Versões do Debian</a>.</dd>
+<dt><strong>Opção (flag)</strong></dt>
+<dd>O que muda o comportamento do comando, como <code>-l</code> ou <code>--all</code>. Veja: <a href="sintaxe.html">Sintaxe dos Comandos</a>.</dd>
+</dl>
+<h2 id="g-P">P</h2>
+<dl class="glossario">
+<dt><strong>Pacote</strong></dt>
+<dd>Um programa empacotado com tudo o que precisa para ser instalado. Veja: <a href="apt.html">apt</a>.</dd>
+<dt><strong>Partição</strong></dt>
+<dd>Uma divisão do disco, com o próprio sistema de arquivos. Veja: <a href="particionar.html">Particionar e Formatar</a>.</dd>
+<dt><strong>PATH</strong></dt>
+<dd>Lista de pastas onde o shell procura os comandos. No Debian, a da <code>ana</code> não tem <code>/sbin</code>. Veja: <a href="bashrc.html">.bashrc, alias, PATH</a>.</dd>
+<dt><strong>Permissão</strong></dt>
+<dd>Quem pode ler (r), escrever (w) e executar (x) cada arquivo: dono, grupo e outros. Veja: <a href="permissoes.html">Entendendo Permissões</a>.</dd>
+<dt><strong>PID</strong></dt>
+<dd>O número de identificação de um processo. Veja: <a href="processos.html">ps, pgrep, top</a>.</dd>
+<dt><strong>Pinning</strong></dt>
+<dd>Regras do apt que dão prioridade a um repositório sobre outro. Veja: <a href="backports.html">Backports e Pinning</a>.</dd>
+<dt><strong>Pipe</strong></dt>
+<dd>A barra <code>|</code>, que liga a saída de um comando à entrada do próximo. Veja: <a href="pipes.html">Pipes e xargs</a>.</dd>
+<dt><strong>Playbook</strong></dt>
+<dd>Arquivo do Ansible que descreve o estado desejado das máquinas. Veja: <a href="ansible.html">Ansible</a>.</dd>
+<dt><strong>Podman</strong></dt>
+<dd>Ferramenta de containers compatível com o Docker que roda sem root. Veja: <a href="podman.html">Podman</a>.</dd>
+<dt><strong>Point release</strong></dt>
+<dd>Atualização de uma versão já lançada, como 13.5 e 13.7: só correções, sem programas novos. Veja: <a href="versoes.html">Versões do Debian</a>.</dd>
+<dt><strong>Porta</strong></dt>
+<dd>Número que identifica um serviço numa máquina, como 22 (SSH) e 443 (HTTPS). Veja: <a href="redes.html">Conceitos de Rede</a>.</dd>
+<dt><strong>preseed</strong></dt>
+<dd>Arquivo de respostas que instala o Debian sozinho, sem perguntas. Veja: <a href="preseed.html">Instalação Automática (preseed)</a>.</dd>
+<dt><strong>Processo</strong></dt>
+<dd>Um programa em execução. Veja: <a href="processos.html">ps, pgrep, top</a>.</dd>
+<dt><strong>Prompt</strong></dt>
+<dd>O texto antes do cursor, como <code>ana@notebook:~$</code>. Veja: <a href="terminal.html">O Terminal</a>.</dd>
+<dt><strong>Proxy reverso</strong></dt>
+<dd>Servidor que recebe as conexões e repassa para outro programa (o nginx faz isso). Veja: <a href="nginx.html">Servidor Web (nginx)</a>.</dd>
+</dl>
+<h2 id="g-R">R</h2>
+<dl class="glossario">
+<dt><strong>RAID</strong></dt>
+<dd>Juntar discos para ganhar segurança (espelho) ou velocidade. No Linux, com <code>mdadm</code>. Veja: <a href="raid.html">RAID (mdadm)</a>.</dd>
+<dt><strong>Redirecionamento</strong></dt>
+<dd>Mandar a saída de um comando para um arquivo (<code>&gt;</code>, <code>&gt;&gt;</code>, <code>2&gt;</code>). Veja: <a href="redirecionamento.html">Redirecionamento</a>.</dd>
+<dt><strong>Release Notes</strong></dt>
+<dd>As notas oficiais de cada versão do Debian; leitura obrigatória antes de atualizar a versão. Veja: <a href="upgrade-versao.html">Atualizar a Versão do Debian</a>.</dd>
+<dt><strong>Repositório</strong></dt>
+<dd>Servidor de onde o apt baixa os pacotes, listado no <code>sources.list</code>. Veja: <a href="repositorios.html">Repositórios (sources)</a>.</dd>
+<dt><strong>root</strong></dt>
+<dd>O administrador do sistema, que pode tudo. No Debian, você vira root com <code>su -</code>. Veja: <a href="root-su-sudo.html">root, su e sudo</a>.</dd>
+</dl>
+<h2 id="g-S">S</h2>
+<dl class="glossario">
+<dt><strong>Serviço</strong></dt>
+<dd>Programa controlado pelo systemd, que pode subir no boot. Veja: <a href="systemctl.html">systemctl</a>.</dd>
+<dt><strong>Shell</strong></dt>
+<dd>O programa que interpreta os comandos (no Debian, o bash). Veja: <a href="terminal.html">O Terminal</a>.</dd>
+<dt><strong>Shell de login</strong></dt>
+<dd>Shell aberto com <code>su -</code> ou no login; carrega o ambiente completo e diz "sair" ao terminar. Veja: <a href="root-su-sudo.html">root, su e sudo</a>.</dd>
+<dt><strong>sid</strong></dt>
+<dd>O nome eterno da unstable, onde tudo chega primeiro. Veja: <a href="versoes.html">Versões do Debian</a>.</dd>
+<dt><strong>Sinal</strong></dt>
+<dd>Aviso enviado a um processo, como TERM (feche) e KILL (morra agora). Veja: <a href="kill.html">Encerrar Programas (kill)</a>.</dd>
+<dt><strong>sources.list</strong></dt>
+<dd>Arquivo <code>/etc/apt/sources.list</code> com os repositórios, no formato de uma linha. Veja: <a href="repositorios.html">Repositórios (sources)</a>.</dd>
+<dt><strong>SSH</strong></dt>
+<dd>Acesso remoto seguro a outra máquina pelo terminal. Veja: <a href="ssh.html">SSH</a>.</dd>
+<dt><strong>stable</strong></dt>
+<dd>A versão estável do Debian, recomendada para o dia a dia (hoje o 13). Veja: <a href="versoes.html">Versões do Debian</a>.</dd>
+<dt><strong>stdin, stdout, stderr</strong></dt>
+<dd>Entrada padrão, saída padrão e saída de erros de um comando (0, 1 e 2). Veja: <a href="redirecionamento.html">Redirecionamento</a>.</dd>
+<dt><strong>su</strong></dt>
+<dd>Comando para virar outro usuário, normalmente o root. <code>su -</code> abre um shell de login. Veja: <a href="root-su-sudo.html">root, su e sudo</a>.</dd>
+<dt><strong>sudo</strong></dt>
+<dd>Roda um comando como root com a sua senha. No Debian, só vem se você não definiu senha de root. Veja: <a href="root-su-sudo.html">root, su e sudo</a>.</dd>
+<dt><strong>Swap</strong></dt>
+<dd>Espaço em disco usado como memória extra. Veja: <a href="particionar.html">Particionar e Formatar</a>.</dd>
+<dt><strong>SysRq</strong></dt>
+<dd>Teclas mágicas que falam direto com o kernel. No Debian, o padrão é 438 (R, S, U e B funcionam). Veja: <a href="travamentos.html">Quando o Sistema Trava</a>.</dd>
+<dt><strong>systemd</strong></dt>
+<dd>O sistema que inicia o Debian e controla os serviços. Veja: <a href="systemctl.html">systemctl</a>.</dd>
+</dl>
+<h2 id="g-T">T</h2>
+<dl class="glossario">
+<dt><strong>tasksel</strong></dt>
+<dd>Ferramenta que instala ambientes prontos (GNOME, KDE, servidor web, servidor SSH). Veja: <a href="instalacao.html">Instalação</a>.</dd>
+<dt><strong>testing</strong></dt>
+<dd>A próxima versão do Debian em preparação (hoje o Debian 14 forky). Veja: <a href="versoes.html">Versões do Debian</a>.</dd>
+<dt><strong>Timer</strong></dt>
+<dd>Agendamento feito pelo systemd, alternativa ao cron. Veja: <a href="criar-servico.html">Criar um Serviço</a>.</dd>
+<dt><strong>tmpfs</strong></dt>
+<dd>Sistema de arquivos na memória. No Debian 13, o <code>/tmp</code> é tmpfs e some ao reiniciar. Veja: <a href="estrutura-diretorios.html">Estrutura de Diretórios</a>.</dd>
+<dt><strong>Trixie</strong></dt>
+<dd>Codinome do Debian 13, a stable atual. Veja: <a href="versoes.html">Versões do Debian</a>.</dd>
+<dt><strong>TTY</strong></dt>
+<dd>Console de texto fora da interface gráfica, aberto com <code>Ctrl+Alt+F3</code>. Veja: <a href="travamentos.html">Quando o Sistema Trava</a>.</dd>
+</dl>
+<h2 id="g-U">U</h2>
+<dl class="glossario">
+<dt><strong>UID</strong></dt>
+<dd>Número que identifica um usuário (a <code>ana</code> é 1000; o root é 0). Veja: <a href="usuarios.html">Usuários e Grupos</a>.</dd>
+<dt><strong>umask</strong></dt>
+<dd>Máscara que define as permissões de arquivos novos (0002 para a ana, 0022 para o root). Veja: <a href="chown.html">chown, chgrp, umask</a>.</dd>
+<dt><strong>unattended-upgrades</strong></dt>
+<dd>Pacote que instala atualizações de segurança sozinho. Não vem instalado no Debian. Veja: <a href="atualizacoes.html">Atualizações</a>.</dd>
+<dt><strong>unstable</strong></dt>
+<dd>A faixa onde os pacotes novos entram primeiro: o sid. Veja: <a href="versoes.html">Versões do Debian</a>.</dd>
+<dt><strong>UUID</strong></dt>
+<dd>Identificador único de uma partição, usado no fstab. Veja: <a href="montar.html">mount e fstab</a>.</dd>
+</dl>
+<h2 id="g-V">V</h2>
+<dl class="glossario">
+<dt><strong>Variável de ambiente</strong></dt>
+<dd>Valor que o shell passa aos programas, como <code>PATH</code>, <code>HOME</code> e <code>LANG</code>. Veja: <a href="bashrc.html">.bashrc, alias, PATH</a>.</dd>
+<dt><strong>Volume</strong></dt>
+<dd>Pasta guardada fora do container, que sobrevive quando ele é apagado. Veja: <a href="docker.html">Docker</a>.</dd>
+<dt><strong>VPN</strong></dt>
+<dd>Túnel seguro entre máquinas pela internet. O WireGuard é uma VPN moderna. Veja: <a href="wireguard.html">VPN (WireGuard)</a>.</dd>
+</dl>
+<h2 id="g-Z">Z</h2>
+<dl class="glossario">
+<dt><strong>ZFS</strong></dt>
+<dd>Sistema de arquivos com snapshots, compressão e RAID embutidos; no Debian vem do contrib e compila com DKMS. Veja: <a href="zfs.html">ZFS</a>.</dd>
+</dl>
+
+<hr>
+
+<h2>Exercícios</h2>
+
+<div class="mc" data-answer="2">
+<p class="mc-q">1. O que é o "sid"?</p>
+<label><input type="radio" name="q1"> A próxima versão estável.</label>
+<label><input type="radio" name="q1"> O nome permanente da unstable, onde os pacotes novos entram primeiro.</label>
+<label><input type="radio" name="q1"> Um gerenciador de pacotes.</label>
+<label><input type="radio" name="q1"> O codinome do Debian 13.</label>
+</div>
+
+<div class="mc" data-answer="4">
+<p class="mc-q">2. Em qual componente do repositório ficam os firmwares fechados de Wi-Fi e vídeo?</p>
+<label><input type="radio" name="q2"> main</label>
+<label><input type="radio" name="q2"> contrib</label>
+<label><input type="radio" name="q2"> backports</label>
+<label><input type="radio" name="q2"> non-free-firmware</label>
+</div>
+
+<div class="mc" data-answer="1">
+<p class="mc-q">3. Misturar pacotes da stable com os da testing cria o quê?</p>
+<label><input type="radio" name="q3"> Um FrankenDebian, que quebra nas atualizações.</label>
+<label><input type="radio" name="q3"> Uma point release.</label>
+<label><input type="radio" name="q3"> Um backport.</label>
+<label><input type="radio" name="q3"> Uma versão LTS.</label>
+</div>
+
+<div class="pager"></div>
+
+</div>
+</main>
+</div>
+<script src="assets/site.js"></script>
+</body>
+</html>

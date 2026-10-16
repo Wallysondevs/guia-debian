@@ -1,0 +1,349 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Debian bancos de dados — PostgreSQL 17 e MariaDB | Guia Debian</title>
+<meta name="description" content="Aprenda a instalar e usar bancos de dados no Debian 13: PostgreSQL 17 com pg_lsclusters, psql, usuários e backup com pg_dump; MariaDB 11.8 com autenticação por socket, usuários, mariadb-dump; acesso remoto com segurança e erros reais.">
+<link rel="stylesheet" href="assets/style.css">
+<script>try{var t=localStorage.getItem("tema");if(t)document.documentElement.setAttribute("data-theme",t)}catch(e){}</script>
+</head>
+<body>
+<div class="layout">
+<nav class="sidebar" id="sidebar" aria-label="Tópicos"></nav>
+<main class="main">
+<div class="content">
+
+<div class="pager"></div>
+
+<h1>Debian <span class="hl">Bancos de Dados</span></h1>
+
+<p class="intro">Quase toda aplicação guarda seus dados num <strong>banco de dados</strong>: cadastros, pedidos, posts. No Debian, os dois mais usados vêm prontos no repositório: o <strong>PostgreSQL</strong> e o <strong>MariaDB</strong> (o substituto livre do MySQL, que o Debian instala até quando você pede "mysql").</p>
+
+<div class="note">
+<strong>Você vai aprender</strong>
+<ul>
+  <li>O que é um servidor de banco de dados e como ele "conversa" com os programas.</li>
+  <li>PostgreSQL: instalar, ver o cluster com <code>pg_lsclusters</code>, criar usuário e banco, usar o <code>psql</code> e fazer backup.</li>
+  <li>MariaDB: entrar como root sem senha (e por quê), criar usuário com senha, consultar e fazer backup.</li>
+  <li>Liberar o acesso de outra máquina sem abrir uma porta perigosa.</li>
+</ul>
+</div>
+
+<p>Comandos de administração como <strong>root</strong> (<code>su -</code>) na máquina fictícia <strong>servidor</strong>; comandos de uso como <strong>ana</strong>. As saídas vêm de um Debian 13 real com PostgreSQL 17.11 e MariaDB 11.8.6. Os dois respondem em português quando o sistema está em pt-BR, com exceções que a aula mostra.</p>
+
+<hr>
+
+<h2>Conceito: um servidor dentro do servidor</h2>
+<p>O banco de dados é um <strong>serviço</strong> que fica rodando e esperando conexões, como o nginx. Os programas não abrem os arquivos do banco: eles se conectam ao serviço e mandam comandos em <strong>SQL</strong> ("me dê os produtos mais baratos que 10 reais").</p>
+
+<div class="table-wrap">
+<table class="ref">
+<tr><th></th><th>PostgreSQL</th><th>MariaDB</th></tr>
+<tr><td>Pacote</td><td><code>postgresql</code> (versão 17 no Debian 13)</td><td><code>mariadb-server</code> (versão 11.8)</td></tr>
+<tr><td>Porta</td><td>5432</td><td>3306</td></tr>
+<tr><td>Cliente de terminal</td><td><code>psql</code></td><td><code>mariadb</code> (ou <code>mysql</code>)</td></tr>
+<tr><td>Administrador</td><td>usuário de sistema <code>postgres</code></td><td><code>root</code> do sistema</td></tr>
+<tr><td>Backup</td><td><code>pg_dump</code></td><td><code>mariadb-dump</code> (ou <code>mysqldump</code>)</td></tr>
+<tr><td>Escuta em</td><td>só <code>localhost</code> por padrão</td><td>só <code>127.0.0.1</code> por padrão</td></tr>
+</table>
+</div>
+
+<hr>
+
+<h2>PostgreSQL</h2>
+
+<h3>Instalar e conferir</h3>
+<pre class="term" data-host="servidor" data-user="root">#> apt install postgresql
+#> pg_lsclusters
+Ver Cluster Port Status Owner    Data directory              Log file
+17  main    5432 online postgres /var/lib/postgresql/17/main /var/log/postgresql/postgresql-17-main.log</pre>
+
+<p>O <code>pg_lsclusters</code> é uma ferramenta do Debian. Ela mostra cada <strong>cluster</strong> (uma instância do PostgreSQL com seus bancos): versão 17, nome <code>main</code>, porta 5432, ligado (<code>online</code>), onde ficam os dados e o log. O Debian deixa ter várias versões e clusters lado a lado, o que facilita atualizar.</p>
+
+<div class="note">
+<strong>O serviço "exited" é normal</strong>
+<p><code>systemctl status postgresql</code> mostra <code>active (exited)</code>. É um serviço "guarda-chuva" do Debian que liga os clusters. O que de fato roda é o <code>postgresql@17-main</code>: confira com <code>systemctl status postgresql@17-main</code>.</p>
+</div>
+
+<h3>Entrar como administrador</h3>
+<p>Na instalação, o PostgreSQL cria o usuário de sistema <code>postgres</code>, que é o administrador do banco. Ele entra sem senha porque o Debian usa a autenticação <code>peer</code>: o banco confia no usuário do Linux que está conectando pelo socket local.</p>
+
+<pre class="term" data-host="servidor" data-user="root">#> su - postgres -c "psql -c 'SELECT version();'"
+                                                       version
+---------------------------------------------------------------------------------------------------------------------
+ PostgreSQL 17.11 (Debian 17.11-0+deb13u1) on x86_64-pc-linux-gnu, compiled by gcc (Debian 14.2.0-19) 14.2.0, 64-bit
+(1 linha)</pre>
+
+<p>Se a ana tentar entrar antes de existir um usuário (no PostgreSQL, "role") com o nome dela:</p>
+<pre class="term" data-host="servidor">$ psql
+psql: erro: a conexão com o servidor no soquete "/var/run/postgresql/.s.PGSQL.5432" falhou: FATAL:  role "ana" não existe</pre>
+
+<h3>Criar usuário e banco</h3>
+<dl class="anatomy">
+  <dt>createuser ana</dt><dd>Cria um "role" (usuário do banco) com o mesmo nome do usuário do Linux, para o <code>peer</code> funcionar.</dd>
+  <dt>createdb -O ana loja</dt><dd>Cria o banco <code>loja</code> com <code>-O</code> (<em>owner</em>, dono) <code>ana</code>.</dd>
+</dl>
+
+<pre class="term" data-host="servidor" data-user="root">#> su - postgres -c "createuser ana"
+#> su - postgres -c "createdb -O ana loja"</pre>
+
+<p>Agora a ana usa o próprio banco:</p>
+<pre class="term" data-host="servidor">$ psql -d loja -c 'CREATE TABLE produtos (id serial PRIMARY KEY, nome text, preco numeric(10,2));'
+CREATE TABLE
+$ psql -d loja -c "INSERT INTO produtos (nome, preco) VALUES ('Café', 18.90), ('Pão', 7.50);"
+INSERT 0 2                                                « 2 linhas inseridas
+$ psql -d loja -c 'SELECT * FROM produtos;'
+ id | nome | preco
+----+------+-------
+  1 | Café | 18.90
+  2 | Pão  |  7.50
+(2 linhas)</pre>
+
+<h3>Os comandos com barra do psql</h3>
+<p>Dentro do <code>psql</code> (rode só <code>psql -d loja</code> para entrar), além do SQL existem atalhos que começam com <code>\</code>:</p>
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Comando</th><th>O que faz</th></tr>
+<tr><td><code>\l</code></td><td>Lista os bancos</td></tr>
+<tr><td><code>\dt</code></td><td>Lista as tabelas do banco atual</td></tr>
+<tr><td><code>\d produtos</code></td><td>Mostra as colunas de uma tabela</td></tr>
+<tr><td><code>\du</code></td><td>Lista os usuários (roles)</td></tr>
+<tr><td><code>\c outro_banco</code></td><td>Troca de banco</td></tr>
+<tr><td><code>\q</code></td><td>Sai</td></tr>
+</table>
+</div>
+
+<pre class="term" data-host="servidor">$ psql -d loja -c '\dt'
+         Lista de relações
+ Esquema |   Nome   |  Tipo  | Dono
+---------+----------+--------+------
+ public  | produtos | tabela | ana
+(1 linha)</pre>
+
+<h3>Backup e restauração</h3>
+<pre class="term" data-host="servidor">$ pg_dump loja &gt; loja.sql                              « exporta o banco inteiro em SQL
+$ head -3 loja.sql
+--
+-- PostgreSQL database dump
+--
+$ createdb loja_copia
+$ psql -q -d loja_copia -f loja.sql                  « recria tudo num banco novo
+$ psql -d loja_copia -c 'SELECT count(*) FROM produtos;'
+ count
+-------
+     2
+(1 linha)</pre>
+<p>Para a ana criar um banco, o role dela precisa da permissão: <code>su - postgres -c "createuser --createdb ana"</code>, ou o <code>postgres</code> cria por ela.</p>
+
+<hr>
+
+<h2>MariaDB</h2>
+
+<h3>Instalar e conferir</h3>
+<pre class="term" data-host="servidor" data-user="root">#> apt install mariadb-server
+#> mariadb --version
+mariadb from 11.8.6-MariaDB, client 15.2 for debian-linux-gnu (x86_64) using  EditLine wrapper
+#> systemctl status mariadb --no-pager | head -3
+● mariadb.service - MariaDB 11.8.6 database server
+     Loaded: loaded (/usr/lib/systemd/system/mariadb.service; enabled; preset: enabled)
+     Active: active (running) since Thu 2026-10-15 23:11:27 -03; 5min ago</pre>
+
+<h3>O root entra sem senha: por quê?</h3>
+<p>No Debian, o usuário <code>root</code> do MariaDB usa autenticação por <strong>socket Unix</strong>: o banco confere que quem conecta é o root do Linux e deixa entrar, sem senha. Por isso basta digitar <code>mariadb</code> como root. Qualquer outro usuário do Linux é barrado:</p>
+
+<pre class="term" data-host="servidor" data-user="root">#> mariadb -e "SELECT VERSION();"
+VERSION()
+11.8.6-MariaDB-0+deb13u1 from Debian
+#> mariadb -e "SELECT user, host FROM mysql.user;"
+User	Host
+mariadb.sys	localhost
+mysql	localhost
+root	localhost</pre>
+<pre class="term" data-host="servidor">$ mariadb
+ERROR 1698 (28000): Access denied for user 'ana'@'localhost'</pre>
+
+<p>Isso é mais seguro do que uma senha de root: ninguém de fora consegue entrar como root, nem adivinhando. Por isso, ao rodar o <code>mariadb-secure-installation</code> (o nome novo do antigo <code>mysql_secure_installation</code>, que nem existe mais no Debian 13), mantenha o root com socket.</p>
+
+<h3>Criar banco e usuário para a aplicação</h3>
+<p>Aplicações (como um site em PHP) conectam com usuário e senha. Crie um usuário só para elas, com acesso só ao banco delas:</p>
+
+<pre class="term" data-host="servidor" data-user="root">#> mariadb
+MariaDB [(none)]&gt; CREATE DATABASE loja;
+MariaDB [(none)]&gt; CREATE USER 'lojaapp'@'localhost' IDENTIFIED BY 'SenhaForte123';
+MariaDB [(none)]&gt; GRANT ALL PRIVILEGES ON loja.* TO 'lojaapp'@'localhost';
+MariaDB [(none)]&gt; exit</pre>
+
+<dl class="anatomy">
+  <dt>'lojaapp'@'localhost'</dt><dd>No MariaDB, um usuário é sempre <em>nome@de-onde</em>. <code>localhost</code> = só desta máquina.</dd>
+  <dt>IDENTIFIED BY '…'</dt><dd>A senha.</dd>
+  <dt>GRANT ALL PRIVILEGES ON loja.*</dt><dd>Todas as permissões, mas só nas tabelas (<code>.*</code>) do banco <code>loja</code>.</dd>
+</dl>
+
+<pre class="term" data-host="servidor">$ mariadb -u lojaapp -p loja
+Enter password:
+MariaDB [loja]&gt; CREATE TABLE produtos (id INT AUTO_INCREMENT PRIMARY KEY, nome VARCHAR(50), preco DECIMAL(10,2));
+MariaDB [loja]&gt; INSERT INTO produtos (nome, preco) VALUES ('Café', 18.90), ('Pão', 7.50);
+MariaDB [loja]&gt; SELECT * FROM produtos;
++----+------+-------+
+| id | nome | preco |
++----+------+-------+
+|  1 | Café | 18.90 |
+|  2 | Pão  |  7.50 |
++----+------+-------+
+2 rows in set (0.001 sec)</pre>
+
+<p>O <code>-p</code> sem nada depois faz ele pedir a senha sem mostrá-la (mais seguro que digitar <code>-pSenha</code>, que fica no histórico). As mensagens do MariaDB ficam em inglês.</p>
+
+<h3>Backup e restauração</h3>
+<pre class="term" data-host="servidor" data-user="root">#> mariadb-dump loja &gt; loja.sql
+#> head -2 loja.sql
+/*M!999999\- enable the sandbox mode */
+-- MariaDB dump 10.19-11.8.6-MariaDB, for debian-linux-gnu (x86_64)
+#> mariadb loja &lt; loja.sql                               « restaura</pre>
+<p>O <code>mysqldump</code> e o <code>mysql</code> continuam existindo no Debian como nomes alternativos, para scripts antigos.</p>
+
+<hr>
+
+<h2>Acesso remoto, com cuidado</h2>
+<p>Por padrão, os dois só aceitam conexões <strong>da própria máquina</strong>:</p>
+<pre class="term" data-host="servidor" data-user="root">#> ss -tlnp | grep -E ":5432|:3306"
+LISTEN 0      200        127.0.0.1:5432       0.0.0.0:*    users:(("postgres",pid=139257,fd=7))
+LISTEN 0      80         127.0.0.1:3306       0.0.0.0:*    users:(("mariadbd",pid=139580,fd=28))
+LISTEN 0      200            [::1]:5432          [::]:*    users:(("postgres",pid=139257,fd=6))</pre>
+
+<p>Isso é o certo para a maioria dos casos: a aplicação roda no mesmo servidor. Se outra máquina realmente precisar acessar:</p>
+<ul>
+  <li><strong>Melhor opção:</strong> não abra a porta. Use um túnel SSH a partir da outra máquina: <code>ssh -L 5432:localhost:5432 ana@servidor</code> (veja <a href="ssh.html">SSH</a>).</li>
+  <li><strong>PostgreSQL:</strong> em <code>/etc/postgresql/17/main/postgresql.conf</code>, troque <code>#listen_addresses = 'localhost'</code> por <code>listen_addresses = '*'</code>; em <code>pg_hba.conf</code>, libere só a rede necessária (ex.: <code>host loja ana 192.168.0.0/24 scram-sha-256</code>); reinicie com <code>systemctl restart postgresql</code>.</li>
+  <li><strong>MariaDB:</strong> em <code>/etc/mysql/mariadb.conf.d/50-server.cnf</code>, mude <code>bind-address = 127.0.0.1</code>; crie o usuário com o host certo (<code>'lojaapp'@'192.168.0.%'</code>); reinicie.</li>
+  <li>Em qualquer caso, libere a porta no firewall <strong>só</strong> para o IP de quem precisa (veja <a href="nftables.html">Firewall</a>).</li>
+</ul>
+
+<div class="warning">
+<strong>Nunca exponha o banco para a internet inteira</strong>
+<p>Bancos expostos são alvo de robôs que tentam senhas o dia todo. Prefira túnel SSH ou VPN (veja <a href="wireguard.html">WireGuard</a>).</p>
+</div>
+
+<hr>
+
+<h2>Parar os serviços</h2>
+<p>Se o banco era só para estudo, desligue-o para economizar memória:</p>
+<pre class="term" data-host="servidor" data-user="root">#> systemctl disable --now postgresql mariadb
+Removed '/etc/systemd/system/multi-user.target.wants/postgresql.service'.
+Removed '/etc/systemd/system/multi-user.target.wants/mariadb.service'.</pre>
+
+<hr>
+
+<h2>Quando não funciona</h2>
+
+<div class="cenario">
+<strong>PostgreSQL: "FATAL: role … não existe"</strong>
+<pre class="term" data-host="servidor">$ psql
+psql: erro: a conexão com o servidor no soquete "/var/run/postgresql/.s.PGSQL.5432" falhou: FATAL:  role "ana" não existe</pre>
+<p><strong>O que aconteceu:</strong> o <code>psql</code> tenta entrar com um usuário do banco com o mesmo nome do usuário do Linux, e ele não existe.</p>
+<p><strong>Como resolver:</strong> <code>su - postgres -c "createuser ana"</code>, ou entre como administrador: <code>su - postgres -c psql</code>.</p>
+</div>
+
+<div class="cenario">
+<strong>PostgreSQL: "FATAL: banco de dados … não existe"</strong>
+<pre class="term" data-host="servidor">$ psql -d nada
+psql: erro: a conexão com o servidor no soquete "/var/run/postgresql/.s.PGSQL.5432" falhou: FATAL:  banco de dados "nada" não existe</pre>
+<p><strong>Como resolver:</strong> veja os bancos com <code>psql -l</code> e use o nome certo, ou crie com <code>createdb</code>. Sem <code>-d</code>, o <code>psql</code> procura um banco com o seu nome de usuário.</p>
+</div>
+
+<div class="cenario">
+<strong>Erro de sintaxe no SQL</strong>
+<pre class="term" data-host="servidor">$ psql -d loja -c 'SELEC * FROM produtos;'
+ERRO:  erro de sintaxe em ou próximo a "SELEC"
+LINHA 1: SELEC * FROM produtos;
+         ^                                              « o ^ aponta onde ele se perdeu</pre>
+<pre class="term" data-host="servidor" data-user="root">#> mariadb loja -e "SELEC * FROM produtos"
+ERROR 1064 (42000) at line 1: You have an error in your SQL syntax; check the manual that corresponds to your MariaDB server version for the right syntax to use near 'SELEC * FROM produtos' at line 1</pre>
+<p><strong>Como resolver:</strong> a mensagem mostra o trecho do problema (aqui, <code>SELECT</code> escrito errado). No psql, o <code>^</code> aponta a posição.</p>
+</div>
+
+<div class="cenario">
+<strong>MariaDB: "ERROR 1698 … Access denied" e "ERROR 1045 … (using password: YES)"</strong>
+<pre class="term" data-host="servidor">$ mariadb
+ERROR 1698 (28000): Access denied for user 'ana'@'localhost'
+$ mariadb -u lojaapp -perrada loja
+ERROR 1045 (28000): Access denied for user 'lojaapp'@'localhost' (using password: YES)</pre>
+<p><strong>O que aconteceu:</strong> o 1698 aparece quando o usuário entra pelo socket sem ter permissão (a ana não existe no MariaDB); o 1045, quando a senha está errada.</p>
+<p><strong>Como resolver:</strong> para administrar, entre como root do Linux (<code>su -</code> e <code>mariadb</code>). Para a aplicação, confira o usuário, a senha e o host com <code>SELECT user, host FROM mysql.user;</code>.</p>
+</div>
+
+<div class="cenario">
+<strong>"mysql_secure_installation: comando não encontrado"</strong>
+<p><strong>Como resolver:</strong> no Debian 13 o nome é <code>mariadb-secure-installation</code>.</p>
+</div>
+
+<hr>
+
+<h2>Referência rápida</h2>
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Comando</th><th>O que faz</th></tr>
+<tr><td><code>pg_lsclusters</code></td><td>Lista os clusters do PostgreSQL (Debian)</td></tr>
+<tr><td><code>su - postgres -c psql</code></td><td>Entra no PostgreSQL como administrador</td></tr>
+<tr><td><code>createuser NOME</code> / <code>createdb -O DONO BANCO</code></td><td>Cria usuário / banco (como <code>postgres</code>)</td></tr>
+<tr><td><code>psql -d BANCO</code></td><td>Abre um banco; <code>\l</code>, <code>\dt</code>, <code>\q</code></td></tr>
+<tr><td><code>pg_dump BANCO &gt; arquivo.sql</code></td><td>Backup do PostgreSQL</td></tr>
+<tr><td><code>mariadb</code> (como root)</td><td>Entra no MariaDB como administrador</td></tr>
+<tr><td><code>mariadb -u USUARIO -p BANCO</code></td><td>Entra com usuário e senha</td></tr>
+<tr><td><code>mariadb-dump BANCO &gt; arquivo.sql</code></td><td>Backup do MariaDB</td></tr>
+<tr><td><code>mariadb BANCO &lt; arquivo.sql</code></td><td>Restaura um backup do MariaDB</td></tr>
+<tr><td><code>ss -tlnp | grep -E ":5432|:3306"</code></td><td>Confere em que endereço os bancos escutam</td></tr>
+</table>
+</div>
+
+<hr>
+
+<h2>Exercícios</h2>
+
+<div class="exercise">
+<h3>1. Os clusters</h3>
+<p>Qual comando do Debian lista os clusters do PostgreSQL?</p>
+<div class="ex-code"><input data-answer="pg_lsclusters" aria-label="comando"></div>
+</div>
+
+<div class="exercise">
+<h3>2. Backup do MariaDB</h3>
+<p>Complete para salvar o banco <code>loja</code>:</p>
+<div class="ex-code"><input data-answer="mariadb-dump|mysqldump" aria-label="comando"> loja &gt; loja.sql</div>
+</div>
+
+<div class="mc" data-answer="2">
+<p class="mc-q">3. Por que o root do Debian entra no MariaDB sem senha?</p>
+<label><input type="radio" name="q3"> Porque a senha padrão é vazia e ninguém trocou.</label>
+<label><input type="radio" name="q3"> Porque o MariaDB confere, pelo socket Unix, que quem conecta é o root do Linux.</label>
+<label><input type="radio" name="q3"> Porque o root tem sudo.</label>
+<label><input type="radio" name="q3"> Porque o MariaDB está em modo de teste.</label>
+</div>
+
+<div class="mc" data-answer="3">
+<p class="mc-q">4. Outra máquina precisa consultar o PostgreSQL. Qual é a opção mais segura?</p>
+<label><input type="radio" name="q4"> Liberar a porta 5432 para a internet toda.</label>
+<label><input type="radio" name="q4"> Desligar o <code>pg_hba.conf</code>.</label>
+<label><input type="radio" name="q4"> Um túnel SSH: <code>ssh -L 5432:localhost:5432 ana@servidor</code>.</label>
+<label><input type="radio" name="q4"> Criar o usuário <code>postgres</code> com senha fraca.</label>
+</div>
+
+<hr>
+
+<h2>Resumo</h2>
+<ul>
+  <li>Debian 13: PostgreSQL 17 (<code>postgresql</code>) e MariaDB 11.8 (<code>mariadb-server</code>), ambos ouvindo só na própria máquina.</li>
+  <li>PostgreSQL: administrador é o usuário <code>postgres</code>; <code>pg_lsclusters</code> mostra os clusters; autenticação <code>peer</code> liga usuário do Linux ao do banco.</li>
+  <li>MariaDB: root entra pelo socket, sem senha; aplicações usam um usuário próprio com <code>GRANT</code> só no banco delas.</li>
+  <li>Backup: <code>pg_dump</code> e <code>mariadb-dump</code>. Acesso remoto: prefira túnel SSH ou VPN.</li>
+</ul>
+
+<div class="pager"></div>
+
+</div>
+</main>
+</div>
+<script src="assets/site.js"></script>
+</body>
+</html>

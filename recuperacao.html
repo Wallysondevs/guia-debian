@@ -1,0 +1,318 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Debian Recuperar um Sistema — recovery, fstab, senha e chroot | Guia Debian</title>
+<meta name="description" content="Como recuperar um Debian 13 que não liga: modo de recuperação (que pede a senha de root), modo de emergência por fstab errado, senha esquecida com init=/bin/bash, pendrive live com chroot e fsck, com as mensagens reais.">
+<link rel="stylesheet" href="assets/style.css">
+<script>try{var t=localStorage.getItem("tema");if(t)document.documentElement.setAttribute("data-theme",t)}catch(e){}</script>
+</head>
+<body>
+<div class="layout">
+<nav class="sidebar" id="sidebar" aria-label="Tópicos"></nav>
+<main class="main">
+<div class="content">
+
+<div class="pager"></div>
+
+<h1>Debian <span class="hl">Recuperar um Sistema</span></h1>
+
+<p class="intro">Um dia o Debian não vai ligar: uma linha errada no <code>/etc/fstab</code>, uma senha esquecida, um GRUB apagado. Quase sempre dá para consertar sem reinstalar. Nesta aula você vai subir uma "escada" de ferramentas de resgate, da mais simples à mais poderosa.</p>
+
+<div class="note">
+<strong>Você vai aprender</strong>
+<ul>
+  <li>Usar o modo de recuperação do Debian, que é diferente do Ubuntu: ele <strong>pede a senha do root</strong>.</li>
+  <li>Sair do modo de emergência causado por um <code>/etc/fstab</code> errado.</li>
+  <li>Trocar uma senha esquecida com <code>init=/bin/bash</code>.</li>
+  <li>Consertar o GRUB a partir de um pendrive com <code>chroot</code>.</li>
+  <li>Verificar o disco com <code>fsck</code>.</li>
+</ul>
+</div>
+
+<div class="tip">
+<strong>Pratique antes de precisar</strong>
+<p>Faça estes exercícios numa máquina virtual, de preferência com um snapshot salvo. O <a href="projeto-quebre-conserte.html">projeto Quebre e Conserte</a> guia você por isso.</p>
+</div>
+
+<hr>
+
+<h2>Antes do comando: a escada do resgate</h2>
+<ol class="passo">
+  <li><strong>Kernel anterior</strong> no menu do GRUB (problema depois de atualizar). Veja <a href="boot-grub.html">Boot, GRUB e Kernel</a>.</li>
+  <li><strong>Modo de recuperação</strong> (<em>recovery mode</em>): o sistema sobe o mínimo e abre um terminal de root.</li>
+  <li><strong>Modo de emergência</strong>: aparece sozinho quando um disco do <code>fstab</code> falha.</li>
+  <li><strong><code>init=/bin/bash</code></strong>: um terminal de root sem senha nenhuma, para senhas esquecidas.</li>
+  <li><strong>Pendrive live + <code>chroot</code></strong>: quando nem o GRUB funciona.</li>
+</ol>
+
+<hr>
+
+<h2>O modo de recuperação do Debian</h2>
+<p>No menu do GRUB, entre em <strong>Advanced options for Debian GNU/Linux</strong> e escolha a linha que termina em <strong>(recovery mode)</strong>. Em vez do menu colorido do Ubuntu, o Debian mostra direto um pedido de senha. Esta é a tela real do Debian 13:</p>
+
+<pre class="term" data-title="tty1 — modo de recuperação">You are in rescue mode. After logging in, type "journalctl -xb" to view
+system logs, "systemctl reboot" to reboot, or "exit"
+to continue bootup.
+Give root password for maintenance
+(ou pressione Contrl-D para continuar):                      « digite a senha do ROOT (nada aparece)</pre>
+
+<p>A tela mistura inglês e português porque as traduções estão incompletas (o "Contrl-D", com erro de digitação, é da tradução original). O que ela diz:</p>
+<ul>
+  <li>Você está no <em>rescue mode</em> (modo de manutenção).</li>
+  <li>Digite a <strong>senha do root</strong> para entrar.</li>
+  <li><kbd>Ctrl</kbd>+<kbd>D</kbd> desiste e continua o boot normal.</li>
+  <li>Lá dentro: <code>journalctl -xb</code> mostra os logs, <code>systemctl reboot</code> reinicia e <code>exit</code> continua o boot.</li>
+</ul>
+
+<p>Com a senha certa, você ganha um terminal de root:</p>
+
+<pre class="term" data-user="root" data-title="tty1 — modo de recuperação">#> journalctl -xb -p err
+#> systemctl reboot</pre>
+
+<div class="cenario">
+<strong>"a conta root está travada"</strong>
+<pre class="term" data-title="tty1">Não foi possível abrir acesso ao console, a conta root está travada.
+Veja a página man do sulogin(8) para mais detalhes.
+
+Pressione Enter para continuar.</pre>
+<p><strong>O que aconteceu:</strong> na instalação, você deixou a senha do root em branco. Nesse caso o Debian trava a conta root e dá <code>sudo</code> ao primeiro usuário (veja <a href="root-su-sudo.html">root, su e sudo</a>). Sem senha de root, o modo de recuperação não deixa entrar.</p>
+<p><strong>Como resolver:</strong> use o <code>init=/bin/bash</code> (mais abaixo) ou o pendrive live. Com o sistema funcionando de novo, considere dar uma senha ao root só para emergências.</p>
+</div>
+
+<hr>
+
+<h2>Caso 1: o fstab errado impede o boot</h2>
+<p>Um disco listado no <code>/etc/fstab</code> que não existe mais (UUID errado, HD externo desconectado) faz o systemd esperar 90 segundos e cair no <strong>modo de emergência</strong>:</p>
+
+<pre class="term" data-title="tty1 — modo de emergência">[ TIME ] Timed out waiting for device dev-disk-by\x2duuid-aaaa958f\x2d….device - /dev/disk/by-uuid/aaaa958f-…
+[DEPEND] Dependency failed for local-fs.target - Local File Systems.
+You are in emergency mode. After logging in, type "journalctl -xb" to view
+system logs, "systemctl reboot" to reboot, "systemctl default" or "exit"
+to boot into default mode.
+Give root password for maintenance
+(ou pressione Contrl-D para continuar):</pre>
+
+<p>As duas primeiras linhas variam conforme o disco (são as típicas do systemd); a parte de baixo é a mensagem real do Debian 13. Para consertar:</p>
+
+<ol class="passo">
+  <li>Digite a senha do root.</li>
+  <li>A raiz pode estar só para leitura. Remonte para escrita: <code>mount -o remount,rw /</code></li>
+  <li>Descubra a linha culpada com <code>findmnt --verify</code> (veja abaixo).</li>
+  <li>Edite: <code>nano /etc/fstab</code>. Corrija o UUID (os certos aparecem em <code>blkid</code>) ou comente a linha com <code>#</code>.</li>
+  <li>Confira de novo, rode <code>systemctl daemon-reload</code> e <code>systemctl reboot</code>.</li>
+</ol>
+
+<p>O <code>findmnt --verify</code> lê o fstab e aponta erros sem montar nada. Esta é a saída real com um UUID de swap inventado:</p>
+
+<pre class="term" data-user="root">#> findmnt --verify
+none
+   [E] fonte não alcançável na inicialização: UUID=aaaa958f-02ec-4d04-9252-01fabc01bb17     « [E] = erro
+/media/cdrom0
+   [W] não foi possível detectar o tipo de sistema de arquivos em disco (Mídia não encontrada)  « [W] = só aviso
+
+0 erro de análise, 1 erro, 1 aviso</pre>
+
+<p>O aviso sobre <code>/media/cdrom0</code> é normal: o instalador do Debian deixa uma linha para o leitor de CD/DVD, e sem disco no leitor ele não detecta nada.</p>
+
+<div class="tip">
+<strong>Prevenção</strong>
+<p>Para discos que podem não estar presentes (HD externo, pendrive), acrescente <code>nofail</code> às opções no fstab. E sempre rode <code>findmnt --verify</code> depois de editar o arquivo, antes de reiniciar. Veja <a href="montar.html">mount e fstab</a>.</p>
+</div>
+
+<hr>
+
+<h2>Caso 2: esqueci a senha</h2>
+<p>Se você esqueceu a senha do root (ou do seu usuário, e não tem sudo), o modo de recuperação não ajuda: ele mesmo pede a senha do root. A saída é pedir ao kernel para iniciar um <code>bash</code> no lugar do systemd.</p>
+
+<ol class="passo">
+  <li>No menu do GRUB, deixe <strong>Debian GNU/Linux</strong> selecionado e aperte <kbd>e</kbd>.</li>
+  <li>Ache a linha que começa com <code>linux</code> e termina com <code>ro quiet</code>.</li>
+  <li>No fim dela, acrescente um espaço e <code>init=/bin/bash</code>.</li>
+  <li>Aperte <kbd>Ctrl</kbd>+<kbd>X</kbd> para iniciar.</li>
+</ol>
+
+<pre class="file" data-file="linha linux, editada no GRUB">linux /boot/vmlinuz-6.12.111+deb13-amd64 root=UUID=50185294-cee5-49de-a27c-2cf995361c67 ro quiet init=/bin/bash</pre>
+
+<p>Em segundos aparece um prompt de root, sem pedir senha:</p>
+
+<pre class="term" data-user="root" data-title="tty1 — init=/bin/bash">#> mount -o remount,rw /
+#> passwd root
+Nova senha:
+Redigite a nova senha:
+passwd: senha atualizada com sucesso
+#> sync
+#> exec /sbin/init</pre>
+
+<dl class="anatomy">
+  <dt>mount -o remount,rw /</dt><dd>A raiz começa só para leitura (<code>ro</code>); sem isso o <code>passwd</code> não consegue gravar.</dd>
+  <dt>passwd root</dt><dd>Define a nova senha (troque <code>root</code> por <code>ana</code> para mudar a dela). Nada aparece enquanto você digita.</dd>
+  <dt>sync</dt><dd>Grava no disco tudo o que estiver pendente.</dd>
+  <dt>exec /sbin/init</dt><dd>Entrega a máquina ao systemd e o boot continua normalmente.</dd>
+</dl>
+
+<div class="warning">
+<strong>Isso também é um risco de segurança</strong>
+<p>Qualquer pessoa com acesso físico ao computador pode fazer o mesmo. Por isso, em máquinas sensíveis, use criptografia de disco (LUKS, oferecida no instalador do Debian) e uma senha no GRUB ou no firmware.</p>
+</div>
+
+<hr>
+
+<h2>Caso 3: nem o GRUB aparece — pendrive live + chroot</h2>
+<p>Se a tela mostra <code>grub rescue&gt;</code>, ou o computador diz que não há sistema operacional, inicie por um pendrive do <strong>Debian Live</strong> (por exemplo, <code>debian-live-13.5.0-amd64-gnome.iso</code>). No live, o usuário é <code>user</code>, a senha é <code>live</code> e o <code>sudo</code> funciona.</p>
+
+<p><code>chroot</code> (de <em>change root</em>) faz um terminal "entrar" no Debian instalado no disco, como se ele tivesse iniciado. Dali você reinstala o GRUB.</p>
+
+<ol class="passo">
+  <li>Abra um terminal no live e vire root: <code>sudo -i</code>.</li>
+  <li>Descubra a partição do Debian com <code>lsblk -f</code> (procure a ext4 grande).</li>
+  <li>Monte e prepare as pastas especiais, entre com <code>chroot</code> e reinstale o GRUB, como abaixo.</li>
+</ol>
+
+<pre class="term" data-user="root" data-host="debian" data-title="Debian Live">#> mount /dev/sda1 /mnt
+#> for d in dev proc sys run; do mount --rbind /$d /mnt/$d; done
+#> chroot /mnt
+#> grub-install /dev/sda
+Installing for i386-pc platform.
+Installation finished. No error reported.
+#> update-grub
+#> exit
+#> umount -R /mnt
+#> reboot</pre>
+
+<dl class="anatomy">
+  <dt>mount /dev/sda1 /mnt</dt><dd>Monta a raiz do Debian instalado em <code>/mnt</code>.</dd>
+  <dt>mount --rbind /dev …</dt><dd>Leva <code>/dev</code>, <code>/proc</code>, <code>/sys</code> e <code>/run</code> do live para dentro; sem eles, comandos como o <code>grub-install</code> não enxergam o hardware.</dd>
+  <dt>chroot /mnt</dt><dd>A partir daqui, <code>/</code> é o disco do Debian instalado.</dd>
+  <dt>grub-install /dev/sda</dt><dd>Grava o GRUB no <strong>disco</strong> (não na partição: <code>/dev/sda</code>, e não <code>/dev/sda1</code>).</dd>
+</dl>
+
+<p>Em computadores com UEFI, monte também a partição EFI antes do <code>chroot</code> (<code>mount /dev/sda1 /mnt/boot/efi</code>, se ela for a primeira) e o <code>grub-install</code> mostra "Installing for x86_64-efi platform." As mensagens do <code>grub-install</code> acima são as típicas.</p>
+
+<hr>
+
+<h2>Verificar o sistema de arquivos: fsck</h2>
+<p>O <code>fsck</code> (de <em>file system check</em>) procura e corrige erros num sistema de arquivos. Ele precisa que a partição <strong>não esteja montada</strong> (ou esteja só para leitura). Por isso se usa no pendrive live ou no modo de recuperação. Esta é a saída real numa partição ext4 saudável:</p>
+
+<pre class="term" data-user="root">#> fsck.ext4 -f /dev/sdb1
+e2fsck 1.47.2 (1-Jan-2025)
+Pass 1: Checking inodes, blocks, and sizes
+Pass 2: Checking directory structure
+Pass 3: Checking directory connectivity
+Pass 4: Checking reference counts
+Pass 5: Checking group summary information
+/dev/sdb1: 12/16384 files (0.0% non-contiguous), 9545/65536 blocks       « sem erros</pre>
+
+<p>O <code>e2fsck</code> do Debian não tem tradução: as mensagens são sempre em inglês. Se você rodar numa partição montada, ele avisa:</p>
+
+<pre class="term" data-user="root">#> e2fsck -n /dev/sda1
+e2fsck 1.47.2 (1-Jan-2025)
+Warning!  /dev/sda1 is mounted.
+Warning: skipping journal recovery because doing a read-only filesystem check.</pre>
+
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Opção</th><th>Efeito</th></tr>
+<tr><td><code>-f</code></td><td>Força a verificação mesmo se o disco parece "limpo"</td></tr>
+<tr><td><code>-n</code></td><td>Só olha, não corrige nada (seguro em partição montada)</td></tr>
+<tr><td><code>-y</code></td><td>Responde "sim" a todas as correções</td></tr>
+<tr><td><code>-p</code></td><td>Corrige sozinho só o que é seguro</td></tr>
+</table>
+</div>
+
+<div class="warning">
+<strong>Atenção</strong>
+<p>Nunca rode <code>fsck</code> com correção (<code>-y</code>, <code>-p</code> ou sem opções) numa partição montada para escrita: pode destruir dados.</p>
+</div>
+
+<hr>
+
+<h2>Formas diferentes de fazer</h2>
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Situação</th><th>Ferramenta mais simples</th><th>Alternativa</th></tr>
+<tr><td>Kernel novo não sobe</td><td>Kernel anterior no GRUB</td><td>Recovery mode</td></tr>
+<tr><td>fstab errado</td><td>Modo de emergência (senha do root)</td><td><code>init=/bin/bash</code> ou live</td></tr>
+<tr><td>Senha esquecida</td><td><code>init=/bin/bash</code></td><td>Live + <code>chroot</code> + <code>passwd</code></td></tr>
+<tr><td>GRUB apagado</td><td>Live + <code>chroot</code> + <code>grub-install</code></td><td>Pacote <code>boot-repair</code> (não vem no Debian; é de um PPA do Ubuntu)</td></tr>
+<tr><td>Disco com erros</td><td><code>fsck</code> no live</td><td>Recovery mode com a raiz em leitura</td></tr>
+</table>
+</div>
+
+<hr>
+
+<h2>Quando não funciona</h2>
+
+<div class="cenario">
+<strong>Digitei a senha no modo de recuperação e aparece "Login incorreto"</strong>
+<p><strong>O que aconteceu:</strong> ele pede a senha do <strong>root</strong>, não a sua. Lembre também que o teclado pode estar em inglês nessa hora (os símbolos mudam de lugar).</p>
+</div>
+
+<div class="cenario">
+<strong>Com init=/bin/bash, o passwd diz que não pode gravar</strong>
+<p><strong>O que aconteceu:</strong> faltou <code>mount -o remount,rw /</code>.</p>
+</div>
+
+<div class="cenario">
+<strong>No chroot, o grub-install reclama de /dev ou de EFI</strong>
+<p><strong>O que aconteceu:</strong> faltaram os <code>mount --rbind</code>, ou, em UEFI, montar a partição EFI em <code>/mnt/boot/efi</code> antes do <code>chroot</code>.</p>
+</div>
+
+<hr>
+
+<h2>Exercícios</h2>
+
+<div class="exercise">
+<h3>1. Raiz para escrita</h3>
+<p>Complete para remontar a raiz como leitura e escrita:</p>
+<div class="ex-code">mount -o <input data-answer="remount,rw" aria-label="opções"> /</div>
+</div>
+
+<div class="exercise">
+<h3>2. Conferir o fstab</h3>
+<p>Qual comando procura erros no <code>/etc/fstab</code> sem montar nada?</p>
+<div class="ex-code"><input data-answer="findmnt --verify|findmnt -x" aria-label="comando"></div>
+</div>
+
+<div class="exercise">
+<h3>3. Parâmetro do kernel</h3>
+<p>O que acrescentar à linha <code>linux</code> para ganhar um terminal de root sem senha?</p>
+<div class="ex-code"><input data-answer="init=/bin/bash" aria-label="parâmetro"></div>
+</div>
+
+<div class="mc" data-answer="2">
+<p class="mc-q">4. Qual a principal diferença do modo de recuperação do Debian para o do Ubuntu?</p>
+<label><input type="radio" name="q4"> O Debian não tem modo de recuperação.</label>
+<label><input type="radio" name="q4"> O Debian vai direto a um terminal e pede a senha do root; o Ubuntu mostra um menu.</label>
+<label><input type="radio" name="q4"> O Debian pede a senha do usuário comum.</label>
+<label><input type="radio" name="q4"> O Debian formata o disco.</label>
+</div>
+
+<div class="mc" data-answer="1">
+<p class="mc-q">5. No chroot, onde se instala o GRUB num computador com BIOS?</p>
+<label><input type="radio" name="q5"> No disco: <code>grub-install /dev/sda</code>.</label>
+<label><input type="radio" name="q5"> Na partição: <code>grub-install /dev/sda1</code>.</label>
+<label><input type="radio" name="q5"> Em <code>/boot/grub</code>, copiando os arquivos à mão.</label>
+<label><input type="radio" name="q5"> No pendrive live.</label>
+</div>
+
+<hr>
+
+<h2>Resumo</h2>
+<ul>
+  <li>Recovery mode e modo de emergência do Debian pedem a <strong>senha do root</strong>.</li>
+  <li>fstab errado: <code>mount -o remount,rw /</code>, <code>findmnt --verify</code>, corrigir, reiniciar.</li>
+  <li>Senha esquecida: <code>init=/bin/bash</code> na linha <code>linux</code> do GRUB.</li>
+  <li>GRUB quebrado: pendrive live + <code>mount --rbind</code> + <code>chroot</code> + <code>grub-install</code>.</li>
+  <li><code>fsck</code> só em partição desmontada; <code>-n</code> só olha.</li>
+</ul>
+
+<div class="pager"></div>
+
+</div>
+</main>
+</div>
+<script src="assets/site.js"></script>
+</body>
+</html>

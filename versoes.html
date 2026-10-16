@@ -1,0 +1,276 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Debian Versões — stable, testing, sid e codinomes | Guia Debian</title>
+<meta name="description" content="Entenda as versões do Debian: stable, testing, unstable (sid) e experimental, os codinomes do Toy Story, as atualizações 13.x, o ciclo de lançamento e quanto tempo cada versão recebe suporte.">
+<link rel="stylesheet" href="assets/style.css">
+<script>try{var t=localStorage.getItem("tema");if(t)document.documentElement.setAttribute("data-theme",t)}catch(e){}</script>
+</head>
+<body>
+<div class="layout">
+<nav class="sidebar" id="sidebar" aria-label="Tópicos"></nav>
+<main class="main">
+<div class="content">
+
+<div class="pager"></div>
+
+<h1>Debian <span class="hl">Versões do Debian</span></h1>
+
+<p class="intro">O Debian não tem uma versão só: ao mesmo tempo existem a <strong>estável</strong>, que você instala no dia a dia, uma em <strong>teste</strong>, que vai virar a próxima, e uma <strong>instável</strong>, onde tudo chega primeiro. Cada uma tem um número e um nome de personagem do filme Toy Story. Entender isso evita dois sustos clássicos: instalar a versão errada e atualizar para uma versão nova sem querer.</p>
+
+<div class="note">
+<strong>Você vai aprender</strong>
+<ul>
+  <li>A diferença entre stable, testing, unstable (sid) e experimental.</li>
+  <li>Os codinomes (bookworm, trixie, forky…) e por que eles importam.</li>
+  <li>O que são as atualizações 13.1, 13.2… (<em>point releases</em>).</li>
+  <li>Quanto tempo cada versão recebe correções de segurança.</li>
+  <li>Como descobrir a versão e o codinome da sua máquina.</li>
+</ul>
+</div>
+
+<hr>
+
+<h2>As quatro "faixas" do Debian</h2>
+<p>Pense numa linha de montagem. Os pacotes novos entram por uma ponta, são testados e, quando estão maduros, saem prontos na outra ponta:</p>
+
+<ol class="passo">
+  <li><strong>experimental</strong>: área de rascunho. Pacotes muito novos, que podem quebrar. Não é uma distribuição completa, só um complemento para testes.</li>
+  <li><strong>unstable</strong>, apelidada de <strong>sid</strong>: onde os pacotes novos chegam primeiro. Muda todo dia. Usada por desenvolvedores do Debian.</li>
+  <li><strong>testing</strong>: os pacotes passam para cá depois de alguns dias na sid sem bugs graves. É a futura versão estável sendo montada.</li>
+  <li><strong>stable</strong>: a versão lançada oficialmente. Depois do lançamento, só recebe correções de segurança e de bugs sérios. É a que este guia usa.</li>
+</ol>
+
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Faixa</th><th>Hoje (out/2026)</th><th>Muda com que frequência</th><th>Para quem</th></tr>
+<tr><td>stable</td><td>Debian 13 "trixie"</td><td>Só correções</td><td>Servidores, computadores de trabalho, iniciantes</td></tr>
+<tr><td>oldstable</td><td>Debian 12 "bookworm"</td><td>Só correções de segurança</td><td>Quem ainda não atualizou</td></tr>
+<tr><td>testing</td><td>Debian 14 "forky"</td><td>Todo dia</td><td>Quem quer programas novos e aceita alguns problemas</td></tr>
+<tr><td>unstable</td><td>sempre "sid"</td><td>Várias vezes por dia</td><td>Desenvolvedores do Debian</td></tr>
+</table>
+</div>
+
+<div class="warning">
+<strong>Atenção: "testing" não é "teste" no sentido de "mais seguro"</strong>
+<p>A testing <strong>não</strong> recebe correções de segurança com a mesma rapidez da stable. Para um computador de uso diário ou um servidor, use sempre a stable.</p>
+</div>
+
+<hr>
+
+<h2>Codinomes: os personagens do Toy Story</h2>
+<p>Desde 1996, cada versão do Debian recebe o nome de um personagem do filme Toy Story. O nome é escolhido antes do lançamento, então a próxima versão já tem nome enquanto ainda está em testing.</p>
+
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Versão</th><th>Codinome</th><th>Personagem</th><th>Situação em out/2026</th></tr>
+<tr><td>10</td><td>buster</td><td>O cachorro do Andy</td><td>Sem suporte gratuito</td></tr>
+<tr><td>11</td><td>bullseye</td><td>O cavalo do Woody</td><td>Sem suporte gratuito</td></tr>
+<tr><td>12</td><td>bookworm</td><td>O verme de óculos</td><td>oldstable, suporte de longo prazo (LTS)</td></tr>
+<tr><td><strong>13</strong></td><td><strong>trixie</strong></td><td>A triceratops de brinquedo</td><td><strong>stable</strong> (lançada em agosto de 2025)</td></tr>
+<tr><td>14</td><td>forky</td><td>O garfinho que virou brinquedo</td><td>testing (em preparação)</td></tr>
+<tr><td>15</td><td>duke</td><td>Duke Caboom, o motoqueiro</td><td>Nome já escolhido</td></tr>
+<tr><td>—</td><td>sid</td><td>O vizinho que quebrava brinquedos</td><td>Sempre a unstable</td></tr>
+</table>
+</div>
+
+<div class="tip">
+<strong>Curiosidade</strong>
+<p>A unstable se chama <strong>sid</strong> para sempre, numa piada interna: o Sid é o menino que destrói os brinquedos no filme. Também se costuma dizer que "sid" significa <em>Still In Development</em> ("ainda em desenvolvimento").</p>
+</div>
+
+<h3>Por que o codinome importa</h3>
+<p>O arquivo de repositórios do Debian aponta para um <strong>codinome</strong>, não para "stable". Veja o da máquina deste guia:</p>
+
+<pre class="term">$ cat /etc/apt/sources.list
+#deb cdrom:[Debian GNU/Linux 13.5.0 _Trixie_ - Official amd64 NETINST with firmware 20260516-10:08]/ trixie contrib main non-free-firmware
+
+deb http://deb.debian.org/debian trixie main non-free-firmware      « "trixie", não "stable"
+deb-src http://deb.debian.org/debian trixie main non-free-firmware
+
+deb http://security.debian.org/debian-security trixie-security main non-free-firmware
+deb-src http://security.debian.org/debian-security trixie-security main non-free-firmware
+
+# trixie-updates, to get updates before a point release is made;
+# see https://www.debian.org/doc/manuals/debian-reference/ch02.en.html#_updates_and_backports
+deb http://deb.debian.org/debian trixie-updates main non-free-firmware
+deb-src http://deb.debian.org/debian trixie-updates main non-free-firmware
+
+# This system was installed using small removable media
+# (e.g. netinst, live or single CD). The matching "deb cdrom"
+# entries were disabled at the end of the installation process.
+# For information about how to configure apt package sources,
+# see the sources.list(5) manual.</pre>
+
+<p>Com <code>trixie</code>, a máquina continua no Debian 13 mesmo depois que o Debian 14 for lançado. Se estivesse escrito <code>stable</code>, no dia do lançamento do 14 o <code>apt upgrade</code> tentaria pular de versão sozinho, o que pode quebrar o sistema. Mudar de versão deve ser uma decisão sua: veja <a href="upgrade-versao.html">Atualizar a Versão do Debian</a>.</p>
+
+<hr>
+
+<h2>Atualizações 13.1, 13.2… (point releases)</h2>
+<p>Depois do lançamento, a cada dois ou três meses o Debian publica uma <strong>atualização pontual</strong> (<em>point release</em>): um pacote de todas as correções acumuladas. O número muda de 13.0 para 13.1, 13.2 e assim por diante.</p>
+<p>Isso <strong>não</strong> é uma versão nova: é o mesmo Debian 13 com correções. Você não precisa reinstalar nada; um <code>apt update</code> seguido de <code>apt upgrade</code> já leva sua máquina para a atualização mais recente.</p>
+
+<p>A máquina deste guia foi instalada com a ISO 13.5 (veja a linha comentada do <code>cdrom</code> acima), mas já está na 13.7, porque o instalador baixou as atualizações:</p>
+
+<dl class="anatomy">
+  <dt>cat</dt><dd>Mostra o conteúdo de um arquivo (de <em>concatenate</em>, "juntar").</dd>
+  <dt>/etc/debian_version</dt><dd>Arquivo que guarda só o número da versão do Debian.</dd>
+</dl>
+
+<pre class="term">$ cat /etc/debian_version
+13.7                         « Debian 13, sétima atualização pontual</pre>
+
+<hr>
+
+<h2>Quanto tempo dura o suporte</h2>
+<p>Cada versão estável passa por três fases. As duas primeiras são gratuitas:</p>
+
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Fase</th><th>Quem cuida</th><th>Duração aproximada</th><th>O que recebe</th></tr>
+<tr><td>Suporte normal</td><td>Equipe de segurança do Debian</td><td>~3 anos (até 1 ano depois da próxima versão)</td><td>Correções de segurança e atualizações pontuais</td></tr>
+<tr><td>LTS (<em>Long Term Support</em>)</td><td>Equipe Debian LTS</td><td>Até completar ~5 anos</td><td>Correções de segurança dos pacotes principais</td></tr>
+<tr><td>ELTS (<em>Extended LTS</em>)</td><td>Empresa Freexian (pago)</td><td>Até ~10 anos</td><td>Correções para quem paga</td></tr>
+</table>
+</div>
+
+<p>O Debian lança uma versão estável nova a cada <strong>cerca de 2 anos</strong>. Na prática: com o Debian 13, você tem tempo de sobra até precisar migrar. A data exata de fim de suporte de cada versão está em <a href="https://wiki.debian.org/DebianReleases">wiki.debian.org/DebianReleases</a>.</p>
+
+<hr>
+
+<h2>Como descobrir a versão da sua máquina</h2>
+<p>Já viu o <code>/etc/debian_version</code>. Estas são as outras formas, cada uma com um nível de detalhe:</p>
+
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Comando</th><th>Mostra</th></tr>
+<tr><td><code>cat /etc/debian_version</code></td><td><code>13.7</code></td></tr>
+<tr><td><code>grep VERSION_CODENAME /etc/os-release</code></td><td><code>VERSION_CODENAME=trixie</code></td></tr>
+<tr><td><code>lsb_release -cs</code></td><td><code>trixie</code></td></tr>
+<tr><td><code>lsb_release -a</code></td><td>Distribuidor, descrição, número e codinome</td></tr>
+<tr><td><code>apt-cache policy</code></td><td>De quais faixas (stable, stable-security…) vêm os pacotes</td></tr>
+</table>
+</div>
+
+<dl class="anatomy">
+  <dt>grep</dt><dd>Procura linhas que contêm um texto.</dd>
+  <dt>VERSION_CODENAME</dt><dd>O texto procurado.</dd>
+  <dt>/etc/os-release</dt><dd>O arquivo onde procurar.</dd>
+</dl>
+
+<pre class="term">$ grep VERSION_CODENAME /etc/os-release
+VERSION_CODENAME=trixie
+$ lsb_release -cs
+trixie</pre>
+
+<p>O <code>apt-cache policy</code> mostra a "etiqueta" de cada repositório. Repare em <code>a=</code> (faixa) e <code>n=</code> (codinome):</p>
+
+<pre class="term">$ apt-cache policy
+Arquivos de pacote:
+ 100 /var/lib/dpkg/status
+     release a=now
+ 500 http://deb.debian.org/debian trixie-updates/main amd64 Packages
+     release v=13-updates,o=Debian,a=stable-updates,n=trixie-updates,l=Debian,c=main,b=amd64
+     origin deb.debian.org
+ 500 http://security.debian.org/debian-security trixie-security/main amd64 Packages
+     release v=13,o=Debian,a=stable-security,n=trixie-security,l=Debian-Security,c=main,b=amd64     « faixa e codinome
+     origin security.debian.org
+…</pre>
+
+<div class="try" data-goal="ran:grep.*CODENAME">
+<p class="try-task"><strong>Missão:</strong> nesta máquina simulada, mostre só a linha do codinome dentro de <code>/etc/os-release</code>. Depois veja o número exato com <code>cat /etc/debian_version</code>.</p>
+</div>
+
+<hr>
+
+<h2>Qual versão eu devo usar?</h2>
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Situação</th><th>Recomendação</th></tr>
+<tr><td>Primeiro contato com Debian</td><td>stable (Debian 13)</td></tr>
+<tr><td>Servidor</td><td>stable, sempre</td></tr>
+<tr><td>Computador novo com hardware muito recente</td><td>stable + kernel dos <a href="backports.html">backports</a></td></tr>
+<tr><td>Preciso de um programa mais novo</td><td>stable + <a href="backports.html">backports</a> ou <a href="flatpak.html">Flatpak</a></td></tr>
+<tr><td>Quero ajudar a testar o próximo Debian</td><td>testing, numa máquina que pode quebrar</td></tr>
+</table>
+</div>
+
+<div class="warning">
+<strong>Não misture faixas</strong>
+<p>Adicionar linhas de testing ou sid no <code>sources.list</code> de uma stable cria o que a comunidade chama de <strong>FrankenDebian</strong>: um sistema montado com peças incompatíveis, que quebra nas atualizações. Se precisa de algo mais novo, use os backports.</p>
+</div>
+
+<hr>
+
+<h2>Quando não funciona</h2>
+
+<div class="cenario">
+<strong>"lsb_release: comando não encontrado"</strong>
+<pre class="term">$ lsb_release -a
+bash: lsb_release: comando não encontrado</pre>
+<p><strong>O que aconteceu:</strong> em instalações muito mínimas (contêineres, por exemplo), o pacote <code>lsb-release</code> pode não estar instalado.</p>
+<p><strong>Como resolver:</strong> use <code>cat /etc/os-release</code>, que sempre existe.</p>
+</div>
+
+<div class="cenario">
+<strong>O apt avisa que o repositório mudou de codinome</strong>
+<pre class="term">$ su -c 'apt update'
+…
+Nota: O repositório 'http://deb.debian.org/debian stable InRelease' alterou seu valor 'Codename' de 'trixie' para 'forky'</pre>
+<p><strong>O que aconteceu:</strong> o <code>sources.list</code> usa <code>stable</code> em vez do codinome, e uma nova versão foi lançada.</p>
+<p><strong>Como resolver:</strong> troque <code>stable</code> por <code>trixie</code> no <code>sources.list</code> para continuar no Debian 13, ou planeje a migração com <a href="upgrade-versao.html">Atualizar a Versão do Debian</a>.</p>
+</div>
+
+<hr>
+
+<h2>Exercícios</h2>
+
+<div class="mc" data-answer="4">
+<p class="mc-q">1. Qual faixa do Debian é recomendada para um servidor?</p>
+<label><input type="radio" name="q1"> experimental</label>
+<label><input type="radio" name="q1"> unstable (sid)</label>
+<label><input type="radio" name="q1"> testing</label>
+<label><input type="radio" name="q1"> stable</label>
+</div>
+
+<div class="mc" data-answer="2">
+<p class="mc-q">2. A passagem do Debian 13.6 para o 13.7 é:</p>
+<label><input type="radio" name="q2"> Uma versão nova, que exige reinstalar.</label>
+<label><input type="radio" name="q2"> Uma atualização pontual com correções, recebida com <code>apt upgrade</code>.</label>
+<label><input type="radio" name="q2"> A troca de stable para testing.</label>
+<label><input type="radio" name="q2"> Um novo codinome.</label>
+</div>
+
+<div class="exercise">
+<h3>3. Codinome</h3>
+<p>Qual é o codinome do Debian 13?</p>
+<div class="ex-code"><input data-answer="trixie|Trixie" aria-label="codinome"></div>
+</div>
+
+<div class="exercise">
+<h3>4. Só o codinome</h3>
+<p>Complete para mostrar só o codinome, numa palavra:</p>
+<div class="ex-code">lsb_release <input data-answer="-cs|-sc|-c -s|-s -c" aria-label="opções"></div>
+</div>
+
+<hr>
+
+<h2>Resumo</h2>
+<ul>
+  <li>stable é a versão lançada e recomendada; testing é a próxima em montagem; sid é a instável.</li>
+  <li>Cada versão tem um codinome do Toy Story: 12 bookworm, 13 trixie, 14 forky.</li>
+  <li>Use o codinome no <code>sources.list</code> para não mudar de versão sem querer.</li>
+  <li>13.1, 13.2… são atualizações pontuais do mesmo Debian 13.</li>
+  <li>Suporte: ~3 anos normais + LTS até ~5 anos; nova versão a cada ~2 anos.</li>
+</ul>
+
+<div class="pager"></div>
+
+</div>
+</main>
+</div>
+<script src="assets/site.js"></script>
+</body>
+</html>

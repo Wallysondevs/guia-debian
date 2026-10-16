@@ -1,0 +1,272 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Debian Projeto: App com Docker | Guia Debian</title>
+<meta name="description" content="Laboratório no Debian 13: subir o Uptime Kuma com docker.io e docker compose do repositório do Debian, com volume persistente, backup do volume, atualização da imagem e os erros mais comuns.">
+<link rel="stylesheet" href="assets/style.css">
+<script>try{var t=localStorage.getItem("tema");if(t)document.documentElement.setAttribute("data-theme",t)}catch(e){}</script>
+</head>
+<body>
+<div class="layout">
+<nav class="sidebar" id="sidebar" aria-label="Tópicos"></nav>
+<main class="main">
+<div class="content">
+
+<div class="pager"></div>
+
+<h1>Projeto <span class="hl">App com Docker</span></h1>
+
+<p class="intro">Você vai colocar no ar um aplicativo de verdade, o <strong>Uptime Kuma</strong> (um painel que avisa quando seus sites caem), sem instalar nada dele no Debian: tudo roda dentro de um container. Os dados ficam num volume que sobrevive a atualizações. No fim, você faz backup desse volume e atualiza o app com dois comandos.</p>
+
+<div class="tip">
+<strong>Ao terminar você terá</strong>
+<ul>
+  <li>O Docker e o Docker Compose instalados <strong>do repositório do Debian</strong> (<code>docker.io</code> e <code>docker-compose</code>).</li>
+  <li>Um arquivo <code>compose.yaml</code> que descreve o app inteiro.</li>
+  <li>O Uptime Kuma respondendo na porta 3001, com os dados num volume.</li>
+  <li>Um backup do volume em <code>.tar.gz</code> e a rotina de atualização.</li>
+</ul>
+</div>
+
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Item</th><th>Detalhe</th></tr>
+<tr><td>Tempo estimado</td><td>1h</td></tr>
+<tr><td>Pré-requisitos</td><td><a href="projetos.html">Como Usar os Projetos</a>, <a href="docker.html">Docker</a>, <a href="systemctl.html">systemctl</a>. Ajuda ter o <code>sudo</code> configurado (<a href="projeto-servidor-web.html">Servidor Web do Zero</a>).</td></tr>
+<tr><td>Onde roda</td><td>Sua VM <code>lab</code>, com pelo menos 2 GB de memória e 5 GB livres (a imagem tem 448 MB)</td></tr>
+</table>
+</div>
+
+<div class="note">
+<strong>Docker do Debian ou da Docker Inc.?</strong>
+<p>O Debian empacota o Docker como <code>docker.io</code>, com versões estáveis e atualizações de segurança do próprio Debian. A empresa Docker oferece o <code>docker-ce</code> num repositório separado, com versões mais novas. Para aprender e para a maioria dos servidores, o do Debian basta. Veja <a href="docker.html">Docker</a>.</p>
+</div>
+
+<hr>
+
+<h2>As etapas</h2>
+
+<ol class="passo">
+
+<li>
+<h3>Instalar o Docker e o Compose</h3>
+<pre class="term" data-host="lab">$ sudo apt install docker.io docker-compose
+$ docker --version
+Docker version 26.1.5+dfsg1, build a72d7cd
+$ docker compose version
+Docker Compose version 2.26.1-4
+$ systemctl is-active docker
+active</pre>
+<p>Repare que o comando é <code>docker compose</code> (com espaço). O pacote <code>docker-compose</code> do Debian 13 instala a versão 2, que funciona como um "subcomando" do <code>docker</code>.</p>
+</li>
+
+<li>
+<h3>Decidir quem pode usar o Docker</h3>
+<p>Sem permissão, a ana recebe:</p>
+<pre class="term" data-host="lab">$ docker ps
+permission denied while trying to connect to the Docker daemon socket at unix:///var/run/docker.sock: Get "http://%2Fvar%2Frun%2Fdocker.sock/v1.45/containers/json": dial unix /var/run/docker.sock: connect: permission denied</pre>
+<p>Há dois caminhos: usar <code>sudo docker …</code> sempre, ou colocar a ana no grupo <code>docker</code>:</p>
+<pre class="term" data-host="lab">$ sudo usermod -aG docker ana</pre>
+<div class="warning">
+<strong>O grupo docker vale tanto quanto ser root</strong>
+<p>Quem pode rodar containers pode montar o <code>/</code> do servidor dentro de um container e mexer em qualquer arquivo. Só coloque no grupo quem você colocaria no <code>sudo</code>. Neste projeto, por clareza, usamos <code>sudo docker</code>.</p>
+</div>
+</li>
+
+<li>
+<h3>Escrever o compose.yaml</h3>
+<p><strong>O que vamos fazer e por quê:</strong> em vez de um <code>docker run</code> enorme, descrevemos o app num arquivo. Ele vira a documentação e pode ir para o Git.</p>
+<pre class="term" data-host="lab">$ sudo mkdir -p /srv/monitor
+$ cd /srv/monitor
+$ sudo nano compose.yaml</pre>
+<pre class="file" data-file="/srv/monitor/compose.yaml">services:
+  kuma:
+    image: louislam/uptime-kuma:1      # imagem e versão (tag "1")
+    container_name: kuma
+    restart: unless-stopped            # volta sozinho após reboot ou falha
+    ports:
+      - "3001:3001"                    # porta do Debian : porta do container
+    volumes:
+      - kuma-dados:/app/data           # volume com nome : pasta dentro do container
+
+volumes:
+  kuma-dados:</pre>
+<pre class="term" data-host="lab" data-cwd="/srv/monitor">$ sudo docker compose config --quiet &amp;&amp; echo "config ok"
+config ok</pre>
+<p>O <code>config --quiet</code> confere o YAML sem subir nada. Um erro de indentação aparece aqui, com a linha.</p>
+</li>
+
+<li>
+<h3>Subir o app</h3>
+<pre class="term" data-host="lab" data-cwd="/srv/monitor">$ sudo docker compose up -d
+[+] Running 6/6
+ ✔ kuma Pulled
+ ✔ Network monitor_default    Created      « uma rede só para este projeto
+ ✔ Volume "monitor_kuma-dados" Created     « o volume, com o nome da pasta na frente
+ ✔ Container kuma             Started</pre>
+<p>Na primeira vez, o Docker baixa a imagem (várias camadas, alguns minutos). O <code>-d</code> (de <em>detached</em>) devolve o terminal; o app continua rodando em segundo plano. O prefixo <code>monitor_</code> vem do nome da pasta, que vira o nome do projeto.</p>
+<p><strong>Confira:</strong></p>
+<pre class="term" data-host="lab" data-cwd="/srv/monitor">$ sudo docker compose ps
+NAME      IMAGE                    COMMAND                  SERVICE   CREATED          STATUS                             PORTS
+kuma      louislam/uptime-kuma:1   "/usr/bin/dumb-init …"   kuma      55 seconds ago   Up 40 seconds (health: starting)   0.0.0.0:3001-&gt;3001/tcp, :::3001-&gt;3001/tcp
+$ sudo docker compose logs --tail 3 kuma
+kuma  | 2026-10-16T02:01:36Z [SERVER] INFO: Init the server
+kuma  | 2026-10-16T02:01:36Z [SERVER] INFO: Listening on 3001       « pronto
+kuma  | 2026-10-16T02:01:36Z [SERVICES] INFO: Starting nscd
+$ wget -S -qO /dev/null http://127.0.0.1:3001 2&gt;&amp;1 | head -3
+  HTTP/1.1 302 Found
+  X-Frame-Options: SAMEORIGIN
+  Location: /dashboard</pre>
+<p>O <code>health: starting</code> some depois de um minuto e vira <code>healthy</code>. A resposta <code>302</code> é o app redirecionando para o painel: está vivo. Para abrir no navegador do seu computador, redirecione a porta da VM (desligada): <code>VBoxManage modifyvm lab --natpf1 "kuma,tcp,127.0.0.1,3001,,3001"</code> e acesse <code>http://localhost:3001</code>.</p>
+<div class="cenario">
+<strong>Se deu errado: "port is already allocated"</strong>
+<pre class="term" data-host="lab">docker: Error response from daemon: driver failed programming external connectivity on endpoint kuma-dup (106acad3…): Bind for 0.0.0.0:3001 failed: port is already allocated.</pre>
+<p>Outro container (ou programa) já usa a porta 3001. Veja quem com <code>sudo ss -tlnp | grep 3001</code> ou <code>sudo docker ps</code>, e troque o lado esquerdo do <code>ports</code> (por exemplo, <code>"3002:3001"</code>).</p>
+</div>
+</li>
+
+<li>
+<h3>Onde os dados moram</h3>
+<pre class="term" data-host="lab" data-cwd="/srv/monitor">$ sudo docker volume ls
+DRIVER    VOLUME NAME
+local     monitor_kuma-dados
+$ sudo docker volume inspect monitor_kuma-dados --format '{{ .Mountpoint }}'
+/var/lib/docker/volumes/monitor_kuma-dados/_data
+$ sudo docker exec kuma ls /app/data
+docker-tls
+kuma.db
+kuma.db-shm
+kuma.db-wal
+screenshots
+upload</pre>
+<p>O banco do app (<code>kuma.db</code>) está no volume, que fica em <code>/var/lib/docker/volumes</code> no Debian. Apagar o container <strong>não</strong> apaga o volume: é isso que permite atualizar sem perder nada.</p>
+</li>
+
+<li>
+<h3>Backup do volume</h3>
+<p><strong>O que vamos fazer e por quê:</strong> um container descartável, com o volume montado só para leitura, empacota os dados num <code>.tar.gz</code> na pasta do projeto.</p>
+<dl class="anatomy">
+  <dt>docker run --rm</dt><dd>Roda um container e apaga ele no fim.</dd>
+  <dt>-v monitor_kuma-dados:/dados:ro</dt><dd>Monta o volume em <code>/dados</code>, somente leitura (<em>read-only</em>).</dd>
+  <dt>-v /srv/monitor:/destino</dt><dd>Monta a pasta do Debian onde o arquivo vai ficar.</dd>
+  <dt>debian:trixie</dt><dd>A imagem usada só para ter o <code>tar</code>.</dd>
+  <dt>tar czf /destino/kuma-backup.tar.gz -C /dados .</dt><dd>O comando que roda lá dentro.</dd>
+</dl>
+<pre class="term" data-host="lab" data-cwd="/srv/monitor">$ sudo docker run --rm -v monitor_kuma-dados:/dados:ro -v /srv/monitor:/destino debian:trixie tar czf /destino/kuma-backup.tar.gz -C /dados .
+$ ls -lh /srv/monitor/kuma-backup.tar.gz
+-rw-r--r-- 1 root root 29K out 15 23:02 /srv/monitor/kuma-backup.tar.gz</pre>
+<p>Leve esse arquivo para o seu <a href="projeto-backup.html">Backup Automático</a>. Para restaurar, use o mesmo truque ao contrário: <code>tar xzf</code> com o volume montado sem <code>:ro</code>.</p>
+</li>
+
+<li>
+<h3>Atualizar o app</h3>
+<pre class="term" data-host="lab" data-cwd="/srv/monitor">$ sudo docker compose pull
+ kuma Pulling
+ kuma Pulled
+$ sudo docker compose up -d
+ Container kuma  Running              « já estava na versão mais nova: nada a fazer
+$ sudo docker images louislam/uptime-kuma
+REPOSITORY             TAG       IMAGE ID       CREATED       SIZE
+louislam/uptime-kuma   1         ded82109b2b8   4 weeks ago   448MB</pre>
+<p>Quando há versão nova, o <code>up -d</code> recria o container com a imagem nova e o mesmo volume. Imagens antigas ficam ocupando espaço até você rodar <code>sudo docker image prune</code>.</p>
+</li>
+
+<li>
+<h3>Parar sem perder os dados</h3>
+<pre class="term" data-host="lab" data-cwd="/srv/monitor">$ sudo docker compose down
+ Container kuma  Removing
+ Container kuma  Removed
+ Network monitor_default  Removing
+ Network monitor_default  Removed
+$ sudo docker volume ls
+DRIVER    VOLUME NAME
+local     monitor_kuma-dados          « o volume continua lá</pre>
+<p>Um <code>docker compose up -d</code> depois disso traz o app de volta com todos os monitores cadastrados.</p>
+<div class="warning">
+<strong>Cuidado com o <code>down -v</code></strong>
+<p>O <code>-v</code> apaga também os volumes, ou seja, os dados do app. Use só quando quiser começar do zero, e com backup.</p>
+</div>
+</li>
+</ol>
+
+<hr>
+
+<h2>E com Podman?</h2>
+<p>O Debian também empacota o <strong>Podman</strong>, que roda containers sem um serviço central e sem precisar de root. O mesmo <code>compose.yaml</code> funciona com <code>sudo apt install podman podman-compose</code> e <code>podman-compose up -d</code> (troque a imagem por <code>docker.io/louislam/uptime-kuma:1</code>, com o endereço completo). Veja <a href="podman.html">Podman</a>.</p>
+
+<hr>
+
+<h2>Checklist do que você aprendeu</h2>
+<ul>
+  <li>No Debian: <code>apt install docker.io docker-compose</code>, e o comando é <code>docker compose</code>.</li>
+  <li>O grupo <code>docker</code> equivale a root.</li>
+  <li><code>compose.yaml</code> descreve imagem, portas, volumes e reinício; <code>config --quiet</code> confere.</li>
+  <li>Os dados ficam em volumes (<code>/var/lib/docker/volumes</code>) e sobrevivem ao <code>down</code>.</li>
+  <li>Backup de volume com um container <code>--rm</code> e <code>tar</code>; atualização com <code>pull</code> + <code>up -d</code>.</li>
+</ul>
+
+<h2>Desafios extras</h2>
+<ul>
+  <li>Coloque o Uptime Kuma atrás do Apache do <a href="projeto-servidor-web.html">Servidor Web</a> como proxy reverso (<code>a2enmod proxy proxy_http proxy_wstunnel</code>), com HTTPS.</li>
+  <li>Agende o backup do volume num systemd timer, como no <a href="projeto-backup.html">Backup Automático</a>.</li>
+  <li>Restaure o backup num volume novo e suba uma segunda cópia do app na porta 3002.</li>
+</ul>
+
+<h2>Limpeza</h2>
+<pre class="term" data-host="lab" data-cwd="/srv/monitor">$ sudo docker compose down -v
+ Volume monitor_kuma-dados  Removing
+ Volume monitor_kuma-dados  Removed
+$ sudo docker rmi louislam/uptime-kuma:1
+$ sudo rm -rf /srv/monitor</pre>
+
+<hr>
+
+<h2>Exercícios</h2>
+
+<div class="exercise">
+<h3>1. Subir em segundo plano</h3>
+<p>Complete o comando que sobe o app e devolve o terminal:</p>
+<div class="ex-code">sudo docker compose <input data-answer="up -d|up --detach" aria-label="subcomando"></div>
+</div>
+
+<div class="mc" data-answer="3">
+<p class="mc-q">2. Você rodou <code>docker compose down</code>. O que aconteceu com os monitores cadastrados no Kuma?</p>
+<label><input type="radio" name="q2"> Foram apagados junto com o container.</label>
+<label><input type="radio" name="q2"> Foram para a lixeira.</label>
+<label><input type="radio" name="q2"> Continuam no volume e voltam no próximo <code>up -d</code>.</label>
+<label><input type="radio" name="q2"> Foram enviados para o Docker Hub.</label>
+</div>
+
+<div class="exercise">
+<h3>3. Porta ocupada</h3>
+<p>A porta 3001 do Debian está ocupada. Complete a linha para publicar o app na 3002 do Debian, sem mudar a porta interna:</p>
+<div class="ex-code">      - "<input data-answer="3002:3001" aria-label="portas">"</div>
+</div>
+
+<div class="mc" data-answer="1">
+<p class="mc-q">4. Por que não colocar qualquer usuário no grupo <code>docker</code>?</p>
+<label><input type="radio" name="q4"> Porque quem roda containers consegue, na prática, agir como root no servidor.</label>
+<label><input type="radio" name="q4"> Porque o grupo deixa o Docker mais lento.</label>
+<label><input type="radio" name="q4"> Porque o Debian não tem esse grupo.</label>
+<label><input type="radio" name="q4"> Porque impede o uso de volumes.</label>
+</div>
+
+<hr>
+
+<h2>Resumo</h2>
+<ul>
+  <li>Docker do Debian: <code>docker.io</code> + <code>docker-compose</code>, comando <code>docker compose</code>.</li>
+  <li>App = <code>compose.yaml</code>; dados = volume; atualizar = <code>pull</code> + <code>up -d</code>.</li>
+  <li>Proteja o volume com backup e o servidor com cuidado no grupo <code>docker</code>.</li>
+</ul>
+
+<div class="pager"></div>
+
+</div>
+</main>
+</div>
+<script src="assets/site.js"></script>
+</body>
+</html>

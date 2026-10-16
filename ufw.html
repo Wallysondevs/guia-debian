@@ -1,0 +1,274 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Debian ufw — firewall simples (opcional) | Guia Debian</title>
+<meta name="description" content="O ufw no Debian 13: não vem instalado, como instalar, por que algumas pessoas preferem, como ele convive com o nftables e como ligar sem perder o acesso SSH.">
+<link rel="stylesheet" href="assets/style.css">
+<script>try{var t=localStorage.getItem("tema");if(t)document.documentElement.setAttribute("data-theme",t)}catch(e){}</script>
+</head>
+<body>
+<div class="layout">
+<nav class="sidebar" id="sidebar" aria-label="Tópicos"></nav>
+<main class="main">
+<div class="content">
+
+<div class="pager"></div>
+
+<h1>Debian <span class="hl">ufw (opcional)</span></h1>
+
+<p class="intro">O <strong>ufw</strong> (de <em>Uncomplicated Firewall</em>, "firewall descomplicado") foi criado pelo Ubuntu para quem não quer escrever regras de nftables. No Debian ele <strong>não vem instalado</strong>: o firewall oficial é o <a href="nftables.html">nftables</a>. Mas o ufw está nos repositórios e funciona bem. Esta aula é para quem prefere comandos curtos como <code>ufw allow ssh</code>.</p>
+
+<div class="note">
+<strong>Você vai aprender</strong>
+<ul>
+  <li>Quando vale a pena usar ufw no lugar de escrever o <code>nftables.conf</code>.</li>
+  <li>Instalar o ufw e entender o que ele traz junto (o <code>iptables</code>).</li>
+  <li>Criar regras com ele ainda desligado e ligar sem derrubar o SSH.</li>
+  <li>Por que não misturar ufw com o serviço <code>nftables</code>.</li>
+</ul>
+</div>
+
+<p>Os exemplos são na máquina <strong>servidor</strong>, como root (entre com <code>su -</code>).</p>
+
+<hr>
+
+<h2>ufw ou nftables?</h2>
+<div class="table-wrap">
+<table class="ref">
+<tr><th></th><th>nftables (padrão do Debian)</th><th>ufw</th></tr>
+<tr><td>Vem instalado</td><td>Sim (serviço desligado)</td><td>Não</td></tr>
+<tr><td>Como se configura</td><td>Um arquivo, <code>/etc/nftables.conf</code></td><td>Comandos: <code>ufw allow 22/tcp</code></td></tr>
+<tr><td>Curva de aprendizado</td><td>Maior: tabelas, cadeias, regras</td><td>Pequena</td></tr>
+<tr><td>Controle fino</td><td>Total</td><td>O suficiente para um servidor comum</td></tr>
+<tr><td>Idioma das mensagens</td><td>Inglês</td><td>Inglês (o pacote do Debian não traz tradução)</td></tr>
+</table>
+</div>
+
+<p>Regra prática: se você administra um servidor simples (SSH + site) e já usou ufw no Ubuntu, pode usá-lo. Se precisa de regras específicas, ou quer o padrão do Debian, use o nftables.</p>
+
+<hr>
+
+<h2>Instalar</h2>
+<pre class="term" data-host="servidor" data-user="root">#> apt install ufw
+…
+Configurando iptables (1.8.11-2) ...
+update-alternatives: usando /usr/sbin/iptables-nft para fornecer /usr/sbin/iptables (iptables) no modo automático
+…
+Configurando ufw (0.36.2-9) ...
+Created symlink '/etc/systemd/system/multi-user.target.wants/ufw.service' → '/usr/lib/systemd/system/ufw.service'.</pre>
+
+<p>Duas coisas para reparar:</p>
+<ul>
+  <li>O ufw instala o <strong>iptables</strong> junto. No Debian, o <code>iptables</code> escolhido é o <code>iptables-nft</code>: ele aceita os comandos antigos, mas grava regras nftables. Ou seja, o ufw também usa o nftables por baixo.</li>
+  <li>O serviço <code>ufw.service</code> fica habilitado, mas o firewall continua <strong>desligado</strong> até você mandar. Instalar não bloqueia nada.</li>
+</ul>
+
+<pre class="term" data-host="servidor" data-user="root">#> ufw status
+Status: inactive</pre>
+
+<hr>
+
+<h2>Criar regras antes de ligar</h2>
+<p>O ufw aceita regras mesmo desligado. Elas ficam guardadas e só valem quando você ligar. Comece <strong>sempre</strong> pelo SSH:</p>
+
+<dl class="anatomy">
+  <dt>ufw</dt><dd>O programa.</dd>
+  <dt>allow</dt><dd>Permitir (<code>deny</code> bloqueia, <code>limit</code> permite com limite de tentativas).</dd>
+  <dt>OpenSSH</dt><dd>Um "perfil de aplicativo": um nome que já sabe quais portas abrir (aqui, 22/tcp).</dd>
+</dl>
+
+<pre class="term" data-host="servidor" data-user="root">#> ufw allow OpenSSH
+Rules updated
+Rules updated (v6)                          « v6: a mesma regra para IPv6
+#> ufw allow 80,443/tcp
+Rules updated
+Rules updated (v6)
+#> ufw show added
+Added user rules (see 'ufw status' for running firewall):
+ufw allow OpenSSH
+ufw allow 80,443/tcp</pre>
+
+<p>Os perfis disponíveis aparecem com <code>ufw app list</code>, e os detalhes de um deles com <code>ufw app info</code>:</p>
+
+<pre class="term" data-host="servidor" data-user="root">#> ufw app info OpenSSH
+Profile: OpenSSH
+Title: Secure shell server, an rshd replacement
+Description: OpenSSH is a free implementation of the Secure Shell protocol.
+
+Port:
+  22/tcp</pre>
+
+<h3>Formas diferentes de liberar o SSH</h3>
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Comando</th><th>O que libera</th></tr>
+<tr><td><code>ufw allow OpenSSH</code></td><td>Pelo perfil (22/tcp)</td></tr>
+<tr><td><code>ufw allow 22/tcp</code></td><td>A porta diretamente</td></tr>
+<tr><td><code>ufw limit 22/tcp</code></td><td>A porta, mas bloqueia quem tentar 6 conexões em 30 segundos</td></tr>
+<tr><td><code>ufw allow from 192.168.0.0/24 to any port 22 proto tcp</code></td><td>Só para a rede da casa/escritório</td></tr>
+</table>
+</div>
+
+<hr>
+
+<h2>Ligar sem perder o acesso</h2>
+<ol class="passo">
+  <li>Confira com <code>ufw show added</code> que a regra do SSH está lá.</li>
+  <li>Ligue com <code>ufw enable</code>. Ele avisa que pode derrubar conexões SSH; responda <code>y</code>.</li>
+  <li>Abra uma <strong>segunda</strong> sessão SSH antes de fechar a primeira.</li>
+</ol>
+
+<pre class="term" data-host="servidor" data-user="root">#> ufw enable
+Command may disrupt existing ssh connections. Proceed with operation (y|n)? y
+Firewall is active and enabled on system startup
+#> ufw status verbose
+Status: active
+Logging: on (low)
+Default: deny (incoming), allow (outgoing), deny (routed)
+New profiles: skip
+
+To                         Action      From
+--                         ------      ----
+22/tcp (OpenSSH)           ALLOW IN    Anywhere
+80,443/tcp                 ALLOW IN    Anywhere
+22/tcp (OpenSSH (v6))      ALLOW IN    Anywhere (v6)
+80,443/tcp (v6)            ALLOW IN    Anywhere (v6)</pre>
+
+<p>A linha <code>Default: deny (incoming)</code> mostra a política: entrada bloqueada, exceto o que está na tabela. Esses padrões vêm de <code>/etc/default/ufw</code> (<code>DEFAULT_INPUT_POLICY="DROP"</code>).</p>
+
+<div class="warning">
+<strong>Atenção</strong>
+<p>Nunca rode <code>ufw enable</code> num servidor remoto sem antes liberar o SSH. Se acontecer, só o console do provedor (ou acesso físico) resolve: lá, rode <code>ufw disable</code>.</p>
+</div>
+
+<hr>
+
+<h2>Listar e apagar regras</h2>
+<pre class="term" data-host="servidor" data-user="root">#> ufw status numbered
+Status: active
+
+     To                         Action      From
+     --                         ------      ----
+[ 1] OpenSSH                    ALLOW IN    Anywhere
+[ 2] 80,443/tcp                 ALLOW IN    Anywhere
+[ 3] OpenSSH (v6)               ALLOW IN    Anywhere (v6)
+[ 4] 80,443/tcp (v6)            ALLOW IN    Anywhere (v6)
+#> ufw delete 2
+Deleting:
+ allow 80,443/tcp
+Proceed with operation (y|n)? y
+Rule deleted</pre>
+
+<p>Também dá para apagar repetindo a regra com <code>delete</code> na frente: <code>ufw delete allow 80,443/tcp</code>. Os números mudam a cada exclusão; liste de novo antes de apagar outra.</p>
+
+<p>As saídas com o firewall ativo acima são as típicas do ufw 0.36. Para desligar, <code>ufw disable</code>; para voltar ao zero, <code>ufw reset</code>.</p>
+
+<hr>
+
+<h2>ufw e o serviço nftables juntos: não</h2>
+<p>O ufw grava as regras dele no nftables, numa tabela chamada <code>ip filter</code> (e <code>ip6 filter</code>), por meio do <code>iptables-nft</code>:</p>
+
+<pre class="term" data-host="servidor" data-user="root">#> nft list tables
+table ip filter
+table ip6 filter</pre>
+
+<p>O <code>/etc/nftables.conf</code> do Debian começa com <code>flush ruleset</code>. Se o serviço <code>nftables</code> também estiver ligado, um <code>systemctl reload nftables</code> apaga as regras do ufw. Escolha um dos dois:</p>
+
+<pre class="term" data-host="servidor" data-user="root">#> systemctl is-enabled nftables ufw
+disabled                                    « nftables desligado
+enabled                                     « ufw no controle</pre>
+
+<hr>
+
+<h2>Quando não funciona</h2>
+
+<div class="cenario">
+<strong>"ufw: comando não encontrado"</strong>
+<p><strong>O que aconteceu:</strong> ou o ufw não está instalado (o padrão no Debian), ou você está como usuário comum: o <code>ufw</code> fica em <code>/usr/sbin</code>, fora do PATH da ana.</p>
+<p><strong>Como resolver:</strong> <code>su -</code> e depois <code>apt install ufw</code>.</p>
+</div>
+
+<div class="cenario">
+<strong>Liguei o ufw e o Docker continuou acessível de fora</strong>
+<p><strong>O que aconteceu:</strong> o Docker cria regras próprias que passam antes das do ufw para as portas publicadas com <code>-p</code>.</p>
+<p><strong>Como resolver:</strong> publique as portas só no localhost (<code>-p 127.0.0.1:8080:80</code>) e use um proxy reverso. Veja <a href="docker.html">Docker</a>.</p>
+</div>
+
+<div class="cenario">
+<strong>As regras sumiram depois do reboot</strong>
+<p><strong>O que aconteceu:</strong> provavelmente o serviço <code>nftables</code> também está habilitado e o <code>flush ruleset</code> dele apagou as regras do ufw no boot.</p>
+<p><strong>Como resolver:</strong> <code>systemctl disable --now nftables</code> e <code>ufw reload</code>.</p>
+</div>
+
+<hr>
+
+<h2>Referência</h2>
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Comando</th><th>O que faz</th></tr>
+<tr><td><code>ufw status verbose</code></td><td>Estado, políticas e regras</td></tr>
+<tr><td><code>ufw status numbered</code></td><td>Regras numeradas</td></tr>
+<tr><td><code>ufw show added</code></td><td>Regras criadas (mesmo com o firewall desligado)</td></tr>
+<tr><td><code>ufw allow 22/tcp</code></td><td>Libera uma porta</td></tr>
+<tr><td><code>ufw limit 22/tcp</code></td><td>Libera com limite de tentativas</td></tr>
+<tr><td><code>ufw deny 23</code></td><td>Bloqueia uma porta</td></tr>
+<tr><td><code>ufw delete 3</code></td><td>Apaga a regra número 3</td></tr>
+<tr><td><code>ufw app list</code></td><td>Perfis de aplicativos</td></tr>
+<tr><td><code>ufw enable</code> / <code>ufw disable</code></td><td>Liga / desliga</td></tr>
+<tr><td><code>ufw reset</code></td><td>Apaga todas as regras e desliga</td></tr>
+<tr><td><code>ufw --dry-run allow 80</code></td><td>Mostra o que faria, sem fazer</td></tr>
+</table>
+</div>
+
+<hr>
+
+<h2>Exercícios</h2>
+
+<div class="exercise">
+<h3>1. Primeira regra</h3>
+<p>Complete para liberar o SSH pelo perfil de aplicativo:</p>
+<div class="ex-code">ufw allow <input data-answer="OpenSSH" aria-label="perfil"></div>
+</div>
+
+<div class="exercise">
+<h3>2. Conferir antes de ligar</h3>
+<p>Qual comando lista as regras criadas com o ufw ainda desligado?</p>
+<div class="ex-code">ufw <input data-answer="show added" aria-label="comando"></div>
+</div>
+
+<div class="mc" data-answer="4">
+<p class="mc-q">3. Você instalou o ufw num Debian. O que acontece com o tráfego?</p>
+<label><input type="radio" name="q3"> Tudo passa a ser bloqueado, exceto o SSH.</label>
+<label><input type="radio" name="q3"> O SSH é bloqueado imediatamente.</label>
+<label><input type="radio" name="q3"> O nftables é desinstalado.</label>
+<label><input type="radio" name="q3"> Nada muda: o ufw fica com <code>Status: inactive</code> até você rodar <code>ufw enable</code>.</label>
+</div>
+
+<div class="mc" data-answer="1">
+<p class="mc-q">4. Por que não ligar ao mesmo tempo o ufw e o serviço <code>nftables</code> com o arquivo padrão?</p>
+<label><input type="radio" name="q4"> Porque o <code>flush ruleset</code> do <code>nftables.conf</code> apaga as regras do ufw.</label>
+<label><input type="radio" name="q4"> Porque o ufw não funciona com IPv6.</label>
+<label><input type="radio" name="q4"> Porque o Debian proíbe e mostra um erro.</label>
+<label><input type="radio" name="q4"> Porque os dois usam a porta 22.</label>
+</div>
+
+<hr>
+
+<h2>Resumo</h2>
+<ul>
+  <li>No Debian o ufw é opcional: <code>apt install ufw</code> (como root).</li>
+  <li>Ele instala o <code>iptables-nft</code> e grava regras no nftables por baixo.</li>
+  <li>Crie a regra do SSH, confira com <code>ufw show added</code> e só então <code>ufw enable</code>.</li>
+  <li>Use ufw <strong>ou</strong> o serviço nftables, nunca os dois.</li>
+</ul>
+
+<div class="pager"></div>
+
+</div>
+</main>
+</div>
+<script src="assets/site.js"></script>
+</body>
+</html>

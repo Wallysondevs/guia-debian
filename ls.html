@@ -1,0 +1,326 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Debian ls — listar arquivos | Guia Debian</title>
+<meta name="description" content="O comando ls no Debian 13: colunas do -l explicadas, arquivos ocultos, ordenação pelo idioma, mês em português, como ativar o ll e terminal simulado para praticar.">
+<link rel="stylesheet" href="assets/style.css">
+<script>try{var t=localStorage.getItem("tema");if(t)document.documentElement.setAttribute("data-theme",t)}catch(e){}</script>
+</head>
+<body>
+<div class="layout">
+<nav class="sidebar" id="sidebar" aria-label="Tópicos"></nav>
+<main class="main">
+<div class="content">
+
+<div class="pager"></div>
+
+<h1>Debian <span class="hl">ls</span></h1>
+
+<p class="intro">O <code>ls</code> (de <em>list</em>, "listar") mostra o que existe numa pasta. É o comando mais digitado no terminal: você vai usá-lo antes e depois de quase tudo, para conferir.</p>
+
+<div class="note">
+<strong>Você vai aprender</strong>
+<ul>
+  <li>Ler cada coluna do <code>ls -l</code>.</li>
+  <li>Ver arquivos ocultos, tamanhos legíveis e ordenar por data ou tamanho.</li>
+  <li>Por que o Debian ordena "a, Área, aula1, aula10, aula2, Aula3".</li>
+  <li>Por que o <code>ll</code> não funciona no Debian e como ativá-lo.</li>
+</ul>
+</div>
+
+<hr>
+
+<h2>O básico</h2>
+
+<dl class="anatomy">
+  <dt>ls</dt><dd>Lista a pasta atual. Pastas aparecem em azul; executáveis, em verde.</dd>
+</dl>
+
+<pre class="term">$ ls
+'Área de trabalho'   Downloads    Imagens   Música    Vídeos
+ Documentos          frutas.txt   Modelos   Público</pre>
+
+<p>Os nomes vêm em colunas, de cima para baixo. "Área de trabalho" aparece entre aspas porque tem espaços: o <code>ls</code> mostra o nome do jeito que você teria de digitá-lo. O espaço antes dos outros nomes só serve para alinhar.</p>
+
+<h3>Outra pasta</h3>
+<p>Passe o caminho como argumento. Você não precisa entrar na pasta para listá-la:</p>
+
+<pre class="term">$ ls Documentos
+acesso.log  notas.txt  projetos  relatorio.odt</pre>
+
+<hr>
+
+<h2>Detalhes: <code>-l</code></h2>
+<p>O <code>-l</code> (de <em>long</em>, "longo") mostra uma linha por item, com permissões, dono, tamanho e data.</p>
+
+<dl class="anatomy">
+  <dt>ls</dt><dd>O programa.</dd>
+  <dt>-l</dt><dd>Formato longo.</dd>
+  <dt>Documentos</dt><dd>A pasta a listar.</dd>
+</dl>
+
+<pre class="term">$ ls -l Documentos
+total 24                                                « espaço ocupado, em blocos de 1 KB
+-rw-rw-r-- 1 ana ana  389 out 15 09:07 acesso.log
+-rw-rw-r-- 1 ana ana   71 out 14 17:40 notas.txt
+drwxrwxr-x 3 ana ana 4096 out 12 08:03 projetos         « o d no início indica pasta
+-rw-rw-r-- 1 ana ana 8394 out 14 17:40 relatorio.odt</pre>
+
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Coluna</th><th>Exemplo</th><th>Significado</th></tr>
+<tr><td>Tipo e permissões</td><td><code>drwxrwxr-x</code></td><td>1º caractere: <code>-</code> arquivo, <code>d</code> pasta, <code>l</code> atalho. O resto: quem pode ler, escrever e executar (veja <a href="permissoes.html">Entendendo Permissões</a>).</td></tr>
+<tr><td>Links</td><td><code>3</code></td><td>Quantos nomes apontam para o item. Em pastas, cresce com as subpastas.</td></tr>
+<tr><td>Dono</td><td><code>ana</code></td><td>O usuário dono.</td></tr>
+<tr><td>Grupo</td><td><code>ana</code></td><td>O grupo dono.</td></tr>
+<tr><td>Tamanho</td><td><code>8394</code></td><td>Em bytes. Pastas mostram 4096, o tamanho da "ficha" da pasta, não do conteúdo.</td></tr>
+<tr><td>Data</td><td><code>out 14 17:40</code></td><td>Última modificação, com o mês em português. Arquivos com mais de 6 meses mostram o ano no lugar da hora.</td></tr>
+<tr><td>Nome</td><td><code>notas.txt</code></td><td>O nome do item.</td></tr>
+</table>
+</div>
+
+<div class="note">
+<strong>Mês em português</strong>
+<p>O Debian usa o <code>ls</code> do projeto GNU, que traduz a data: <code>out 14</code>, <code>jan  1  2026</code>. Em tutoriais feitos no Ubuntu 26.04 você verá <code>Oct 14</code>, porque lá o <code>ls</code> é outro programa. Os dois fazem a mesma coisa.</p>
+</div>
+
+<hr>
+
+<h2>Arquivos ocultos: <code>-a</code> e <code>-A</code></h2>
+<p>Arquivos cujo nome começa com ponto ficam escondidos. São, em geral, configurações, como o <code>.bashrc</code>. O <code>-a</code> (de <em>all</em>, "todos") mostra tudo, inclusive <code>.</code> (a própria pasta) e <code>..</code> (a de cima). O <code>-A</code> mostra os ocultos sem esses dois.</p>
+
+<pre class="term">$ ls -A
+'Área de trabalho'   .bashrc      Downloads    Imagens   Música     Público
+ .bash_history       Documentos   frutas.txt   Modelos   .profile   Vídeos</pre>
+
+<p>Repare que o <code>.bashrc</code> aparece no meio da lista, perto do "b", e não no começo. Isso tem a ver com a ordem, explicada a seguir.</p>
+
+<div class="try" data-goal="ran:ls\s+-[a-zA-Z]*[aA]">
+<p class="try-task"><strong>Missão:</strong> descubra quantos arquivos ocultos existem na pasta pessoal da Ana. Liste com <code>-a</code> ou <code>-A</code>.</p>
+</div>
+
+<hr>
+
+<h2>A ordem: pelo idioma</h2>
+<p>O <code>ls</code> do Debian ordena como um dicionário em português: ignora acentos, pontos e a diferença entre maiúsculas e minúsculas. Veja uma pasta real:</p>
+
+<pre class="term" data-cwd="/tmp/nav">$ ls
+ a                   aula1    aula2   Documentos   frutas.txt   Música
+'Área de trabalho'   aula10   Aula3   Downloads    Imagens</pre>
+
+<ul>
+  <li><strong>"Área"</strong> vem logo depois de "a", porque o acento é ignorado.</li>
+  <li><strong>"Aula3"</strong> fica entre as "aula", porque maiúscula e minúscula contam como a mesma letra.</li>
+  <li><strong>"aula10"</strong> vem antes de "aula2": a comparação é caractere por caractere, e "1" vem antes de "2". O <code>ls</code> não entende números.</li>
+</ul>
+
+<div class="tip">
+<strong>Quer números na ordem certa?</strong>
+<p>Use <code>ls -v</code> (de <em>version</em>), que ordena <code>aula1 aula2 aula10</code>. Ou dê nomes com zeros à esquerda: <code>aula01</code>, <code>aula02</code>… <code>aula10</code>.</p>
+</div>
+
+<hr>
+
+<h2>Tamanhos legíveis: <code>-h</code></h2>
+<p>Com <code>-h</code> (de <em>human-readable</em>, "legível para humanos") o tamanho aparece em K, M e G, com vírgula decimal. Use junto com <code>-l</code>:</p>
+
+<pre class="term">$ ls -lh Imagens
+total 2,1M
+-rw-rw-r-- 1 ana ana 2,0M ago  2 14:00 ferias.jpg      « 2,0 megabytes
+-rw-rw-r-- 1 ana ana 100K set 20 10:00 perfil.png</pre>
+
+<div class="tip">
+<strong>Juntando opções</strong>
+<p><code>ls -l -a -h</code> é o mesmo que <code>ls -lah</code>. A ordem das letras não importa.</p>
+</div>
+
+<hr>
+
+<h2>Ordenar por data e por tamanho</h2>
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Opção</th><th>Ordena por</th></tr>
+<tr><td><code>-t</code></td><td>Data de modificação, mais recente primeiro</td></tr>
+<tr><td><code>-S</code></td><td>Tamanho, maior primeiro</td></tr>
+<tr><td><code>-r</code></td><td>Inverte a ordem escolhida</td></tr>
+<tr><td><code>-v</code></td><td>Números dentro dos nomes (1, 2, 10)</td></tr>
+</table>
+</div>
+
+<pre class="term">$ ls -lt Documentos
+total 24
+-rw-rw-r-- 1 ana ana  389 out 15 09:07 acesso.log       « o mais recente
+-rw-rw-r-- 1 ana ana   71 out 14 17:40 notas.txt
+-rw-rw-r-- 1 ana ana 8394 out 14 17:40 relatorio.odt
+drwxrwxr-x 3 ana ana 4096 out 12 08:03 projetos
+$ ls -lSr Documentos
+total 24
+-rw-rw-r-- 1 ana ana   71 out 14 17:40 notas.txt        « o menor, por causa do -r
+-rw-rw-r-- 1 ana ana  389 out 15 09:07 acesso.log
+drwxrwxr-x 3 ana ana 4096 out 12 08:03 projetos
+-rw-rw-r-- 1 ana ana 8394 out 14 17:40 relatorio.odt</pre>
+
+<div class="try" data-goal="ran:ls\s+-[a-zA-Z]*S">
+<p class="try-task"><strong>Missão:</strong> descubra qual é o maior arquivo da pasta <code>Downloads</code>, com tamanhos legíveis.</p>
+</div>
+
+<hr>
+
+<h2>Outras opções úteis</h2>
+
+<h3>-d: a pasta, não o conteúdo</h3>
+<pre class="term">$ ls -ld /tmp
+drwxrwxrwt 2 root root 4096 out 15 10:30 /tmp</pre>
+
+<h3>-R: entrar nas subpastas</h3>
+<pre class="term">$ ls -R Documentos/projetos
+Documentos/projetos:
+backup.sh  site
+
+Documentos/projetos/site:
+index.html  style.css</pre>
+
+<h3>-F: marcar o tipo</h3>
+<pre class="term">$ ls -F Documentos/projetos
+backup.sh*  site/            « * executável, / pasta</pre>
+
+<hr>
+
+<h2>Cadê o <code>ll</code>?</h2>
+<p>Muitos tutoriais usam <code>ll</code> como atalho para <code>ls -l</code>. No Debian ele vem <strong>desligado</strong>:</p>
+
+<pre class="term">$ ll
+bash: ll: comando não encontrado
+$ type ls
+ls está apelidada para `ls --color=auto'</pre>
+
+<p>O único apelido ativo é o que deixa o <code>ls</code> colorido. Os outros estão no arquivo <code>~/.bashrc</code>, comentados com <code>#</code>:</p>
+
+<pre class="file" data-file="~/.bashrc (linhas 90 a 93)"># some more ls aliases
+#alias ll='ls -l'
+#alias la='ls -A'
+#alias l='ls -CF'</pre>
+
+<p>Para ativá-los, apague o <code>#</code> do começo dessas linhas com um editor (<code>nano ~/.bashrc</code>, veja <a href="editores.html">nano e vim</a>), salve e recarregue a configuração:</p>
+
+<pre class="term">$ source ~/.bashrc
+$ type ll
+ll está apelidada para `ls -l'</pre>
+
+<p>A aula <a href="bashrc.html">.bashrc, alias, PATH</a> mostra como criar os seus próprios apelidos.</p>
+
+<hr>
+
+<h2>Formas diferentes de ver uma pasta</h2>
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Forma</th><th>Mostra</th><th>Quando usar</th></tr>
+<tr><td><code>ls</code></td><td>Só os nomes</td><td>Olhada rápida</td></tr>
+<tr><td><code>ls -lh</code></td><td>Detalhes e tamanhos</td><td>Conferir datas e tamanhos</td></tr>
+<tr><td><code>ls -lah</code></td><td>Tudo, inclusive ocultos</td><td>Procurar configurações</td></tr>
+<tr><td><code>ls -1</code></td><td>Um nome por linha</td><td>Mandar para outro comando</td></tr>
+<tr><td><code>tree</code></td><td>A árvore desenhada</td><td>Ver a estrutura (o root instala com <code>apt install tree</code>)</td></tr>
+<tr><td>App Arquivos</td><td>Ícones</td><td>No desktop</td></tr>
+</table>
+</div>
+
+<hr>
+
+<h2>Quando não funciona</h2>
+
+<div class="cenario">
+<strong>"não foi possível acessar"</strong>
+<pre class="term">$ ls -l documentos
+ls: não foi possível acessar 'documentos': Arquivo ou diretório inexistente</pre>
+<p><strong>O que aconteceu:</strong> o nome não existe: aqui, o "D" deveria ser maiúsculo.</p>
+<p><strong>Como resolver:</strong> confira com <code>ls</code> e use <kbd>Tab</kbd> para completar.</p>
+</div>
+
+<div class="cenario">
+<strong>"não foi possível abrir o diretório"</strong>
+<pre class="term">$ ls /root
+ls: não foi possível abrir o diretório '/root': Permissão negada</pre>
+<p><strong>O que aconteceu:</strong> a pasta existe, mas você não pode ler o conteúdo dela.</p>
+<p><strong>Como resolver:</strong> se for necessário, use <code>su -</code> para virar root (veja <a href="root-su-sudo.html">root, su e sudo</a>).</p>
+</div>
+
+<div class="cenario">
+<strong>O ls não mostrou o arquivo que eu sei que existe</strong>
+<p><strong>O que aconteceu:</strong> o nome começa com ponto e está oculto.</p>
+<p><strong>Como resolver:</strong> use <code>ls -a</code>.</p>
+</div>
+
+<hr>
+
+<h2>Referência de opções</h2>
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Opção</th><th>Descrição</th><th>Exemplo</th></tr>
+<tr><td><code>-l</code></td><td>Formato longo</td><td><code>ls -l</code></td></tr>
+<tr><td><code>-a</code></td><td>Mostra ocultos, <code>.</code> e <code>..</code></td><td><code>ls -a</code></td></tr>
+<tr><td><code>-A</code></td><td>Mostra ocultos, sem <code>.</code> e <code>..</code></td><td><code>ls -A</code></td></tr>
+<tr><td><code>-h</code></td><td>Tamanhos em K, M, G (com <code>-l</code>)</td><td><code>ls -lh</code></td></tr>
+<tr><td><code>-t</code></td><td>Ordena por data</td><td><code>ls -lt</code></td></tr>
+<tr><td><code>-S</code></td><td>Ordena por tamanho</td><td><code>ls -lS</code></td></tr>
+<tr><td><code>-r</code></td><td>Inverte a ordem</td><td><code>ls -ltr</code></td></tr>
+<tr><td><code>-v</code></td><td>Ordem natural de números</td><td><code>ls -v</code></td></tr>
+<tr><td><code>-R</code></td><td>Lista subpastas</td><td><code>ls -R</code></td></tr>
+<tr><td><code>-d</code></td><td>Mostra a pasta, não o conteúdo</td><td><code>ls -ld /etc</code></td></tr>
+<tr><td><code>-F</code></td><td>Marca o tipo (<code>/</code> pasta, <code>*</code> executável)</td><td><code>ls -F</code></td></tr>
+<tr><td><code>-1</code></td><td>Um item por linha</td><td><code>ls -1</code></td></tr>
+<tr><td><code>--time-style=long-iso</code></td><td>Datas no formato 2026-10-15 10:30</td><td><code>ls -l --time-style=long-iso</code></td></tr>
+</table>
+</div>
+
+<hr>
+
+<h2>Exercícios</h2>
+
+<div class="exercise">
+<h3>1. Tudo, com detalhes</h3>
+<p>Complete para listar a pasta pessoal com detalhes, ocultos e tamanhos legíveis:</p>
+<div class="ex-code">ls <input data-answer="-lah|-alh|-lha|-hla|-ahl|-hal" aria-label="opções"> ~</div>
+</div>
+
+<div class="exercise">
+<h3>2. O mais antigo primeiro</h3>
+<p>Complete para ordenar por data, com o mais antigo no topo:</p>
+<div class="ex-code">ls -lt<input data-answer="r" aria-label="opção"></div>
+</div>
+
+<div class="mc" data-answer="2">
+<p class="mc-q">3. Por que <code>ll</code> dá "comando não encontrado" no Debian?</p>
+<label><input type="radio" name="q3"> Porque o pacote do <code>ll</code> não está instalado.</label>
+<label><input type="radio" name="q3"> Porque o apelido vem comentado no <code>~/.bashrc</code>.</label>
+<label><input type="radio" name="q3"> Porque só o root pode usar <code>ll</code>.</label>
+<label><input type="radio" name="q3"> Porque o Debian não tem o comando <code>ls</code>.</label>
+</div>
+
+<div class="mc" data-answer="4">
+<p class="mc-q">4. Numa pasta com <code>aula1</code>, <code>aula2</code> e <code>aula10</code>, em que ordem o <code>ls</code> mostra?</p>
+<label><input type="radio" name="q4"> aula1, aula2, aula10</label>
+<label><input type="radio" name="q4"> aula10, aula2, aula1</label>
+<label><input type="radio" name="q4"> aula2, aula10, aula1</label>
+<label><input type="radio" name="q4"> aula1, aula10, aula2</label>
+</div>
+
+<hr>
+
+<h2>Resumo</h2>
+<ul>
+  <li><code>ls</code> lista nomes; <code>ls -l</code> mostra detalhes, com o mês em português.</li>
+  <li><code>-a</code> mostra ocultos, <code>-h</code> deixa tamanhos legíveis, <code>-t</code>/<code>-S</code>/<code>-r</code> mudam a ordem.</li>
+  <li>A ordem padrão segue o idioma: ignora acentos, pontos e maiúsculas.</li>
+  <li>No Debian, <code>ll</code> vem comentado no <code>~/.bashrc</code>; descomente para usar.</li>
+</ul>
+
+<div class="pager"></div>
+
+</div>
+</main>
+</div>
+<script src="assets/site.js"></script>
+</body>
+</html>

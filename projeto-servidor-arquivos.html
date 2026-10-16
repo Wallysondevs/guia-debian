@@ -1,0 +1,297 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Debian Projeto: Servidor de Arquivos com Samba | Guia Debian</title>
+<meta name="description" content="Laboratório no Debian 13: compartilhar uma pasta na rede com Samba, para Windows, Linux e macOS. Grupo da equipe, smb.conf, testparm, smbpasswd, nftables e teste com smbclient.">
+<link rel="stylesheet" href="assets/style.css">
+<script>try{var t=localStorage.getItem("tema");if(t)document.documentElement.setAttribute("data-theme",t)}catch(e){}</script>
+</head>
+<body>
+<div class="layout">
+<nav class="sidebar" id="sidebar" aria-label="Tópicos"></nav>
+<main class="main">
+<div class="content">
+
+<div class="pager"></div>
+
+<h1>Projeto <span class="hl">Servidor de Arquivos</span></h1>
+
+<p class="intro">Uma pasta no servidor que todo mundo da equipe abre como se fosse do próprio computador, seja Windows, Linux ou Mac. É para isso que existe o <strong>Samba</strong>: ele fala o protocolo de compartilhamento do Windows (SMB) a partir de um Debian. Neste laboratório você cria a pasta, o grupo da equipe, os usuários e a regra de firewall.</p>
+
+<div class="tip">
+<strong>Ao terminar você terá</strong>
+<ul>
+  <li>Uma pasta <code>/srv/compartilhado</code> onde só o grupo <code>equipe</code> lê e grava.</li>
+  <li>O compartilhamento <code>\\lab\compartilhado</code> configurado no <code>/etc/samba/smb.conf</code> e conferido com <code>testparm</code>.</li>
+  <li>Um usuário do Samba com senha própria.</li>
+  <li>A porta 445 liberada no nftables, e o acesso testado com <code>smbclient</code> e pelo gerenciador de arquivos.</li>
+</ul>
+</div>
+
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Item</th><th>Detalhe</th></tr>
+<tr><td>Tempo estimado</td><td>45 min</td></tr>
+<tr><td>Pré-requisitos</td><td><a href="projetos.html">Como Usar os Projetos</a>, <a href="usuarios.html">Usuários e Grupos</a>, <a href="chmod.html">chmod</a>, <a href="chown.html">chown, chgrp, umask</a>, <a href="nftables.html">Firewall (nftables)</a>. Ideal: ter feito o <a href="projeto-servidor-web.html">Servidor Web do Zero</a> (sudo e firewall prontos).</td></tr>
+<tr><td>Onde roda</td><td>Sua VM <code>lab</code>; os comandos usam <code>sudo</code> (ou rode-os como root após <code>su -</code>)</td></tr>
+</table>
+</div>
+
+<div class="note">
+<strong>Rede da VM para este projeto</strong>
+<p>Para outros computadores da casa enxergarem a VM, troque a placa de rede dela de <strong>NAT</strong> para <strong>Placa em modo Bridge</strong> (VirtualBox, Configurações &gt; Rede). Assim ela ganha um IP da sua rede, como <code>192.168.0.50</code>. Os testes com <code>smbclient</code> dentro da própria VM funcionam em qualquer modo.</p>
+</div>
+
+<hr>
+
+<h2>As etapas</h2>
+
+<ol class="passo">
+
+<li>
+<h3>Instalar o Samba</h3>
+<pre class="term" data-host="lab">$ sudo apt install samba smbclient
+$ samba --version
+-bash: samba: comando não encontrado
+$ sudo samba --version
+Version 4.22.11-Debian-4.22.11+dfsg-0+deb13u1
+$ systemctl is-active smbd nmbd
+active
+active</pre>
+<p>Dois serviços sobem: <code>smbd</code> (os arquivos e as impressoras) e <code>nmbd</code> (o nome da máquina na rede Windows antiga). O <code>smbclient</code> é o cliente de linha de comando, para testar. Como no Apache, o binário mora em <code>/usr/sbin</code> e só roda com <code>sudo</code>.</p>
+</li>
+
+<li>
+<h3>Criar o grupo, o usuário e a pasta</h3>
+<p><strong>O que vamos fazer e por quê:</strong> o Samba respeita as permissões do Linux. Então a regra "só a equipe mexe" começa num grupo do sistema e nas permissões da pasta.</p>
+<pre class="term" data-host="lab">$ sudo groupadd equipe
+$ sudo adduser --disabled-password --comment "Bruno" bruno
+$ sudo usermod -aG equipe bruno
+$ sudo usermod -aG equipe ana
+$ sudo mkdir -p /srv/compartilhado
+$ sudo chown root:equipe /srv/compartilhado
+$ sudo chmod 2775 /srv/compartilhado
+$ ls -ld /srv/compartilhado
+drwxrwsr-x 2 root equipe 4096 out 15 21:48 /srv/compartilhado</pre>
+<dl class="anatomy">
+  <dt>2</dt><dd>O bit <strong>setgid</strong> numa pasta: tudo criado dentro dela herda o grupo <code>equipe</code>. Aparece como <code>s</code> no lugar do <code>x</code> do grupo (<code>rws</code>).</dd>
+  <dt>7</dt><dd>Dono (root): ler, gravar, entrar.</dd>
+  <dt>7</dt><dd>Grupo (equipe): ler, gravar, entrar.</dd>
+  <dt>5</dt><dd>Outros: só ler e entrar.</dd>
+</dl>
+<p>O <code>--disabled-password</code> cria o <code>bruno</code> sem senha de login no Linux: ele só vai usar o Samba, que tem senha própria. Veja <a href="permissoes.html">Entendendo Permissões</a>.</p>
+</li>
+
+<li>
+<h3>Conhecer o smb.conf do Debian</h3>
+<p>O arquivo vem cheio de comentários. Para ver só o que vale, filtre:</p>
+<pre class="term" data-host="lab">$ grep -v -E '^\s*(#|;|$)' /etc/samba/smb.conf | head -8
+[global]
+   workgroup = WORKGROUP
+   log file = /var/log/samba/log.%m
+   max log size = 1000
+   logging = file
+   panic action = /usr/share/samba/panic-action %d
+   server role = standalone server
+   obey pam restrictions = yes</pre>
+<p>Cada <code>[nome]</code> é uma seção. <code>[global]</code> vale para o servidor; as outras são compartilhamentos. O Debian já traz <code>[homes]</code> (a pasta pessoal de cada usuário, <strong>só leitura</strong> por padrão) e <code>[printers]</code>.</p>
+</li>
+
+<li>
+<h3>Criar o compartilhamento</h3>
+<p>Faça uma cópia e acrescente no fim do arquivo (com <code>sudo nano /etc/samba/smb.conf</code>):</p>
+<pre class="term" data-host="lab">$ sudo cp /etc/samba/smb.conf /etc/samba/smb.conf.bak</pre>
+<pre class="file" data-file="/etc/samba/smb.conf (fim do arquivo)">[compartilhado]
+   comment = Pasta da equipe
+   path = /srv/compartilhado
+   valid users = @equipe
+   read only = no
+   create mask = 0664
+   directory mask = 2775</pre>
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Linha</th><th>O que faz</th></tr>
+<tr><td><code>[compartilhado]</code></td><td>O nome que aparece na rede: <code>\\lab\compartilhado</code>.</td></tr>
+<tr><td><code>path</code></td><td>A pasta de verdade no Debian.</td></tr>
+<tr><td><code>valid users = @equipe</code></td><td>Só membros do grupo <code>equipe</code> entram. O <code>@</code> quer dizer "grupo".</td></tr>
+<tr><td><code>read only = no</code></td><td>Permite gravar.</td></tr>
+<tr><td><code>create mask</code> / <code>directory mask</code></td><td>Permissões dos arquivos e pastas criados pela rede: o grupo também pode editar.</td></tr>
+</table>
+</div>
+<p><strong>Confira com o testparm</strong>, que lê o arquivo e mostra como o Samba entendeu:</p>
+<pre class="term" data-host="lab">$ testparm -s 2&gt;/dev/null | tail -8
+[compartilhado]
+	comment = Pasta da equipe
+	create mask = 0664
+	directory mask = 02775
+	path = /srv/compartilhado
+	read only = No
+	valid users = @equipe</pre>
+<p>Se você errar o nome de uma opção, o <code>testparm</code> avisa com <code>Unknown parameter encountered</code> e a linha. Depois de conferir:</p>
+<pre class="term" data-host="lab">$ sudo systemctl restart smbd</pre>
+</li>
+
+<li>
+<h3>Senhas do Samba</h3>
+<p><strong>O que vamos fazer e por quê:</strong> o Samba guarda as senhas num banco próprio, separado do <code>/etc/shadow</code>. Todo usuário que vai acessar precisa ser cadastrado nele.</p>
+<pre class="term" data-host="lab">$ sudo smbpasswd -a bruno
+New SMB password:
+Retype new SMB password:
+Added user bruno.
+$ sudo smbpasswd -a ana
+$ sudo pdbedit -L
+ana:1000:
+bruno:1001:</pre>
+<p>O <code>pdbedit -L</code> lista quem está no banco do Samba, com o número de usuário (UID) do Linux.</p>
+</li>
+
+<li>
+<h3>Liberar a porta no firewall</h3>
+<p>O Samba escuta nas portas 445 (SMB moderno) e 139 (o antigo NetBIOS):</p>
+<pre class="term" data-host="lab">$ sudo ss -tlnp | grep smbd
+LISTEN 0      50           0.0.0.0:139       0.0.0.0:*    users:(("smbd",pid=112815,fd=31))
+LISTEN 0      50           0.0.0.0:445       0.0.0.0:*    users:(("smbd",pid=112815,fd=30))
+LISTEN 0      50              [::]:139          [::]:*    users:(("smbd",pid=112815,fd=29))
+LISTEN 0      50              [::]:445          [::]:*    users:(("smbd",pid=112815,fd=28))</pre>
+<p>Se o firewall do projeto <a href="projeto-servidor-web.html">Servidor Web</a> estiver ativo, acrescente a 445 na regra do <code>/etc/nftables.conf</code>. Libere só a rede de casa, nunca a internet:</p>
+<pre class="file" data-file="/etc/nftables.conf (dentro de chain input)">        ip saddr 192.168.0.0/24 tcp dport 445 accept    # Samba só para a rede local</pre>
+<pre class="term" data-host="lab">$ sudo nft -c -f /etc/nftables.conf
+$ sudo systemctl reload nftables</pre>
+<div class="warning">
+<strong>Nunca exponha o Samba na internet</strong>
+<p>A porta 445 é das mais atacadas do mundo. Para acesso de fora de casa, use uma VPN (veja <a href="wireguard.html">VPN (WireGuard)</a>) e acesse o Samba por dentro dela.</p>
+</div>
+</li>
+
+<li>
+<h3>Testar de dentro do servidor</h3>
+<p>O <code>smbclient</code> conversa com o Samba como um cliente da rede faria. Vamos enviar um arquivo como o bruno:</p>
+<dl class="anatomy">
+  <dt>//localhost/compartilhado</dt><dd>Máquina e compartilhamento, no formato do Samba (barras normais).</dd>
+  <dt>-U bruno</dt><dd>O usuário do Samba. Ele pede a senha.</dd>
+  <dt>-c 'put …; ls'</dt><dd>Comandos a executar: enviar um arquivo e listar a pasta.</dd>
+</dl>
+<pre class="term" data-host="lab">$ echo "ola" &gt; /tmp/oi.txt
+$ smbclient //localhost/compartilhado -U bruno -c 'put /tmp/oi.txt oi.txt; ls'
+Password for [WORKGROUP\bruno]:
+putting file /tmp/oi.txt as \oi.txt (1,0 kb/s) (average 1,0 kb/s)
+  .                                   D        0  Thu Oct 15 21:48:40 2026
+  ..                                  D        0  Thu Oct 15 21:48:40 2026
+  oi.txt                              A        4  Thu Oct 15 21:48:40 2026
+
+		24253528 blocks of size 1024. 20668596 blocks available
+$ ls -l /srv/compartilhado
+total 4
+-rw-rw-r-- 1 bruno equipe 4 out 15 21:48 oi.txt</pre>
+<p>Repare no <code>ls -l</code>: o arquivo pertence ao <code>bruno</code> e ao grupo <code>equipe</code> (herdado pelo setgid), com permissão <code>rw-rw-r--</code> (o <code>create mask</code>). A ana também consegue editá-lo.</p>
+<p><strong>Confira a recusa:</strong> com a senha errada, o Samba responde:</p>
+<pre class="term" data-host="lab">$ smbclient //localhost/compartilhado -U bruno%senhaerrada -c ls
+session setup failed: NT_STATUS_LOGON_FAILURE</pre>
+</li>
+
+<li>
+<h3>Acessar de outro computador</h3>
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Sistema</th><th>Como abrir</th></tr>
+<tr><td>Windows</td><td>No Explorador de Arquivos, digite <code>\\192.168.0.50\compartilhado</code> na barra de endereço. Para fixar como letra (Z:), use "Mapear unidade de rede".</td></tr>
+<tr><td>Linux (GNOME)</td><td>No Arquivos, "Outros locais" &gt; "Conectar ao servidor": <code>smb://192.168.0.50/compartilhado</code></td></tr>
+<tr><td>macOS</td><td>Finder &gt; Ir &gt; Conectar ao Servidor (<kbd>Cmd</kbd>+<kbd>K</kbd>): <code>smb://192.168.0.50/compartilhado</code></td></tr>
+<tr><td>Linux (terminal, montando)</td><td><code>sudo mount -t cifs //192.168.0.50/compartilhado /mnt/equipe -o username=bruno,uid=$(id -u)</code> (pacote <code>cifs-utils</code>)</td></tr>
+</table>
+</div>
+<p>Troque <code>192.168.0.50</code> pelo IP da VM, que aparece em <code>ip -br a</code>.</p>
+<div class="cenario">
+<strong>Se deu errado: "NT_STATUS_ACCESS_DENIED" ao gravar</strong>
+<p>O Samba deixou entrar, mas o Linux não deixou gravar. Confira se o usuário está no grupo (<code>id bruno</code>), se a pasta é do grupo <code>equipe</code> com <code>2775</code> e se o <code>read only = no</code> está na seção certa. Reinicie o <code>smbd</code> depois de mexer em grupos.</p>
+</div>
+<div class="cenario">
+<strong>Se deu errado: o Windows não acha o servidor</strong>
+<p>Confirme a placa da VM em modo Bridge, o IP certo e a regra da porta 445 no nftables. Teste do próprio Windows com <code>Test-NetConnection 192.168.0.50 -Port 445</code> no PowerShell.</p>
+</div>
+</li>
+</ol>
+
+<hr>
+
+<h2>E o NFS?</h2>
+<p>Entre máquinas Linux, o <strong>NFS</strong> é a alternativa nativa: mais simples, sem senhas próprias, baseado em IPs e números de usuário. No Debian: <code>sudo apt install nfs-kernel-server</code>, uma linha no <code>/etc/exports</code> como <code>/srv/compartilhado 192.168.0.0/24(rw,sync,no_subtree_check)</code> e <code>sudo exportfs -ra</code>. Se a rede tem Windows ou Mac, prefira o Samba.</p>
+
+<hr>
+
+<h2>Checklist do que você aprendeu</h2>
+<ul>
+  <li>O Samba usa as permissões do Linux: grupo + pasta com <code>2775</code> (setgid) primeiro.</li>
+  <li>Cada compartilhamento é uma seção no <code>smb.conf</code>; o <code>testparm</code> confere antes de reiniciar.</li>
+  <li>Usuários do Samba têm senha própria: <code>smbpasswd -a</code>, listados com <code>pdbedit -L</code>.</li>
+  <li>Porta 445 só para a rede local; para acesso remoto, VPN.</li>
+  <li><code>smbclient</code> testa tudo sem sair do servidor.</li>
+</ul>
+
+<h2>Desafios extras</h2>
+<ul>
+  <li>Crie um segundo compartilhamento <code>[publico]</code> só leitura e sem senha (<code>guest ok = yes</code>, <code>read only = yes</code>).</li>
+  <li>Ative a "lixeira" do Samba com <code>vfs objects = recycle</code>, para arquivos apagados pela rede irem para <code>.recycle</code>.</li>
+  <li>Inclua <code>/srv/compartilhado</code> no seu <a href="projeto-backup.html">Backup Automático</a>.</li>
+</ul>
+
+<h2>Limpeza</h2>
+<pre class="term" data-host="lab">$ sudo cp /etc/samba/smb.conf.bak /etc/samba/smb.conf
+$ sudo smbpasswd -x bruno
+Deleted user bruno.
+$ sudo deluser --remove-home bruno
+$ sudo groupdel equipe
+$ sudo rm -rf /srv/compartilhado
+$ sudo apt purge samba smbclient</pre>
+
+<hr>
+
+<h2>Exercícios</h2>
+
+<div class="exercise">
+<h3>1. Herdar o grupo</h3>
+<p>Complete as permissões da pasta para o grupo gravar e os arquivos novos herdarem o grupo:</p>
+<div class="ex-code">sudo chmod <input data-answer="2775|g+s,ug+rwx" aria-label="modo"> /srv/compartilhado</div>
+</div>
+
+<div class="exercise">
+<h3>2. Só o grupo</h3>
+<p>Complete a linha do <code>smb.conf</code> que deixa entrar só quem é do grupo <code>financeiro</code>:</p>
+<div class="ex-code">valid users = <input data-answer="@financeiro" aria-label="valor"></div>
+</div>
+
+<div class="mc" data-answer="1">
+<p class="mc-q">3. O bruno existe no Linux, está no grupo certo, mas o smbclient dá <code>NT_STATUS_LOGON_FAILURE</code> com a senha dele. O que falta?</p>
+<label><input type="radio" name="q3"> Cadastrá-lo no banco do Samba com <code>smbpasswd -a bruno</code>.</label>
+<label><input type="radio" name="q3"> Dar <code>sudo</code> a ele.</label>
+<label><input type="radio" name="q3"> Liberar a porta 80.</label>
+<label><input type="radio" name="q3"> Reinstalar o smbclient.</label>
+</div>
+
+<div class="mc" data-answer="4">
+<p class="mc-q">4. Qual é a forma segura de acessar o Samba de casa quando você está viajando?</p>
+<label><input type="radio" name="q4"> Liberar a porta 445 para a internet no roteador.</label>
+<label><input type="radio" name="q4"> Trocar a porta do Samba para 8445.</label>
+<label><input type="radio" name="q4"> Desligar o firewall.</label>
+<label><input type="radio" name="q4"> Entrar por uma VPN e acessar o Samba por dentro dela.</label>
+</div>
+
+<hr>
+
+<h2>Resumo</h2>
+<ul>
+  <li>Samba = pasta do Linux visível como compartilhamento do Windows, para qualquer sistema.</li>
+  <li>Permissões do Linux + <code>valid users</code> + senha do Samba formam as três travas de acesso.</li>
+  <li>Teste com <code>testparm</code> e <code>smbclient</code>; abra a porta 445 só para a rede local.</li>
+</ul>
+
+<div class="pager"></div>
+
+</div>
+</main>
+</div>
+<script src="assets/site.js"></script>
+</body>
+</html>

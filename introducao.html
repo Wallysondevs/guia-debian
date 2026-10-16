@@ -1,0 +1,289 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Debian Introdução — o que é o Debian | Guia Debian</title>
+<meta name="description" content="O que é o Debian: o projeto comunitário, o Contrato Social, as Diretrizes de Software Livre (DFSG), as distribuições derivadas como Ubuntu e Kali, e por que escolher o Debian.">
+<link rel="stylesheet" href="assets/style.css">
+<script>try{var t=localStorage.getItem("tema");if(t)document.documentElement.setAttribute("data-theme",t)}catch(e){}</script>
+</head>
+<body>
+<div class="layout">
+<nav class="sidebar" id="sidebar" aria-label="Tópicos"></nav>
+<main class="main">
+<div class="content">
+
+<div class="pager"></div>
+
+<h1>Debian <span class="hl">Introdução</span></h1>
+
+<p class="intro">O Debian é um sistema operacional livre, feito por milhares de voluntários do mundo inteiro desde 1993. Ele é uma das distribuições Linux mais antigas ainda ativas e serve de base para muitas outras, inclusive o Ubuntu. Nesta aula você vai entender o que é o Debian, quem faz, quais são as regras do projeto e por que tanta gente escolhe ele para servidores e computadores pessoais.</p>
+
+<div class="note">
+<strong>Você vai aprender</strong>
+<ul>
+  <li>A diferença entre Linux (o kernel) e Debian (a distribuição).</li>
+  <li>Quem faz o Debian e como o projeto se organiza.</li>
+  <li>O que dizem o Contrato Social e as Diretrizes de Software Livre (DFSG).</li>
+  <li>Quais distribuições famosas nasceram do Debian.</li>
+  <li>Como descobrir, pelo terminal, que você está num Debian e em qual versão.</li>
+</ul>
+</div>
+
+<hr>
+
+<h2>Linux e Debian não são a mesma coisa</h2>
+<p>O <strong>Linux</strong> é o <strong>kernel</strong> (em português, "núcleo"): a parte do sistema que conversa com o hardware, divide a memória entre os programas e controla discos, rede e teclado. Sozinho, ele não serve para muita coisa: não tem terminal, não tem área de trabalho, não tem instalador.</p>
+<p>Uma <strong>distribuição</strong> junta o kernel com milhares de outros programas, testa tudo junto e entrega pronto para instalar. O Debian é uma distribuição. Ele inclui:</p>
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Parte</th><th>No Debian 13</th><th>Para que serve</th></tr>
+<tr><td>Kernel</td><td>Linux 6.12</td><td>Controla o hardware.</td></tr>
+<tr><td>Ferramentas básicas</td><td>GNU coreutils, bash</td><td>Comandos como <code>ls</code>, <code>cp</code> e o próprio terminal.</td></tr>
+<tr><td>Sistema de inicialização</td><td>systemd 257</td><td>Liga os serviços quando o computador inicia.</td></tr>
+<tr><td>Gerenciador de pacotes</td><td><code>dpkg</code> e <code>apt</code></td><td>Instala, atualiza e remove programas.</td></tr>
+<tr><td>Instalador</td><td>debian-installer</td><td>Coloca o sistema no disco.</td></tr>
+<tr><td>Programas</td><td>quase 69 mil pacotes</td><td>De editores de texto a servidores web.</td></tr>
+</table>
+</div>
+
+<p>Você pode conferir o kernel e a distribuição pelo terminal. Os dois comandos abaixo foram rodados num Debian 13 de verdade:</p>
+
+<dl class="anatomy">
+  <dt>uname</dt><dd>Mostra informações do kernel (de <em>Unix name</em>, "nome do Unix").</dd>
+  <dt>-r</dt><dd>Opção: só a versão do kernel (de <em>release</em>).</dd>
+</dl>
+
+<pre class="term">$ uname -r
+6.12.111+deb13-amd64          « versão do kernel: 6.12, empacotada para o Debian 13, em PC de 64 bits
+$ cat /etc/debian_version
+13.7                          « a distribuição: Debian 13, sétima atualização</pre>
+
+<p>O <code>+deb13</code> no nome do kernel indica que ele foi preparado pela equipe do Debian para a versão 13. O <code>amd64</code> é a arquitetura: computadores de 64 bits com processador Intel ou AMD.</p>
+
+<hr>
+
+<h2>Quem faz o Debian</h2>
+<p>O Debian foi criado em 1993 por <strong>Ian Murdock</strong>. O nome junta "Deb", de Debra, sua namorada na época, e "Ian". Desde o começo, a ideia era um sistema feito em comunidade, aberto a qualquer pessoa que quisesse ajudar.</p>
+<p>Hoje o Debian não pertence a nenhuma empresa. É mantido por:</p>
+<ul>
+  <li><strong>Desenvolvedores Debian</strong> (DDs): voluntários que podem enviar pacotes e votar nas decisões do projeto.</li>
+  <li><strong>Mantenedores</strong>: pessoas que cuidam de pacotes específicos.</li>
+  <li><strong>Colaboradores</strong>: tradutores, quem testa, quem escreve documentação e quem relata bugs.</li>
+</ul>
+<p>O projeto tem uma <strong>Constituição</strong>, elege um <strong>Líder do Projeto</strong> (DPL, de <em>Debian Project Leader</em>) todo ano e decide temas importantes por votação. Esses documentos vêm instalados no próprio sistema, na pasta <code>/usr/share/doc/debian</code>:</p>
+
+<pre class="term">$ ls /usr/share/doc/debian
+bug-log-access.txt            constitution.1.6.txt.gz
+bug-log-mailserver.txt.gz     constitution.1.7.txt.gz
+bug-mailserver-refcard.txt    constitution.1.8.txt.gz
+bug-maint-info.txt.gz         constitution.txt.gz          « a Constituição atual
+bug-maint-mailcontrol.txt.gz  debian-manifesto.gz          « o manifesto de 1993
+bug-reporting.txt.gz          FAQ
+constitution.1.0.txt.gz       mailing-lists.txt.gz
+constitution.1.1.txt.gz       social-contract.1.0.txt.gz
+constitution.1.2.txt.gz       social-contract.1.1.txt.gz
+constitution.1.3.txt.gz       social-contract.txt.gz       « o Contrato Social atual
+constitution.1.4.txt.gz       source-unpack.txt
+constitution.1.5.txt.gz</pre>
+
+<p>Os arquivos terminados em <code>.gz</code> estão compactados. Para ler, use <code>zcat</code> (mostra o conteúdo descompactado) ou <code>zless</code> (o mesmo, com rolagem).</p>
+
+<hr>
+
+<h2>O Contrato Social do Debian</h2>
+<p>O <strong>Contrato Social</strong> é a promessa pública do projeto aos usuários. A primeira versão é de 1997, e a atual, a 1.2, foi aprovada em 2022. São cinco compromissos:</p>
+
+<div class="table-wrap">
+<table class="ref">
+<tr><th>#</th><th>Compromisso (original em inglês)</th><th>O que significa na prática</th></tr>
+<tr><td>1</td><td>Debian will remain 100% free</td><td>O sistema principal só tem software livre.</td></tr>
+<tr><td>2</td><td>We will give back to the free software community</td><td>Correções feitas no Debian são enviadas de volta aos autores dos programas.</td></tr>
+<tr><td>3</td><td>We will not hide problems</td><td>O banco de bugs é público: qualquer um vê os problemas conhecidos.</td></tr>
+<tr><td>4</td><td>Our priorities are our users and free software</td><td>As decisões pensam em quem usa, não em vender algo.</td></tr>
+<tr><td>5</td><td>Works that do not meet our free software standards</td><td>Software não livre fica separado (nas áreas <code>non-free</code> e <code>non-free-firmware</code>) e nunca é obrigatório.</td></tr>
+</table>
+</div>
+
+<p>Para ler o texto completo no seu Debian:</p>
+
+<dl class="anatomy">
+  <dt>zcat</dt><dd>Mostra o conteúdo de um arquivo <code>.gz</code> sem precisar descompactá-lo no disco.</dd>
+  <dt>/usr/share/doc/debian/social-contract.txt.gz</dt><dd>O arquivo do Contrato Social.</dd>
+  <dt>|</dt><dd>"Cano" (<em>pipe</em>): manda a saída do primeiro comando para o segundo.</dd>
+  <dt>less</dt><dd>Mostra o texto com rolagem. Saia com <kbd>q</kbd>.</dd>
+</dl>
+
+<pre class="term">$ zcat /usr/share/doc/debian/social-contract.txt.gz | less</pre>
+
+<h3>As Diretrizes de Software Livre (DFSG)</h3>
+<p>A segunda parte do contrato são as <strong>DFSG</strong> (<em>Debian Free Software Guidelines</em>): nove critérios que uma licença precisa cumprir para o programa entrar no Debian principal. Por exemplo: permitir redistribuir, dar acesso ao código-fonte, permitir modificações e não discriminar pessoas nem áreas de uso. As DFSG foram tão bem escritas que viraram a base da definição de "código aberto" usada pela Open Source Initiative.</p>
+
+<div class="tip">
+<strong>Na prática</strong>
+<p>Por causa das DFSG, os repositórios do Debian são divididos em áreas: <code>main</code> (100% livre), <code>contrib</code> (livre, mas depende de algo não livre), <code>non-free</code> e <code>non-free-firmware</code> (drivers de Wi-Fi, placas de vídeo…). Desde o Debian 12, o instalador já inclui o <code>non-free-firmware</code> para o hardware funcionar de primeira. Veja <a href="repositorios.html">Repositórios</a>.</p>
+</div>
+
+<hr>
+
+<h2>Distribuições que nasceram do Debian</h2>
+<p>Como tudo no Debian é livre, outros projetos podem pegar o sistema e criar suas próprias versões. Essas são as <strong>derivadas</strong>. Algumas das mais conhecidas:</p>
+
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Distribuição</th><th>Baseada em</th><th>Para quem</th></tr>
+<tr><td>Ubuntu</td><td>Debian (testing/unstable)</td><td>Desktop e nuvem, com suporte da Canonical.</td></tr>
+<tr><td>Linux Mint</td><td>Ubuntu (e o LMDE, direto no Debian)</td><td>Quem vem do Windows e quer algo familiar.</td></tr>
+<tr><td>Kali Linux</td><td>Debian testing</td><td>Testes de segurança e perícia digital.</td></tr>
+<tr><td>Raspberry Pi OS</td><td>Debian stable</td><td>Os computadores Raspberry Pi.</td></tr>
+<tr><td>MX Linux, antiX</td><td>Debian stable</td><td>Computadores antigos ou com pouca memória.</td></tr>
+<tr><td>Tails</td><td>Debian stable</td><td>Privacidade e anonimato (roda de um pendrive).</td></tr>
+<tr><td>Devuan</td><td>Debian, sem systemd</td><td>Quem prefere outros sistemas de inicialização.</td></tr>
+</table>
+</div>
+
+<p>Por isso quem aprende Debian aprende, ao mesmo tempo, a base de todas essas distribuições: o <code>apt</code>, os pacotes <code>.deb</code> e a organização das pastas são os mesmos. As diferenças entre Debian e Ubuntu estão em <a href="debian-x-ubuntu.html">Debian x Ubuntu</a>.</p>
+
+<hr>
+
+<h2>Por que escolher o Debian</h2>
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Característica</th><th>O que isso significa para você</th></tr>
+<tr><td><strong>Estabilidade</strong></td><td>A versão estável (<em>stable</em>) só recebe correções depois de lançada. O que funciona hoje continua funcionando amanhã.</td></tr>
+<tr><td><strong>Liberdade</strong></td><td>Nenhuma empresa decide o rumo do sistema, e nada é coletado sobre você.</td></tr>
+<tr><td><strong>Universal</strong></td><td>Roda em PCs, servidores, Raspberry Pi e até em mainframes: são 8 arquiteturas oficiais (amd64, arm64, armel, armhf, i386, ppc64el, riscv64 e s390x).</td></tr>
+<tr><td><strong>Leve</strong></td><td>A instalação mínima ocupa pouco mais de 1 GB e roda com pouca memória.</td></tr>
+<tr><td><strong>Muitos programas</strong></td><td>Quase 69 mil pacotes prontos para instalar com <code>apt</code>.</td></tr>
+<tr><td><strong>Segurança</strong></td><td>Uma equipe dedicada publica correções de segurança, e cada versão tem anos de suporte (veja <a href="versoes.html">Versões do Debian</a>).</td></tr>
+</table>
+</div>
+
+<div class="note">
+<strong>E o lado conservador?</strong>
+<p>A estabilidade tem um preço: os programas da versão estável não são os mais novos. Um navegador ou editor pode estar alguns meses ou anos atrás da última versão. Para quem precisa de algo mais novo, o Debian oferece os <a href="backports.html">backports</a> e o <a href="flatpak.html">Flatpak</a>.</p>
+</div>
+
+<p>Você confere quantos pacotes existem nos repositórios configurados com um comando só:</p>
+
+<dl class="anatomy">
+  <dt>apt-cache pkgnames</dt><dd>Lista o nome de todos os pacotes disponíveis, um por linha.</dd>
+  <dt>|</dt><dd>Manda essa lista para o próximo comando.</dd>
+  <dt>wc -l</dt><dd>Conta as linhas (<em>word count</em>, <code>-l</code> de <em>lines</em>).</dd>
+</dl>
+
+<pre class="term">$ apt-cache pkgnames | wc -l
+68904                         « pacotes disponíveis no Debian 13 (main + non-free-firmware)</pre>
+
+<hr>
+
+<h2>Como saber se estou num Debian</h2>
+<p>Existem várias formas, e cada uma mostra um nível de detalhe:</p>
+
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Comando</th><th>Mostra</th><th>Quando usar</th></tr>
+<tr><td><code>cat /etc/debian_version</code></td><td>Só o número exato: <code>13.7</code></td><td>Para saber a atualização exata (13.x).</td></tr>
+<tr><td><code>cat /etc/os-release</code></td><td>Nome, versão, codinome e sites</td><td>Funciona em qualquer distribuição.</td></tr>
+<tr><td><code>lsb_release -a</code></td><td>Resumo em 4 linhas</td><td>Leitura rápida.</td></tr>
+<tr><td><code>hostnamectl</code></td><td>Sistema, kernel e hardware</td><td>Quando também quer saber o kernel.</td></tr>
+</table>
+</div>
+
+<pre class="term">$ cat /etc/os-release
+PRETTY_NAME="Debian GNU/Linux 13 (trixie)"      « nome completo
+NAME="Debian GNU/Linux"
+VERSION_ID="13"                                 « versão principal
+VERSION="13 (trixie)"
+VERSION_CODENAME=trixie                         « codinome
+DEBIAN_VERSION_FULL=13.7                        « atualização exata
+ID=debian
+HOME_URL="https://www.debian.org/"
+SUPPORT_URL="https://www.debian.org/support"
+BUG_REPORT_URL="https://bugs.debian.org/"
+$ lsb_release -a
+Distributor ID:	Debian
+Description:	Debian GNU/Linux 13 (trixie)
+Release:	13
+Codename:	trixie</pre>
+
+<p>Repare que o Debian se chama "Debian GNU/Linux". O "GNU" lembra que boa parte das ferramentas básicas vem do Projeto GNU, e o "Linux", que o kernel é o Linux.</p>
+
+<div class="try" data-goal="ran:debian_version|os-release|lsb_release">
+<p class="try-task"><strong>Missão:</strong> descubra a versão exata do Debian desta máquina e o codinome dela. Use os comandos da tabela acima.</p>
+</div>
+
+<hr>
+
+<h2>Quando não funciona</h2>
+
+<div class="cenario">
+<strong>"cat: /etc/debian_version: Arquivo ou diretório inexistente"</strong>
+<pre class="term">$ cat /etc/debian_version
+cat: /etc/debian_version: Arquivo ou diretório inexistente</pre>
+<p><strong>O que aconteceu:</strong> você não está num sistema da família Debian. Fedora, Arch e openSUSE, por exemplo, não têm esse arquivo.</p>
+<p><strong>Como resolver:</strong> use <code>cat /etc/os-release</code>, que existe em praticamente todas as distribuições.</p>
+</div>
+
+<div class="cenario">
+<strong>No Ubuntu, o debian_version mostra um nome estranho</strong>
+<pre class="term" data-host="pc-ubuntu">$ cat /etc/debian_version
+forky/sid</pre>
+<p><strong>O que aconteceu:</strong> o Ubuntu também tem esse arquivo, porque é derivado do Debian. Ele mostra de qual versão em desenvolvimento do Debian aquele Ubuntu partiu.</p>
+<p><strong>Como resolver:</strong> nada a resolver. Para saber a versão do Ubuntu, use <code>/etc/os-release</code>.</p>
+</div>
+
+<hr>
+
+<h2>Exercícios</h2>
+
+<div class="mc" data-answer="2">
+<p class="mc-q">1. O que é o Linux, no sentido técnico?</p>
+<label><input type="radio" name="q1"> Uma distribuição, como o Debian.</label>
+<label><input type="radio" name="q1"> O kernel: o núcleo que controla o hardware.</label>
+<label><input type="radio" name="q1"> A área de trabalho com janelas.</label>
+<label><input type="radio" name="q1"> Uma empresa que vende o Debian.</label>
+</div>
+
+<div class="mc" data-answer="3">
+<p class="mc-q">2. Onde fica o software não livre no Debian?</p>
+<label><input type="radio" name="q2"> Misturado com o resto, na área <code>main</code>.</label>
+<label><input type="radio" name="q2"> O Debian proíbe qualquer software não livre.</label>
+<label><input type="radio" name="q2"> Separado, nas áreas <code>non-free</code> e <code>non-free-firmware</code>.</label>
+<label><input type="radio" name="q2"> Só em sites de terceiros.</label>
+</div>
+
+<div class="exercise">
+<h3>3. Versão exata</h3>
+<p>Complete o comando que mostra só o número da versão, como <code>13.7</code>:</p>
+<div class="ex-code">cat /etc/<input data-answer="debian_version" aria-label="arquivo"></div>
+</div>
+
+<div class="mc" data-answer="1">
+<p class="mc-q">4. Qual destas distribuições é derivada do Debian?</p>
+<label><input type="radio" name="q4"> Kali Linux</label>
+<label><input type="radio" name="q4"> Fedora</label>
+<label><input type="radio" name="q4"> Arch Linux</label>
+<label><input type="radio" name="q4"> openSUSE</label>
+</div>
+
+<hr>
+
+<h2>Resumo</h2>
+<ul>
+  <li>Linux é o kernel; Debian é uma distribuição completa, feita por voluntários desde 1993.</li>
+  <li>O Contrato Social promete um sistema 100% livre e separa o software não livre em áreas próprias.</li>
+  <li>As DFSG definem o que é software livre para o Debian e inspiraram a definição de código aberto.</li>
+  <li>Ubuntu, Mint, Kali, Raspberry Pi OS e muitas outras nasceram do Debian.</li>
+  <li><code>cat /etc/debian_version</code> mostra a versão exata; <code>cat /etc/os-release</code> funciona em qualquer distribuição.</li>
+</ul>
+
+<div class="pager"></div>
+
+</div>
+</main>
+</div>
+<script src="assets/site.js"></script>
+</body>
+</html>

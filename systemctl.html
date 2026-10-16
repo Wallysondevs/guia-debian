@@ -1,0 +1,481 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Debian systemctl — ligar, desligar e vigiar serviços | Guia Debian</title>
+<meta name="description" content="Como usar o systemctl no Debian 13: status explicado linha a linha, start, stop, restart, enable, disable, mask, listar serviços e timers, com saídas reais.">
+<link rel="stylesheet" href="assets/style.css">
+<script>try{var t=localStorage.getItem("tema");if(t)document.documentElement.setAttribute("data-theme",t)}catch(e){}</script>
+</head>
+<body>
+<div class="layout">
+<nav class="sidebar" id="sidebar" aria-label="Tópicos"></nav>
+<main class="main">
+<div class="content">
+
+<div class="pager"></div>
+
+<h1>Debian <span class="hl">systemctl</span></h1>
+
+<p class="intro">Um <strong>serviço</strong> é um programa que roda o tempo todo em segundo plano, sem janela: o servidor SSH, o agendador de tarefas, um servidor web. Quem liga, desliga e vigia esses serviços no Debian é o <strong>systemd</strong>, e você conversa com ele pelo comando <code>systemctl</code>.</p>
+
+<div class="note">
+<strong>Você vai aprender</strong>
+<ul>
+  <li>O que são systemd, units e serviços.</li>
+  <li>Ler o <code>systemctl status</code> linha por linha.</li>
+  <li>A diferença entre <code>start</code> (agora) e <code>enable</code> (no próximo boot), e o que é <code>mask</code>.</li>
+  <li>Por que, no Debian, a usuária comum consegue ver mas não consegue mudar serviços.</li>
+  <li>Listar serviços rodando, com falha, e os timers agendados.</li>
+</ul>
+</div>
+
+<hr>
+
+<h2>Antes do comando: systemd e units</h2>
+<p>Quando o computador liga, o kernel inicia <strong>um</strong> programa: o <strong>systemd</strong>. Ele é o processo número 1 (PID 1) e inicia todo o resto, na ordem certa: rede, login, serviços. Depois, continua vigiando: se um serviço cai, ele pode reiniciá-lo. No Debian 13 a versão é a 257:</p>
+
+<pre class="term">$ systemctl --version
+systemd 257 (257.13-1~deb13u1)</pre>
+
+<p>Cada coisa que o systemd gerencia é uma <strong>unit</strong> ("unidade"), descrita num arquivo de texto. O tipo aparece no fim do nome:</p>
+
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Tipo</th><th>O que é</th><th>Exemplo no Debian</th></tr>
+<tr><td><code>.service</code></td><td>Um programa (serviço)</td><td><code>ssh.service</code>, <code>cron.service</code></td></tr>
+<tr><td><code>.timer</code></td><td>Um agendamento, como o cron</td><td><code>apt-daily.timer</code>, <code>logrotate.timer</code></td></tr>
+<tr><td><code>.socket</code></td><td>Uma porta que liga o serviço quando alguém conecta</td><td><code>dbus.socket</code></td></tr>
+<tr><td><code>.mount</code></td><td>Um disco montado</td><td><code>tmp.mount</code> (o <code>/tmp</code> em memória)</td></tr>
+<tr><td><code>.target</code></td><td>Um grupo de units, um "estágio" do boot</td><td><code>multi-user.target</code>, <code>graphical.target</code></td></tr>
+</table>
+</div>
+
+<p>Quando você omite o tipo, o <code>systemctl</code> assume <code>.service</code>: <code>systemctl status cron</code> é o mesmo que <code>systemctl status cron.service</code>.</p>
+
+<div class="note">
+<strong>"Daemon"</strong>
+<p>Programas de serviço são chamados de <strong>daemons</strong>, e muitos têm nome terminado em <code>d</code>: <code>sshd</code>, <code>systemd</code>, <code>journald</code>. Veja o <a href="glossario.html">Glossário</a>.</p>
+</div>
+
+<hr>
+
+<h2>Ver o estado de um serviço: <code>status</code></h2>
+
+<dl class="anatomy">
+  <dt>systemctl</dt><dd>O programa que conversa com o systemd.</dd>
+  <dt>status</dt><dd>A ação: mostrar o estado. Qualquer usuário pode.</dd>
+  <dt>cron</dt><dd>O serviço: o agendador de tarefas, que vem em toda instalação do Debian.</dd>
+</dl>
+
+<pre class="term">$ systemctl status cron
+● cron.service - Regular background program processing daemon        « bolinha = rodando
+     Loaded: loaded (/usr/lib/systemd/system/cron.service; enabled; preset: enabled)
+     Active: active (running) since Thu 2026-10-15 20:55:52 -03; 10min ago
+ Invocation: b30fe61157e342a9a0ed0579bc57444b
+       Docs: man:cron(8)
+   Main PID: 724 (cron)
+      Tasks: 1 (limit: 4638)
+     Memory: 440K (peak: 1.8M)
+        CPU: 12ms
+     CGroup: /system.slice/cron.service
+             └─724 /usr/sbin/cron -f
+
+out 15 20:55:52 notebook systemd[1]: Started cron.service - Regular background program processing daemon.
+out 15 20:55:52 notebook cron[724]: (CRON) INFO (pidfile fd = 3)
+out 15 20:55:52 notebook cron[724]: (CRON) INFO (Running @reboot jobs)</pre>
+
+<p>A saída é longa, mas cada linha responde uma pergunta:</p>
+
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Linha</th><th>Pergunta que responde</th><th>No exemplo</th></tr>
+<tr><td>Primeira linha</td><td>Que serviço é este?</td><td>O cron; a descrição vem em inglês</td></tr>
+<tr><td><code>Loaded</code></td><td>Onde está o arquivo da unit? Liga sozinho no boot?</td><td>Arquivo em <code>/usr/lib/systemd/system/</code>; <code>enabled</code> = liga no boot; <code>preset: enabled</code> = é o padrão do Debian</td></tr>
+<tr><td><code>Active</code></td><td>Está rodando agora? Desde quando?</td><td><code>active (running)</code> há 10 minutos</td></tr>
+<tr><td><code>Invocation</code></td><td>Qual "execução" é esta?</td><td>Um código novo a cada vez que o serviço inicia</td></tr>
+<tr><td><code>Main PID</code></td><td>Qual é o processo principal?</td><td>PID 724</td></tr>
+<tr><td><code>Tasks</code>, <code>Memory</code>, <code>CPU</code></td><td>Quanto recurso está usando?</td><td>1 tarefa, 440 KB, 12 ms de CPU no total</td></tr>
+<tr><td><code>CGroup</code></td><td>Quais processos pertencem ao serviço?</td><td>Só o <code>/usr/sbin/cron -f</code></td></tr>
+<tr><td>Últimas linhas</td><td>O que o serviço registrou por último?</td><td>As últimas linhas do log (veja <a href="journalctl.html">journalctl</a>)</td></tr>
+</table>
+</div>
+
+<div class="note">
+<strong>Por que a data aparece metade em inglês?</strong>
+<p>Na linha <code>Active</code>, o systemd escreve a data no formato fixo <code>Thu 2026-10-15</code>, sem traduzir. Já nas linhas de log, o mês sai traduzido (<code>out 15</code>). É assim mesmo no Debian em português.</p>
+</div>
+
+<h3>O mesmo para o SSH</h3>
+<p>Um serviço pode ter vários processos. O SSH, por exemplo, tem o principal (que espera conexões) e um por pessoa conectada:</p>
+
+<pre class="term">$ systemctl status ssh
+● ssh.service - OpenBSD Secure Shell server
+     Loaded: loaded (/usr/lib/systemd/system/ssh.service; enabled; preset: enabled)
+     Active: active (running) since Thu 2026-10-15 20:55:53 -03; 10min ago
+ Invocation: dd16b049d296412fa02c83b6ae9a7bcd
+       Docs: man:sshd(8)
+             man:sshd_config(5)
+   Main PID: 778 (sshd)
+      Tasks: 3 (limit: 4638)
+     Memory: 18.3M (peak: 18.7M)
+        CPU: 1.615s
+     CGroup: /system.slice/ssh.service
+             ├─ 778 "sshd: /usr/sbin/sshd -D [listener] 1 of 10-100 startups"   « o que espera conexões
+             ├─1999 "sshd-session: [accepted]"                                    « uma conexão chegando
+             └─2000 "sshd-auth: [session-auth]"                                   « conferindo a chave
+
+out 15 21:06:19 notebook sshd-session[1948]: Accepted publickey for ana from 192.168.0.20 port 58430 ssh2: ED25519 SHA256:ixgT4QXITUrqe0aI2mG5JqJnP118rAlE94kt7cqMC9E
+out 15 21:06:19 notebook sshd-session[1948]: pam_unix(sshd:session): session opened for user ana(uid=1000) by ana(uid=0)</pre>
+
+<div class="tip">
+<strong>A saída parou e não volta o prompt?</strong>
+<p>Quando a saída é maior que a tela, o <code>systemctl</code> abre um paginador (o <code>less</code>). Aperte <kbd>Q</kbd> para sair. Para não abrir o paginador, use <code>--no-pager</code>.</p>
+</div>
+
+<h3>Os estados possíveis</h3>
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Símbolo</th><th>Active</th><th>Significado</th></tr>
+<tr><td>● (verde)</td><td><code>active (running)</code></td><td>Rodando normalmente</td></tr>
+<tr><td>● (verde)</td><td><code>active (exited)</code></td><td>Rodou uma vez e terminou bem (normal em tarefas de configuração)</td></tr>
+<tr><td>●</td><td><code>activating (auto-restart)</code></td><td>Caiu e o systemd vai reiniciar em instantes</td></tr>
+<tr><td>○ (branco)</td><td><code>inactive (dead)</code></td><td>Parado</td></tr>
+<tr><td>× (vermelho)</td><td><code>failed</code></td><td>Tentou rodar e deu erro</td></tr>
+</table>
+</div>
+
+<p>Um serviço parado, por exemplo depois de um <code>stop</code>, aparece assim:</p>
+<pre class="term">#> systemctl status systemd-timesyncd
+○ systemd-timesyncd.service - Network Time Synchronization                       « bolinha vazia
+     Loaded: loaded (/usr/lib/systemd/system/systemd-timesyncd.service; enabled; preset: enabled)
+     Active: inactive (dead) since Thu 2026-10-15 21:14:26 -03; 51ms ago
+   Duration: 18min 36.823s                                                         « quanto tempo ficou ligado</pre>
+
+<p>E um com falha mostra um <code>×</code> e o motivo resumido. O <code>status=203/EXEC</code> quer dizer "não consegui executar o programa":</p>
+<pre class="term">#> systemctl status teste-guia
+× teste-guia.service - Serviço de teste do Guia Debian
+     Loaded: loaded (/etc/systemd/system/teste-guia.service; static)
+     Active: failed (Result: exit-code) since Thu 2026-10-15 21:09:55 -03; 1s ago
+   Duration: 30ms
+    Process: 8060 ExecStart=/usr/local/bin/teste-gia.sh (code=exited, status=203/EXEC)</pre>
+
+<p>O <code>status</code> diz <strong>que</strong> falhou. Para descobrir <strong>por quê</strong>, leia o log com <code>journalctl -u teste-guia</code>. A investigação completa está em <a href="criar-servico.html">Criar um Serviço</a> e <a href="journalctl.html">Logs (journalctl)</a>.</p>
+
+<hr>
+
+<h2>Ligar, desligar e reiniciar</h2>
+<p>Estas ações mudam o sistema, então precisam de root. No Debian instalado com senha de root não existe <code>sudo</code>: entre como root com <code>su -</code> (veja <a href="root-su-sudo.html">root, su e sudo</a>). Os exemplos com <code>root@notebook:~#</code> foram digitados assim.</p>
+
+<dl class="anatomy">
+  <dt>systemctl</dt><dd>O programa.</dd>
+  <dt>restart</dt><dd>A ação: parar e iniciar de novo.</dd>
+  <dt>ssh</dt><dd>O serviço.</dd>
+</dl>
+
+<pre class="term">$ su -
+Senha:
+#> systemctl restart ssh
+#> systemctl is-active ssh
+active</pre>
+
+<p>Como quase todo comando, o <code>restart</code> não mostra nada quando dá certo. Por isso conferimos com <code>is-active</code>.</p>
+
+<h3>E se a ana tentar sem ser root?</h3>
+<pre class="term">$ systemctl restart cron
+Failed to restart cron.service: Access denied
+See system logs and 'systemctl status cron.service' for details.
+$ echo $?
+4</pre>
+<p>No Ubuntu Desktop, o sistema abriria uma janela pedindo senha (é o <em>polkit</em>). Num Debian servidor o polkit não vem instalado, então a resposta é direta: <strong>acesso negado</strong>. A mensagem do <code>systemctl</code> não tem tradução e fica em inglês.</p>
+
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Ação</th><th>O que faz</th><th>Quando usar</th></tr>
+<tr><td><code>start</code></td><td>Inicia</td><td>O serviço está parado</td></tr>
+<tr><td><code>stop</code></td><td>Para</td><td>Você quer desligar agora</td></tr>
+<tr><td><code>restart</code></td><td>Para e inicia</td><td>Depois de mudar a configuração</td></tr>
+<tr><td><code>reload</code></td><td>Relê a configuração sem parar</td><td>Serviços que suportam (ssh, nginx); não derruba conexões</td></tr>
+<tr><td><code>reload-or-restart</code></td><td><code>reload</code> se der, senão <code>restart</code></td><td>Quando você não sabe se o serviço suporta reload</td></tr>
+</table>
+</div>
+
+<div class="warning">
+<strong>Cuidado com o SSH num servidor remoto</strong>
+<p>Um <code>systemctl stop ssh</code> feito por SSH derruba a sua própria porta de entrada. Para aplicar mudanças no <code>sshd_config</code>, prefira <code>reload</code> e mantenha a sessão atual aberta até testar uma nova conexão.</p>
+</div>
+
+<hr>
+
+<h2>Ligar no boot: <code>enable</code>, <code>disable</code> e <code>mask</code></h2>
+<p><code>start</code> liga <strong>agora</strong>; <code>enable</code> liga <strong>no próximo boot</strong>. São coisas independentes. No Debian, muitos serviços antigos também têm um script SysV, e o <code>systemctl</code> avisa que está sincronizando os dois:</p>
+
+<pre class="term">#> systemctl disable cron
+Synchronizing state of cron.service with SysV service script with /usr/lib/systemd/systemd-sysv-install.
+Executing: /usr/lib/systemd/systemd-sysv-install disable cron
+Removed '/etc/systemd/system/multi-user.target.wants/cron.service'.      « o "atalho" do boot foi apagado
+#> systemctl is-enabled cron
+disabled
+#> systemctl enable cron
+Synchronizing state of cron.service with SysV service script with /usr/lib/systemd/systemd-sysv-install.
+Executing: /usr/lib/systemd/systemd-sysv-install enable cron
+Created symlink '/etc/systemd/system/multi-user.target.wants/cron.service' → '/usr/lib/systemd/system/cron.service'.</pre>
+
+<p>Repare no que o <code>enable</code> faz por baixo: cria um <strong>link simbólico</strong> dentro de <code>multi-user.target.wants/</code>. Quando o boot chega ao estágio <code>multi-user.target</code>, o systemd liga tudo o que tiver um link ali.</p>
+
+<dl class="anatomy">
+  <dt>systemctl</dt><dd>O programa.</dd>
+  <dt>enable</dt><dd>Liga no boot.</dd>
+  <dt>--now</dt><dd>E também liga agora (junta <code>enable</code> e <code>start</code>).</dd>
+  <dt>cron</dt><dd>O serviço.</dd>
+</dl>
+
+<h3>mask: proibir de vez</h3>
+<p>Um serviço <code>disabled</code> ainda pode ser ligado na mão, ou por outro serviço que dependa dele. O <code>mask</code> (máscara) aponta a unit para <code>/dev/null</code> e impede qualquer partida:</p>
+
+<pre class="term">#> systemctl mask cron
+Created symlink '/etc/systemd/system/cron.service' → '/dev/null'.
+#> systemctl start cron
+Failed to start cron.service: Unit cron.service is masked.
+#> systemctl unmask cron
+Removed '/etc/systemd/system/cron.service'.</pre>
+
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Estado</th><th>Liga no boot?</th><th>Dá para ligar na mão?</th></tr>
+<tr><td><code>enabled</code></td><td>Sim</td><td>Sim</td></tr>
+<tr><td><code>disabled</code></td><td>Não</td><td>Sim</td></tr>
+<tr><td><code>static</code></td><td>Não por conta própria; outra unit chama</td><td>Sim</td></tr>
+<tr><td><code>masked</code></td><td>Não</td><td>Não</td></tr>
+</table>
+</div>
+
+<hr>
+
+<h2>O que o comando devolve: perguntas para scripts</h2>
+<p>Três ações só respondem uma pergunta, com uma palavra e um código de saída:</p>
+
+<pre class="term">$ systemctl is-active ssh
+active
+$ systemctl is-enabled ssh
+enabled
+$ systemctl is-active nada
+inactive
+$ echo $?
+4                                       « 4 = essa unit não existe</pre>
+
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Código</th><th><code>is-active</code></th></tr>
+<tr><td><code>0</code></td><td>Está rodando</td></tr>
+<tr><td><code>3</code></td><td>Existe, mas está parada (<code>inactive</code>)</td></tr>
+<tr><td><code>4</code></td><td>Unit inexistente</td></tr>
+</table>
+</div>
+
+<p>Com isso, um script decide o que fazer (veja <a href="script-condicionais.html">Condicionais</a>):</p>
+<pre class="file" data-file="checa-ssh.sh">#!/usr/bin/env bash
+if systemctl is-active --quiet ssh; then
+  echo "SSH no ar"
+else
+  echo "SSH parado!"
+fi</pre>
+
+<hr>
+
+<h2>Listar serviços</h2>
+
+<h3>Os que estão rodando</h3>
+<pre class="term">$ systemctl list-units --type=service --state=running
+  UNIT                      LOAD   ACTIVE SUB     DESCRIPTION
+  cron.service              loaded active running Regular background program processing daemon
+  dbus.service              loaded active running D-Bus System Message Bus
+  getty@tty1.service        loaded active running Getty on tty1
+  ssh.service               loaded active running OpenBSD Secure Shell server
+  systemd-journald.service  loaded active running Journal Service
+  systemd-logind.service    loaded active running User Login Management
+  systemd-timesyncd.service loaded active running Network Time Synchronization
+  systemd-udevd.service     loaded active running Rule-based Manager for Device Events and Files
+  user@1000.service         loaded active running User Manager for UID 1000
+
+Legend: LOAD   → Reflects whether the unit definition was properly loaded.
+        ACTIVE → The high-level unit activation state, i.e. generalization of SUB.
+        SUB    → The low-level unit activation state, values depend on unit type.
+
+9 loaded units listed.</pre>
+<p>É a lista de um Debian servidor recém-instalado: bem curta. O <code>getty@tty1</code> é a tela de login de texto no console (veja <a href="travamentos.html">Quando o Sistema Trava</a>).</p>
+
+<h3>Os que falharam</h3>
+<pre class="term">$ systemctl --failed
+  UNIT LOAD ACTIVE SUB DESCRIPTION
+
+0 loaded units listed.             « nada com falha: ótimo sinal</pre>
+
+<h3>Os timers (tarefas agendadas)</h3>
+<pre class="term">$ systemctl list-timers
+NEXT                            LEFT LAST PASSED UNIT                         ACTIVATES
+Fri 2026-10-16 00:00:00 -03 2h 53min -         - dpkg-db-backup.timer         dpkg-db-backup.service
+Fri 2026-10-16 00:45:35 -03 3h 38min -         - logrotate.timer              logrotate.service
+Fri 2026-10-16 06:38:22 -03       9h -         - apt-daily-upgrade.timer      apt-daily-upgrade.service
+Fri 2026-10-16 11:30:13 -03      14h -         - man-db.timer                 man-db.service
+Fri 2026-10-16 15:18:32 -03      18h -         - apt-daily.timer              apt-daily.service
+Sun 2026-10-18 03:10:16 -03   2 days -         - e2scrub_all.timer            e2scrub_all.service
+Mon 2026-10-19 01:04:36 -03   3 days -         - fstrim.timer                 fstrim.service</pre>
+<p>Cada linha diz quando a tarefa roda (<code>NEXT</code>), quanto falta (<code>LEFT</code>) e o que ela liga (<code>ACTIVATES</code>). O <code>apt-daily</code> baixa a lista de atualizações; o <code>fstrim</code> otimiza SSDs uma vez por semana.</p>
+
+<h3>Todos os arquivos de unit</h3>
+<pre class="term">$ systemctl list-unit-files --type=service
+UNIT FILE                                    STATE           PRESET
+apparmor.service                             enabled         enabled
+apt-daily-upgrade.service                    static          -
+apt-daily.service                            static          -
+...</pre>
+
+<hr>
+
+<h2>Ver o arquivo de um serviço</h2>
+<pre class="term">$ systemctl cat cron
+# /usr/lib/systemd/system/cron.service
+[Unit]
+Description=Regular background program processing daemon
+Documentation=man:cron(8)
+After=remote-fs.target nss-user-lookup.target
+
+[Service]
+EnvironmentFile=-/etc/default/cron
+ExecStart=/usr/sbin/cron -f $EXTRA_OPTS
+IgnoreSIGPIPE=false
+KillMode=process
+Restart=on-failure</pre>
+
+<p>Os arquivos que vêm nos pacotes ficam em <code>/usr/lib/systemd/system/</code> e <strong>não devem ser editados</strong>: uma atualização sobrescreveria. Os seus ficam em <code>/etc/systemd/system/</code>, que tem prioridade. Para mudar só uma opção de um serviço do sistema, use <code>systemctl edit cron</code> (como root): ele cria um arquivo extra só com a sua mudança.</p>
+
+<hr>
+
+<h2>Formas diferentes de fazer</h2>
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Objetivo</th><th>Forma</th><th>Observação</th></tr>
+<tr><td>Ligar agora e no boot</td><td><code>systemctl enable --now ssh</code></td><td>Um comando só</td></tr>
+<tr><td>Ligar agora e no boot</td><td><code>systemctl start ssh</code> + <code>systemctl enable ssh</code></td><td>Mesmo resultado em dois passos</td></tr>
+<tr><td>Rodar um comando de root sem abrir shell de root</td><td><code>su -c "systemctl restart ssh"</code></td><td>Pede a senha do root e volta para a ana</td></tr>
+<tr><td>Com sudo</td><td><code>sudo systemctl restart ssh</code></td><td>Só se você instalou o sudo e está no grupo <code>sudo</code></td></tr>
+<tr><td>Comando antigo</td><td><code>service ssh restart</code></td><td>Ainda funciona no Debian; por baixo chama o <code>systemctl</code></td></tr>
+</table>
+</div>
+
+<hr>
+
+<h2>Quando não funciona</h2>
+
+<div class="cenario">
+<strong>"Unit nada.service could not be found."</strong>
+<pre class="term">$ systemctl status nada
+Unit nada.service could not be found.</pre>
+<p><strong>O que aconteceu:</strong> não há serviço com esse nome. Às vezes o nome é outro: no Debian o servidor SSH é <code>ssh</code> (e não <code>sshd</code>), e o Apache é <code>apache2</code>.</p>
+<p><strong>Como resolver:</strong> procure com <code>systemctl list-unit-files | grep -i parte-do-nome</code>.</p>
+</div>
+
+<div class="cenario">
+<strong>"Failed to restart …: Access denied"</strong>
+<p><strong>O que aconteceu:</strong> você tentou mudar um serviço como usuária comum.</p>
+<p><strong>Como resolver:</strong> rode como root (<code>su -</code>) ou com <code>su -c "systemctl restart cron"</code>.</p>
+</div>
+
+<div class="cenario">
+<strong>"The unit file … changed on disk"</strong>
+<pre class="term">#> systemctl start teste-guia
+Warning: The unit file, source configuration file or drop-ins of teste-guia.service changed on disk. Run 'systemctl daemon-reload' to reload units.</pre>
+<p><strong>O que aconteceu:</strong> você editou o arquivo do serviço e o systemd ainda está usando a versão antiga, que ficou na memória.</p>
+<p><strong>Como resolver:</strong> <code>systemctl daemon-reload</code> e depois o <code>restart</code>.</p>
+</div>
+
+<div class="cenario">
+<strong>"Unit … is masked."</strong>
+<p><strong>O que aconteceu:</strong> alguém (ou um pacote) mascarou o serviço para impedir que ele rode.</p>
+<p><strong>Como resolver:</strong> se for isso mesmo que você quer ligar, <code>systemctl unmask nome</code> e depois <code>start</code>.</p>
+</div>
+
+<div class="cenario">
+<strong>O serviço aparece como <code>failed</code></strong>
+<p><strong>Como resolver:</strong> leia o log do serviço: <code>journalctl -u nome -n 30</code>. O passo a passo está em <a href="journalctl.html">Logs (journalctl)</a>.</p>
+</div>
+
+<hr>
+
+<h2>Referência</h2>
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Comando</th><th>O que faz</th><th>Precisa de root?</th></tr>
+<tr><td><code>systemctl status nome</code></td><td>Mostra o estado e as últimas linhas do log</td><td>Não</td></tr>
+<tr><td><code>systemctl start / stop / restart / reload nome</code></td><td>Liga, desliga, reinicia, relê a configuração</td><td>Sim</td></tr>
+<tr><td><code>systemctl enable / disable nome</code></td><td>Liga ou não no boot (<code>--now</code> faz agora também)</td><td>Sim</td></tr>
+<tr><td><code>systemctl mask / unmask nome</code></td><td>Proíbe / libera o serviço</td><td>Sim</td></tr>
+<tr><td><code>systemctl is-active / is-enabled nome</code></td><td>Responde com uma palavra e um código</td><td>Não</td></tr>
+<tr><td><code>systemctl list-units --type=service --state=running</code></td><td>Serviços rodando</td><td>Não</td></tr>
+<tr><td><code>systemctl --failed</code></td><td>Units com falha</td><td>Não</td></tr>
+<tr><td><code>systemctl list-timers</code></td><td>Tarefas agendadas</td><td>Não</td></tr>
+<tr><td><code>systemctl cat nome</code></td><td>Mostra o arquivo da unit</td><td>Não</td></tr>
+<tr><td><code>systemctl edit nome</code></td><td>Cria um ajuste sem mexer no original</td><td>Sim</td></tr>
+<tr><td><code>systemctl daemon-reload</code></td><td>Relê os arquivos de unit</td><td>Sim</td></tr>
+</table>
+</div>
+
+<hr>
+
+<h2>Exercícios</h2>
+
+<div class="exercise">
+<h3>1. Ligar no boot e agora</h3>
+<p>Complete para ligar o serviço <code>ssh</code> agora <strong>e</strong> no boot, num comando só (como root):</p>
+<div class="ex-code">systemctl <input data-answer="enable --now|enable --now ssh" aria-label="ação"> ssh</div>
+</div>
+
+<div class="exercise">
+<h3>2. Só perguntar</h3>
+<p>Qual ação do <code>systemctl</code> responde só <code>active</code> ou <code>inactive</code>?</p>
+<div class="ex-code">systemctl <input data-answer="is-active" aria-label="ação"> cron</div>
+</div>
+
+<div class="exercise">
+<h3>3. Depois de editar</h3>
+<p>Você editou <code>/etc/systemd/system/meuapp.service</code>. Qual comando faz o systemd ler a nova versão?</p>
+<div class="ex-code">systemctl <input data-answer="daemon-reload" aria-label="ação"></div>
+</div>
+
+<div class="mc" data-answer="2">
+<p class="mc-q">4. Num Debian servidor, a ana roda <code>systemctl restart cron</code> e recebe "Access denied". Por quê?</p>
+<label><input type="radio" name="q4"> O cron está com falha.</label>
+<label><input type="radio" name="q4"> Reiniciar serviços exige root, e não há polkit para pedir a senha.</label>
+<label><input type="radio" name="q4"> O nome certo é <code>crond</code>.</label>
+<label><input type="radio" name="q4"> O serviço está mascarado.</label>
+</div>
+
+<div class="mc" data-answer="4">
+<p class="mc-q">5. Qual estado impede o serviço de ser ligado até mesmo na mão?</p>
+<label><input type="radio" name="q5"> <code>disabled</code></label>
+<label><input type="radio" name="q5"> <code>static</code></label>
+<label><input type="radio" name="q5"> <code>inactive</code></label>
+<label><input type="radio" name="q5"> <code>masked</code></label>
+</div>
+
+<hr>
+
+<h2>Resumo</h2>
+<ul>
+  <li>O systemd (PID 1) liga e vigia as units; o <code>systemctl</code> conversa com ele.</li>
+  <li><code>status</code> qualquer um vê; <code>start</code>, <code>stop</code>, <code>restart</code>, <code>enable</code> exigem root (no Debian, via <code>su -</code>).</li>
+  <li><code>start</code> é agora, <code>enable</code> é no boot, <code>mask</code> proíbe.</li>
+  <li><code>is-active</code> e <code>is-enabled</code> servem para scripts (código 0, 3 ou 4).</li>
+  <li>Editou um arquivo de unit? <code>systemctl daemon-reload</code>.</li>
+</ul>
+
+<div class="pager"></div>
+
+</div>
+</main>
+</div>
+<script src="assets/site.js"></script>
+</body>
+</html>

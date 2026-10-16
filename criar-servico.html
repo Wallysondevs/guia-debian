@@ -1,0 +1,367 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Debian Criar um Serviço — seu script rodando com o systemd | Guia Debian</title>
+<meta name="description" content="Transforme um script num serviço do systemd no Debian 13: arquivo .service comentado, enable --now, teste de reinício automático, timer e solução de erros, com saídas reais.">
+<link rel="stylesheet" href="assets/style.css">
+<script>try{var t=localStorage.getItem("tema");if(t)document.documentElement.setAttribute("data-theme",t)}catch(e){}</script>
+</head>
+<body>
+<div class="layout">
+<nav class="sidebar" id="sidebar" aria-label="Tópicos"></nav>
+<main class="main">
+<div class="content">
+
+<div class="pager"></div>
+
+<h1>Debian <span class="hl">Criar um Serviço</span></h1>
+
+<p class="intro">Você tem um script que precisa rodar o tempo todo: um bot, um monitor, um pequeno servidor. Rodá-lo com <code>&amp;</code> ou <code>nohup</code> funciona até a máquina reiniciar ou o script travar. A forma certa no Debian é transformá-lo num <strong>serviço do systemd</strong>, que liga no boot, guarda os logs e reinicia sozinho se cair.</p>
+
+<div class="note">
+<strong>Você vai aprender</strong>
+<ul>
+  <li>Como o systemd lê um arquivo <code>.service</code>, seção por seção.</li>
+  <li>Criar, ligar e conferir um serviço de verdade, passo a passo.</li>
+  <li>Testar o reinício automático matando o processo.</li>
+  <li>Agendar o serviço com um <code>.timer</code> (a alternativa moderna ao cron).</li>
+  <li>Ler os erros mais comuns: <code>203/EXEC</code>, "changed on disk" e "Start request repeated too quickly".</li>
+</ul>
+</div>
+
+<div class="tip">
+<strong>Antes de começar</strong>
+<p>Tudo aqui é feito como <strong>root</strong>, porque cria arquivos em <code>/etc</code> e <code>/usr/local</code>. No Debian sem sudo, entre com <code>su -</code> (veja <a href="root-su-sudo.html">root, su e sudo</a>). Os prompts <code>root@notebook:~#</code> abaixo indicam isso. Os exemplos foram rodados num Debian 13 de verdade.</p>
+</div>
+
+<hr>
+
+<h2>Antes do comando: como o systemd lê um serviço</h2>
+<p>Um serviço é um arquivo de texto com três seções entre colchetes. O systemd lê esse arquivo e sabe: o que rodar, quando, como quem e o que fazer se cair.</p>
+
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Seção</th><th>Responde</th><th>Exemplos de opções</th></tr>
+<tr><td><code>[Unit]</code></td><td>O que é e depois de quem liga</td><td><code>Description</code>, <code>After</code>, <code>Wants</code></td></tr>
+<tr><td><code>[Service]</code></td><td>O que rodar e como</td><td><code>ExecStart</code>, <code>User</code>, <code>Restart</code></td></tr>
+<tr><td><code>[Install]</code></td><td>Em que estágio do boot entra quando você dá <code>enable</code></td><td><code>WantedBy</code></td></tr>
+</table>
+</div>
+
+<p>Os serviços que <strong>você</strong> cria ficam em <code>/etc/systemd/system/</code>. Os que vêm dos pacotes ficam em <code>/usr/lib/systemd/system/</code>; não mexa neles.</p>
+
+<hr>
+
+<h2>Passo a passo: o serviço "teste-guia"</h2>
+<p>Vamos criar um serviço que escreve uma mensagem no log a cada 10 segundos. É simples de propósito: o importante é o caminho.</p>
+
+<ol class="passo">
+  <li><strong>Criar o script.</strong> Programas locais, que não vêm de pacotes, vão em <code>/usr/local/bin</code>.
+    <pre class="term">#> nano /usr/local/bin/teste-guia.sh</pre>
+    <pre class="file" data-file="/usr/local/bin/teste-guia.sh">#!/usr/bin/env bash
+# Registra uma mensagem a cada 10 segundos
+while true; do
+  echo "teste-guia: tudo certo às $(date +%H:%M:%S)"
+  sleep 10
+done</pre>
+    <p>O <code>echo</code> não precisa escrever em arquivo nenhum: tudo o que um serviço imprime vai automaticamente para o <strong>journal</strong>, o log do systemd.</p>
+    <pre class="term">#> chmod 755 /usr/local/bin/teste-guia.sh       « o serviço precisa poder executar o script</pre></li>
+
+  <li><strong>Criar o arquivo do serviço.</strong>
+    <pre class="term">#> nano /etc/systemd/system/teste-guia.service</pre>
+    <pre class="file" data-file="/etc/systemd/system/teste-guia.service">[Unit]
+# Nome amigável, aparece no status e nos logs
+Description=Serviço de teste do Guia Debian
+# Só liga depois que a rede estiver pronta
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+# Simple: o programa fica rodando em primeiro plano
+Type=simple
+# O comando, sempre com caminho completo
+ExecStart=/usr/local/bin/teste-guia.sh
+# Se cair com erro, reinicia
+Restart=on-failure
+# ...esperando 5 segundos antes
+RestartSec=5
+# Roda como a ana, não como root (mais seguro)
+User=ana
+
+[Install]
+# Entra no boot normal (modo multiusuário)
+WantedBy=multi-user.target</pre></li>
+
+  <li><strong>Avisar o systemd que existe um arquivo novo.</strong>
+    <pre class="term">#> systemctl daemon-reload</pre></li>
+
+  <li><strong>Ligar agora e no boot.</strong>
+    <dl class="anatomy">
+      <dt>systemctl</dt><dd>O programa.</dd>
+      <dt>enable</dt><dd>Liga no boot (cria o link em <code>multi-user.target.wants</code>).</dd>
+      <dt>--now</dt><dd>E também liga agora.</dd>
+      <dt>teste-guia</dt><dd>O nome do arquivo, sem o <code>.service</code>.</dd>
+    </dl>
+    <pre class="term">#> systemctl enable --now teste-guia
+Created symlink '/etc/systemd/system/multi-user.target.wants/teste-guia.service' → '/etc/systemd/system/teste-guia.service'.</pre></li>
+
+  <li><strong>Conferir.</strong>
+    <pre class="term">#> systemctl status teste-guia
+● teste-guia.service - Serviço de teste do Guia Debian
+     Loaded: loaded (/etc/systemd/system/teste-guia.service; enabled; preset: enabled)   « o seu arquivo, ligado no boot
+     Active: active (running) since Thu 2026-10-15 21:09:09 -03; 3s ago
+ Invocation: 44d9bca957864a5b813956383c9010ae
+   Main PID: 7107 (bash)                                                                « o bash rodando o script
+      Tasks: 2 (limit: 4638)
+     Memory: 568K (peak: 1.8M)
+        CPU: 13ms
+     CGroup: /system.slice/teste-guia.service
+             ├─7107 bash /usr/local/bin/teste-guia.sh
+             └─7112 sleep 10                                                            « o sleep do laço
+
+out 15 21:09:09 notebook systemd[1]: Started teste-guia.service - Serviço de teste do Guia Debian.
+out 15 21:09:09 notebook teste-guia.sh[7107]: teste-guia: tudo certo às 21:09:09        « o echo do script</pre></li>
+</ol>
+
+<hr>
+
+<h2>Teste: mate o processo e veja o systemd reiniciar</h2>
+<p>A grande vantagem de um serviço é o <code>Restart=on-failure</code>. Vamos provar que funciona. Primeiro, pegue o PID principal:</p>
+
+<pre class="term">#> systemctl show -p MainPID --value teste-guia
+7107
+#> kill -9 7107                                     « o -9 (SIGKILL) "mata na marra", como um travamento
+#> systemctl status teste-guia
+● teste-guia.service - Serviço de teste do Guia Debian
+     Loaded: loaded (/etc/systemd/system/teste-guia.service; enabled; preset: enabled)
+     Active: activating (auto-restart) (Result: signal) since Thu 2026-10-15 21:09:12 -03; 1s ago   « esperando os 5 s
+    Process: 7107 ExecStart=/usr/local/bin/teste-guia.sh (code=killed, signal=KILL)
+   Main PID: 7107 (code=killed, signal=KILL)</pre>
+
+<p>Cinco segundos depois, ele volta com um PID novo:</p>
+
+<pre class="term">#> systemctl status teste-guia
+● teste-guia.service - Serviço de teste do Guia Debian
+     Loaded: loaded (/etc/systemd/system/teste-guia.service; enabled; preset: enabled)
+     Active: active (running) since Thu 2026-10-15 21:09:17 -03; 1s ago
+   Main PID: 7218 (bash)                                     « processo novo
+#> journalctl -u teste-guia
+out 15 21:09:09 notebook systemd[1]: Started teste-guia.service - Serviço de teste do Guia Debian.
+out 15 21:09:09 notebook teste-guia.sh[7107]: teste-guia: tudo certo às 21:09:09
+out 15 21:09:12 notebook systemd[1]: teste-guia.service: Main process exited, code=killed, status=9/KILL
+out 15 21:09:12 notebook systemd[1]: teste-guia.service: Failed with result 'signal'.
+out 15 21:09:17 notebook systemd[1]: teste-guia.service: Scheduled restart job, restart counter is at 1.   « reiniciou
+out 15 21:09:17 notebook systemd[1]: Started teste-guia.service - Serviço de teste do Guia Debian.
+out 15 21:09:17 notebook teste-guia.sh[7218]: teste-guia: tudo certo às 21:09:17
+#> systemctl show -p NRestarts teste-guia
+NRestarts=1</pre>
+
+<div class="note">
+<strong>E se eu parar com <code>systemctl stop</code>?</strong>
+<p>Aí ele <strong>não</strong> volta. O <code>on-failure</code> só reinicia quando o serviço cai sozinho (erro, sinal, travamento). Parar de propósito é respeitado: o status fica <code>inactive (dead)</code>.</p>
+</div>
+
+<hr>
+
+<h2>Parar e remover o serviço</h2>
+<pre class="term">#> systemctl disable --now teste-guia
+Removed '/etc/systemd/system/multi-user.target.wants/teste-guia.service'.
+#> rm /etc/systemd/system/teste-guia.service /usr/local/bin/teste-guia.sh
+#> systemctl daemon-reload
+#> systemctl status teste-guia
+Unit teste-guia.service could not be found.         « sumiu de verdade</pre>
+
+<hr>
+
+<h2>Agendar com um timer</h2>
+<p>Para rodar algo de tempos em tempos (um backup, uma limpeza), o systemd tem os <strong>timers</strong>. Um <code>.timer</code> com o mesmo nome do <code>.service</code> liga esse serviço no horário marcado. Nesse caso, o serviço deve fazer a tarefa e terminar, sem laço infinito.</p>
+
+<pre class="file" data-file="/etc/systemd/system/teste-guia.timer">[Unit]
+Description=Roda o teste-guia todo dia às 3h
+
+[Timer]
+# Todo dia, às 03:00
+OnCalendar=*-*-* 03:00:00
+# Se a máquina estava desligada às 3h, roda assim que ligar
+Persistent=true
+
+[Install]
+WantedBy=timers.target</pre>
+
+<pre class="term">#> systemctl daemon-reload
+#> systemctl enable --now teste-guia.timer
+Created symlink '/etc/systemd/system/timers.target.wants/teste-guia.timer' → '/etc/systemd/system/teste-guia.timer'.
+#> systemctl list-timers teste-guia.timer
+NEXT                            LEFT LAST PASSED UNIT             ACTIVATES
+Fri 2026-10-16 03:00:00 -03 5h 50min -         - teste-guia.timer teste-guia.service
+
+1 timers listed.</pre>
+
+<p>Não tem certeza se escreveu o horário certo? O <code>systemd-analyze</code> confere para você:</p>
+<pre class="term">$ systemd-analyze calendar "*-*-* 03:00:00"
+Normalized form: *-*-* 03:00:00
+    Next elapse: Fri 2026-10-16 03:00:00 -03
+       (in UTC): Fri 2026-10-16 06:00:00 UTC
+       From now: 5h 50min left</pre>
+
+<div class="table-wrap">
+<table class="ref">
+<tr><th>OnCalendar</th><th>Quando</th></tr>
+<tr><td><code>hourly</code></td><td>De hora em hora</td></tr>
+<tr><td><code>daily</code></td><td>Todo dia à meia-noite</td></tr>
+<tr><td><code>Mon *-*-* 08:00</code></td><td>Segundas às 8h</td></tr>
+<tr><td><code>*-*-01 02:00</code></td><td>Dia 1 de cada mês às 2h</td></tr>
+<tr><td><code>*:0/15</code></td><td>A cada 15 minutos</td></tr>
+</table>
+</div>
+
+<p>Prefere o jeito clássico? O <code>cron</code> continua funcionando no Debian. Veja <a href="cron.html">Agendar Tarefas (cron)</a>.</p>
+
+<hr>
+
+<h2>Outras formas de fazer</h2>
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Forma</th><th>Liga no boot?</th><th>Reinicia se cair?</th><th>Quando usar</th></tr>
+<tr><td><code>script &amp;</code> / <code>nohup</code></td><td>Não</td><td>Não</td><td>Teste rápido, uma vez só</td></tr>
+<tr><td><code>tmux</code></td><td>Não</td><td>Não</td><td>Tarefa longa que você quer acompanhar</td></tr>
+<tr><td><code>@reboot</code> no cron</td><td>Sim</td><td>Não</td><td>Algo simples que só precisa rodar ao ligar</td></tr>
+<tr><td>Serviço do systemd</td><td>Sim</td><td>Sim</td><td>Qualquer coisa que precisa ficar no ar</td></tr>
+<tr><td>Serviço de usuário (<code>systemctl --user</code>)</td><td>Ao fazer login</td><td>Sim</td><td>Programas só seus, sem precisar de root</td></tr>
+</table>
+</div>
+
+<hr>
+
+<h2>Opções úteis do <code>[Service]</code></h2>
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Opção</th><th>O que faz</th><th>Exemplo</th></tr>
+<tr><td><code>ExecStart</code></td><td>Comando principal (caminho completo)</td><td><code>/usr/bin/python3 /opt/bot/bot.py</code></td></tr>
+<tr><td><code>User</code> / <code>Group</code></td><td>Roda como esse usuário</td><td><code>User=ana</code></td></tr>
+<tr><td><code>WorkingDirectory</code></td><td>Pasta em que o programa começa</td><td><code>/opt/bot</code></td></tr>
+<tr><td><code>Environment</code></td><td>Define uma variável</td><td><code>Environment=PORTA=8080</code></td></tr>
+<tr><td><code>EnvironmentFile</code></td><td>Lê variáveis de um arquivo</td><td><code>/etc/default/bot</code></td></tr>
+<tr><td><code>Restart</code></td><td><code>no</code>, <code>on-failure</code>, <code>always</code></td><td><code>Restart=on-failure</code></td></tr>
+<tr><td><code>RestartSec</code></td><td>Espera antes de reiniciar</td><td><code>RestartSec=5</code></td></tr>
+<tr><td><code>Type</code></td><td><code>simple</code> (fica rodando), <code>oneshot</code> (roda e termina)</td><td><code>Type=oneshot</code> para tarefas de timer</td></tr>
+</table>
+</div>
+
+<hr>
+
+<h2>Quando não funciona</h2>
+
+<div class="cenario">
+<strong><code>status=203/EXEC</code>: o programa não foi encontrado</strong>
+<pre class="term">#> systemctl status teste-guia
+× teste-guia.service - Serviço de teste do Guia Debian
+     Active: failed (Result: exit-code) since Thu 2026-10-15 21:09:55 -03; 1s ago
+    Process: 8060 ExecStart=/usr/local/bin/teste-gia.sh (code=exited, status=203/EXEC)
+#> journalctl -u teste-guia -n 4
+out 15 21:09:55 notebook (e-gia.sh)[8060]: teste-guia.service: Unable to locate executable '/usr/local/bin/teste-gia.sh': No such file or directory
+out 15 21:09:55 notebook (e-gia.sh)[8060]: teste-guia.service: Failed at step EXEC spawning /usr/local/bin/teste-gia.sh: No such file or directory
+out 15 21:09:55 notebook systemd[1]: teste-guia.service: Main process exited, code=exited, status=203/EXEC
+out 15 21:09:55 notebook systemd[1]: teste-guia.service: Failed with result 'exit-code'.</pre>
+<p><strong>O que aconteceu:</strong> erro de digitação no <code>ExecStart</code> (<code>teste-gia</code>). O código 203 sempre significa "não consegui executar": caminho errado, arquivo sem permissão de execução (<code>chmod 755</code>) ou falta a primeira linha <code>#!</code> no script.</p>
+<p><strong>Como resolver:</strong> confira com <code>ls -l</code> o caminho exato, corrija o arquivo, <code>daemon-reload</code> e <code>restart</code>.</p>
+</div>
+
+<div class="cenario">
+<strong>"Start request repeated too quickly"</strong>
+<pre class="term">out 15 21:09:45 notebook systemd[1]: teste-guia.service: Scheduled restart job, restart counter is at 5.
+out 15 21:09:45 notebook systemd[1]: teste-guia.service: Start request repeated too quickly.
+out 15 21:09:45 notebook systemd[1]: Failed to start teste-guia.service - Serviço de teste do Guia Debian.</pre>
+<p><strong>O que aconteceu:</strong> o serviço tem <code>Restart=on-failure</code>, mas cai logo ao ligar. O systemd tentou 5 vezes seguidas e desistiu, para não ficar num laço eterno.</p>
+<p><strong>Como resolver:</strong> descubra o erro de verdade nas linhas anteriores do <code>journalctl -u</code>. Depois de consertar, rode <code>systemctl reset-failed teste-guia</code> para zerar o contador e <code>start</code> de novo.</p>
+</div>
+
+<div class="cenario">
+<strong>"changed on disk. Run 'systemctl daemon-reload'"</strong>
+<p><strong>O que aconteceu:</strong> você editou o <code>.service</code> e o systemd ainda está com a versão antiga na memória. Cuidado: até o reload, ele continua usando a antiga, inclusive para ligar o serviço.</p>
+<p><strong>Como resolver:</strong> <code>systemctl daemon-reload</code> sempre que mexer no arquivo.</p>
+</div>
+
+<div class="cenario">
+<strong>O serviço funciona no terminal mas não pelo systemd</strong>
+<p><strong>O que aconteceu:</strong> o systemd não lê o seu <code>.bashrc</code>: o <code>PATH</code> é mínimo, não há variáveis suas e a pasta inicial é <code>/</code>.</p>
+<p><strong>Como resolver:</strong> use caminhos completos no script e no <code>ExecStart</code>, defina <code>WorkingDirectory</code> e passe variáveis com <code>Environment</code>.</p>
+</div>
+
+<hr>
+
+<h2>Referência</h2>
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Comando</th><th>O que faz</th></tr>
+<tr><td><code>systemctl daemon-reload</code></td><td>Relê os arquivos de unit</td></tr>
+<tr><td><code>systemctl enable --now nome</code></td><td>Liga agora e no boot</td></tr>
+<tr><td><code>systemctl disable --now nome</code></td><td>Desliga agora e no boot</td></tr>
+<tr><td><code>systemctl show -p MainPID --value nome</code></td><td>Só o PID principal</td></tr>
+<tr><td><code>systemctl show -p NRestarts nome</code></td><td>Quantas vezes reiniciou</td></tr>
+<tr><td><code>systemctl reset-failed nome</code></td><td>Zera o estado de falha</td></tr>
+<tr><td><code>systemctl list-timers</code></td><td>Lista os timers</td></tr>
+<tr><td><code>systemd-analyze calendar "expr"</code></td><td>Confere uma expressão de <code>OnCalendar</code></td></tr>
+<tr><td><code>systemd-analyze verify arquivo</code></td><td>Procura erros no arquivo da unit</td></tr>
+</table>
+</div>
+
+<hr>
+
+<h2>Exercícios</h2>
+
+<div class="exercise">
+<h3>1. Onde salvar</h3>
+<p>Complete o caminho onde você deve criar o arquivo do seu serviço:</p>
+<div class="ex-code"><input data-answer="/etc/systemd/system/|/etc/systemd/system" aria-label="pasta">meuapp.service</div>
+</div>
+
+<div class="exercise">
+<h3>2. Reiniciar se cair</h3>
+<p>Complete a linha do <code>[Service]</code> que reinicia o serviço quando ele falha:</p>
+<div class="ex-code">Restart=<input data-answer="on-failure|always" aria-label="valor"></div>
+</div>
+
+<div class="exercise">
+<h3>3. Depois de criar o arquivo</h3>
+<p>Qual comando faz o systemd enxergar um <code>.service</code> novo?</p>
+<div class="ex-code">systemctl <input data-answer="daemon-reload" aria-label="ação"></div>
+</div>
+
+<div class="mc" data-answer="1">
+<p class="mc-q">4. O status mostra <code>status=203/EXEC</code>. Qual a causa mais provável?</p>
+<label><input type="radio" name="q4"> O caminho do <code>ExecStart</code> está errado ou o script não é executável.</label>
+<label><input type="radio" name="q4"> Faltou memória.</label>
+<label><input type="radio" name="q4"> O serviço foi mascarado.</label>
+<label><input type="radio" name="q4"> A rede ainda não estava pronta.</label>
+</div>
+
+<div class="mc" data-answer="3">
+<p class="mc-q">5. Com <code>Restart=on-failure</code>, o que acontece depois de <code>systemctl stop teste-guia</code>?</p>
+<label><input type="radio" name="q5"> Ele reinicia em 5 segundos.</label>
+<label><input type="radio" name="q5"> Ele reinicia no próximo minuto.</label>
+<label><input type="radio" name="q5"> Ele fica parado: parar de propósito não é falha.</label>
+<label><input type="radio" name="q5"> O arquivo do serviço é apagado.</label>
+</div>
+
+<hr>
+
+<h2>Resumo</h2>
+<ul>
+  <li>Script em <code>/usr/local/bin</code>, serviço em <code>/etc/systemd/system/nome.service</code>.</li>
+  <li><code>[Unit]</code> descreve, <code>[Service]</code> diz o que rodar, <code>[Install]</code> diz quando entra no boot.</li>
+  <li>Criou ou editou? <code>daemon-reload</code>. Para ligar: <code>enable --now</code>.</li>
+  <li><code>Restart=on-failure</code> reinicia quando o serviço cai, não quando você para.</li>
+  <li>Erro? <code>systemctl status</code> diz que falhou; <code>journalctl -u</code> diz por quê.</li>
+</ul>
+
+<div class="pager"></div>
+
+</div>
+</main>
+</div>
+<script src="assets/site.js"></script>
+</body>
+</html>

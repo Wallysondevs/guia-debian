@@ -1,0 +1,429 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Debian dpkg e .deb — instalar, consultar e consertar pacotes | Guia Debian</title>
+<meta name="description" content="dpkg no Debian 13: o que é um .deb, apt install ./arquivo.deb x dpkg -i, dpkg -l, -L, -S e -s com as saídas reais, dependências quebradas e apt -f install, dpkg --configure -a, dpkg-reconfigure e debconf.">
+<link rel="stylesheet" href="assets/style.css">
+<script>try{var t=localStorage.getItem("tema");if(t)document.documentElement.setAttribute("data-theme",t)}catch(e){}</script>
+</head>
+<body>
+<div class="layout">
+<nav class="sidebar" id="sidebar" aria-label="Tópicos"></nav>
+<main class="main">
+<div class="content">
+
+<div class="pager"></div>
+
+<h1>Debian <span class="hl">dpkg e .deb</span></h1>
+
+<p class="intro">O <code>dpkg</code> (de <em>Debian package</em>) é o programa que de fato instala, remove e registra pacotes no Debian. O <code>apt</code> fica por cima dele: busca nos repositórios, resolve dependências e chama o <code>dpkg</code>. Você vai usar o <code>dpkg</code> direto para instalar um <code>.deb</code> baixado, para descobrir de onde veio um arquivo e para consertar uma instalação que parou no meio.</p>
+
+<div class="note">
+<strong>Você vai aprender</strong>
+<ul>
+  <li>O que tem dentro de um <code>.deb</code> e como espiar antes de instalar.</li>
+  <li>Por que preferir <code>apt install ./arquivo.deb</code> ao <code>dpkg -i</code>.</li>
+  <li>A consultar o sistema: <code>dpkg -l</code>, <code>-L</code>, <code>-S</code> e <code>-s</code>, lendo cada coluna.</li>
+  <li>A consertar dependências faltando e instalações interrompidas.</li>
+  <li>A refazer as perguntas de um pacote com <code>dpkg-reconfigure</code>.</li>
+</ul>
+</div>
+
+<hr>
+
+<h2>Antes do comando: o que é um pacote</h2>
+<p>Um arquivo <code>.deb</code> é um pacote: os arquivos do programa, mais uma "ficha" (<code>control</code>) com nome, versão, de quais outros pacotes ele depende e scripts para rodar na instalação. Repare no nome do arquivo:</p>
+
+<dl class="anatomy">
+  <dt>hello</dt><dd>Nome do pacote.</dd>
+  <dt>_2.10-5</dt><dd>Versão do programa (2.10) e revisão do pacote no Debian (5).</dd>
+  <dt>_amd64</dt><dd>Arquitetura: processadores de 64 bits (Intel/AMD). <code>all</code> serve para qualquer uma.</dd>
+  <dt>.deb</dt><dd>Formato de pacote do Debian.</dd>
+</dl>
+
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Ferramenta</th><th>Trabalha com</th><th>Resolve dependências?</th></tr>
+<tr><td><code>dpkg</code></td><td>Um arquivo <code>.deb</code> e o registro do que está instalado</td><td>Não: só avisa que faltam</td></tr>
+<tr><td><code>apt</code></td><td>Repositórios (e <code>.deb</code> locais com <code>./</code>)</td><td>Sim: baixa o que faltar</td></tr>
+</table>
+</div>
+
+<hr>
+
+<h2>Espiar um .deb antes de instalar</h2>
+<p>Ler a ficha não precisa de root. É um bom hábito com qualquer <code>.deb</code> baixado da internet:</p>
+
+<pre class="term">$ dpkg -I hello_2.10-5_amd64.deb
+ novo pacote Debian, versão 2.0.
+ tamanho 53228 bytes: arquivo de controle= 1872 bytes.
+     757 bytes,    20 linhas      control
+    3601 bytes,    49 linhas      md5sums
+ Package: hello
+ Version: 2.10-5
+ Architecture: amd64
+ Maintainer: Santiago Vila &lt;sanvila@debian.org&gt;
+ Installed-Size: 280
+ Depends: libc6 (&gt;= 2.38)                « do que ele precisa
+ Section: devel
+ Priority: optional
+ Homepage: https://www.gnu.org/software/hello/
+ Description: example package based on GNU hello</pre>
+
+<p>O <code>-I</code> (<em>info</em>) mostra a ficha. O <code>-c</code> (<em>contents</em>) lista os arquivos que serão instalados, e onde:</p>
+
+<pre class="term">$ dpkg -c hello_2.10-5_amd64.deb | head -4
+drwxr-xr-x root/root         0 2025-04-16 06:50 ./
+drwxr-xr-x root/root         0 2025-04-16 06:50 ./usr/
+drwxr-xr-x root/root         0 2025-04-16 06:50 ./usr/bin/
+-rwxr-xr-x root/root     35544 2025-04-16 06:50 ./usr/bin/hello</pre>
+
+<p>Para ver só alguns campos, o <code>dpkg-deb -f</code> é mais direto:</p>
+
+<pre class="term">$ dpkg-deb -f hello_2.10-5_amd64.deb Package Version Depends
+Package: hello
+Version: 2.10-5
+Depends: libc6 (&gt;= 2.38)</pre>
+
+<hr>
+
+<h2>Instalar um .deb baixado</h2>
+<p>Instalar exige root. No Debian, isso quer dizer <code>su -</code> primeiro (o <code>dpkg</code> de usuário comum responde <code>dpkg: erro: a operação solicitada requer privilégios de superusuário</code>).</p>
+
+<h3>Forma recomendada: <code>apt install ./arquivo.deb</code></h3>
+
+<dl class="anatomy">
+  <dt>apt install</dt><dd>Instalar, como sempre.</dd>
+  <dt>./hello_2.10-5_amd64.deb</dt><dd>O caminho do arquivo. O <code>./</code> (ou qualquer <code>/</code>) é o que avisa o apt de que é um arquivo, e não um nome de pacote do repositório.</dd>
+</dl>
+
+<pre class="term" data-user="root">#> cd /tmp
+#> apt install ./hello_2.10-5_amd64.deb
+…
+Instalando:
+  hello
+
+Resumo:
+  Atualizando: 0, Instalando: 1, Removendo: 0, Não atualizando: 0
+…
+#> hello
+Olá, mundo!</pre>
+
+<p>A vantagem: se o <code>.deb</code> precisar de outros pacotes, o apt os baixa dos repositórios na mesma operação.</p>
+
+<h3>A forma antiga: <code>dpkg -i</code></h3>
+<pre class="term" data-user="root">#> dpkg -i hello_2.10-5_amd64.deb
+Selecionando pacote previamente não selecionado hello.
+(Lendo banco de dados ... 40858 arquivos e diretórios atualmente instalados).
+Preparando para desempacotar hello_2.10-5_amd64.deb ...
+Desempacotando hello (2.10-5) ...
+Configurando hello (2.10-5) ...
+Processando gatilhos para install-info (7.1.1-1+b1) ...
+Processando gatilhos para man-db (2.13.1-1) ...</pre>
+
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Linha</th><th>Significa</th></tr>
+<tr><td>Selecionando pacote previamente não selecionado</td><td>Pacote novo, nunca instalado aqui</td></tr>
+<tr><td>Lendo banco de dados</td><td>O dpkg lê o registro de todos os arquivos instalados</td></tr>
+<tr><td>Desempacotando</td><td>Copia os arquivos para os lugares</td></tr>
+<tr><td>Configurando</td><td>Roda os scripts de instalação do pacote</td></tr>
+<tr><td>Processando gatilhos</td><td>Outros programas se atualizam por causa do novo (índice do <code>man</code>, do <code>info</code>…)</td></tr>
+</table>
+</div>
+
+<p>Quando o pacote depende de algo que não está instalado, o <code>dpkg</code> para no meio:</p>
+
+<pre class="term" data-user="root">#> dpkg -i fortune-mod_1%3a1.99.1-9_amd64.deb
+Selecionando pacote previamente não selecionado fortune-mod.
+(Lendo banco de dados ... 40908 arquivos e diretórios atualmente instalados).
+Preparando para desempacotar fortune-mod_1%3a1.99.1-9_amd64.deb ...
+Desempacotando fortune-mod (1:1.99.1-9) ...
+dpkg: problemas de dependência impedem a configuração de fortune-mod:
+ fortune-mod depende de librecode3 (&gt;= 3.7); porém:
+  O pacote librecode3 não está instalado.
+
+dpkg: erro processando pacote fortune-mod (--install):
+ problemas de dependência - deixando desconfigurado
+Processando gatilhos para man-db (2.13.1-1) ...
+Erros foram encontrados durante o processamento de:
+ fortune-mod</pre>
+
+<p>O pacote foi desempacotado, mas ficou <strong>desconfigurado</strong>. Quem resolve é o apt, com <code>-f</code> (<em>fix broken</em>, "consertar quebrados"), sem nome de pacote:</p>
+
+<pre class="term" data-user="root">#> apt -f install
+Corrigindo dependências... Concluído
+Os pacotes adicionais a seguir serão instalados:
+  librecode3
+Os NOVOS pacotes a seguir serão instalados:
+  librecode3
+…                                « baixa a dependência e termina de configurar o fortune-mod</pre>
+
+<h3>Qual usar?</h3>
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Situação</th><th>Comando</th></tr>
+<tr><td>Você baixou um <code>.deb</code> de um site</td><td><code>apt install ./arquivo.deb</code></td></tr>
+<tr><td>O <code>.deb</code> não tem dependências, ou você já sabe que estão instaladas</td><td><code>dpkg -i arquivo.deb</code> funciona igual</td></tr>
+<tr><td>Usou <code>dpkg -i</code> e deu "problemas de dependência"</td><td><code>apt -f install</code></td></tr>
+<tr><td>O programa está no repositório do Debian</td><td>Nem baixe o <code>.deb</code>: <code>apt install nome</code></td></tr>
+</table>
+</div>
+
+<div class="warning">
+<strong><code>.deb</code> de qualquer site é risco</strong>
+<p>Um <code>.deb</code> roda scripts como root na instalação: pode fazer qualquer coisa com a máquina. Instale só de fontes em que você confia. E um <code>.deb</code> feito para o Ubuntu nem sempre combina com as bibliotecas do Debian; prefira o pacote "para Debian" quando o site oferecer.</p>
+</div>
+
+<hr>
+
+<h2>Consultar pacotes instalados</h2>
+<p>As consultas não precisam de root.</p>
+
+<h3><code>dpkg -l</code>: listar</h3>
+<pre class="term">$ dpkg -l 'nano*'
+Desejado=(U)Desconhecido/Instalar/Remover/exPurgar/(H)Reter
+| Estado=Não/Instalado/arqs-Config/(U)descompactado/semi-conFigurado
+|        /(H)semi-instalado/(W)gatilhos-em-espera/(T)gatilho-pendente
+|/ Erro?=(nenhum)/Reinstalação-necessária (eStado,Err: maiúsculas=ruim)
+||/ Nome           Versão        Arquitetura  Descrição
++++-==============-=============-============-============================================
+ii  nano           8.4-1+deb13u1 amd64        small, friendly text editor inspired by Pico
+un  nano-tiny      &lt;nenhum&gt;      &lt;nenhum&gt;     (nenhuma descrição disponível)</pre>
+
+<p>O cabeçalho é a legenda das duas letras do começo de cada linha:</p>
+
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Letras</th><th>Desejado</th><th>Estado</th><th>Na prática</th></tr>
+<tr><td><code>ii</code></td><td>Instalar</td><td>Instalado</td><td>Tudo certo</td></tr>
+<tr><td><code>rc</code></td><td>Remover</td><td>arqs-Config</td><td>Removido, mas as configurações ficaram (some com <code>apt purge</code>)</td></tr>
+<tr><td><code>un</code></td><td>Desconhecido</td><td>Não instalado</td><td>O dpkg conhece o nome, mas ele não está instalado</td></tr>
+<tr><td><code>iU</code></td><td>Instalar</td><td>descompactado</td><td>Ficou pela metade (problema de dependência ou interrupção)</td></tr>
+<tr><td><code>hi</code></td><td>Reter</td><td>Instalado</td><td>Segurado com <code>apt-mark hold</code>: não atualiza</td></tr>
+</table>
+</div>
+
+<h3><code>dpkg -L</code>: quais arquivos um pacote instalou</h3>
+<pre class="term">$ dpkg -L nano | head -6
+/.
+/etc
+/etc/nanorc                      « a configuração do nano
+/usr
+/usr/bin
+/usr/bin/nano                    « o programa</pre>
+
+<h3><code>dpkg -S</code>: de qual pacote veio este arquivo</h3>
+<pre class="term">$ dpkg -S /usr/bin/nano
+nano: /usr/bin/nano
+$ dpkg -S bin/ls | head -3
+pciutils: /usr/bin/lspci          « sem caminho completo, ele procura em qualquer lugar
+util-linux: /usr/bin/lsblk
+util-linux-extra: /usr/bin/lsirq</pre>
+
+<h3><code>dpkg -s</code>: a ficha do pacote instalado</h3>
+<pre class="term">$ dpkg -s nano
+Package: nano
+Status: install ok installed                  « instalado e sem erros
+Priority: important
+Section: editors
+Installed-Size: 2839
+Maintainer: Jordi Mallach &lt;jordi@debian.org&gt;
+Architecture: amd64
+Version: 8.4-1+deb13u1
+Depends: libc6 (&gt;= 2.38), libncursesw6 (&gt;= 6), libtinfo6 (&gt;= 6)
+Conffiles:
+ /etc/nanorc b30e7a873df86d742e539d3e3f2a3826  « arquivos de configuração protegidos
+…</pre>
+
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Pergunta</th><th>Comando</th></tr>
+<tr><td>Está instalado? Qual versão?</td><td><code>dpkg -l nome</code></td></tr>
+<tr><td>Onde ficaram os arquivos?</td><td><code>dpkg -L nome</code></td></tr>
+<tr><td>Quem instalou este arquivo?</td><td><code>dpkg -S /caminho/arquivo</code></td></tr>
+<tr><td>Detalhes e dependências?</td><td><code>dpkg -s nome</code> (ou <code>apt show nome</code>)</td></tr>
+<tr><td>Quais pacotes estão instalados?</td><td><code>dpkg -l | grep ^ii</code> ou <code>apt list --installed</code></td></tr>
+</table>
+</div>
+
+<hr>
+
+<h2>Remover com o dpkg</h2>
+<pre class="term" data-user="root">#> dpkg -r hello
+(Lendo banco de dados ... 40922 arquivos e diretórios atualmente instalados).
+Removendo hello (2.10-5) ...
+Processando gatilhos para man-db (2.13.1-1) ...
+#> dpkg -P fortune-mod                  « P de purge: remove também as configurações
+(Lendo banco de dados ... 40787 arquivos e diretórios atualmente instalados).
+Removendo fortune-mod (1:1.99.1-9) ...</pre>
+
+<p>Na prática, prefira <code>apt remove</code> e <code>apt purge</code> (veja <a href="apt.html">apt</a>): o apt avisa se outro pacote depende do que você vai tirar, e depois o <code>apt autoremove</code> limpa as dependências que sobraram.</p>
+
+<hr>
+
+<h2>Consertar uma instalação interrompida</h2>
+<p>Se o computador desligou, a conexão caiu ou alguém apertou <kbd>Ctrl</kbd>+<kbd>C</kbd> no meio de uma instalação, o próximo apt avisa:</p>
+
+<pre class="term" data-user="root">#> apt install htop
+Erro: dpkg was interrupted, you must manually run 'dpkg --configure -a' to correct the problem.</pre>
+
+<p>A mensagem não tem tradução, mas diz exatamente o que fazer:</p>
+
+<dl class="anatomy">
+  <dt>dpkg</dt><dd>O programa.</dd>
+  <dt>--configure</dt><dd>Termina a configuração de pacotes que ficaram pela metade.</dd>
+  <dt>-a</dt><dd>De <strong>todos</strong> os pacotes nessa situação (<em>all</em>).</dd>
+</dl>
+
+<pre class="term" data-user="root">#> dpkg --configure -a
+#> apt -f install                     « se ainda houver dependências faltando</pre>
+
+<p>Para conferir se sobrou algo quebrado, use <code>dpkg --audit</code>: se não mostrar nada, está tudo certo.</p>
+
+<hr>
+
+<h2>Refazer as perguntas de um pacote: debconf</h2>
+<p>Alguns pacotes fazem perguntas na instalação: o fuso horário, o idioma, o layout do teclado. As respostas ficam guardadas no <strong>debconf</strong>, o banco de perguntas do Debian. Para ver o que foi respondido:</p>
+
+<pre class="term" data-user="root">#> debconf-show tzdata
+* tzdata/Zones/America: Sao_Paulo         « o * marca as perguntas já respondidas
+* tzdata/Areas: America
+  tzdata/Zones/Europe:
+  …</pre>
+
+<p>Para responder de novo, o <code>dpkg-reconfigure</code> reabre as telas do pacote:</p>
+
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Comando (como root)</th><th>Para quê</th></tr>
+<tr><td><code>dpkg-reconfigure tzdata</code></td><td>Trocar o fuso horário</td></tr>
+<tr><td><code>dpkg-reconfigure locales</code></td><td>Gerar outros idiomas e escolher o padrão</td></tr>
+<tr><td><code>dpkg-reconfigure keyboard-configuration</code></td><td>Trocar o layout do teclado do console</td></tr>
+<tr><td><code>dpkg-reconfigure console-setup</code></td><td>Fonte e tamanho do texto no console</td></tr>
+</table>
+</div>
+
+<p>Lembre: o <code>dpkg-reconfigure</code> fica em <code>/usr/sbin</code>, então a ana só o encontra depois de <code>su -</code>.</p>
+
+<hr>
+
+<h2>Quando não funciona</h2>
+
+<div class="cenario">
+<strong>"requer privilégios de superusuário"</strong>
+<pre class="term">$ dpkg -i hello_2.10-5_amd64.deb
+dpkg: erro: a operação solicitada requer privilégios de superusuário</pre>
+<p><strong>Como resolver:</strong> <code>su -</code>, vá até a pasta do arquivo (depois do <code>su -</code> você está em <code>/root</code>) e rode de novo, ou use o caminho completo: <code>apt install /home/ana/Downloads/hello_2.10-5_amd64.deb</code>.</p>
+</div>
+
+<div class="cenario">
+<strong>"trava da interface do dpkg foi travado pelo processo…"</strong>
+<pre class="term" data-user="root">#> dpkg -i hello_2.10-5_amd64.deb
+dpkg: erro: trava da interface do dpkg foi travado pelo processo /usr/bin/apt-get com pid 9748
+Observação: remover o arquivo de trava é sempre errado, podendo danificar a área
+travada e todo o sistema. Veja &lt;https://wiki.debian.org/Teams/Dpkg/FAQ#db-lock&gt;.</pre>
+<p><strong>O que aconteceu:</strong> outro programa (um <code>apt</code> em outro terminal, ou as atualizações automáticas) está instalando algo agora. Só um pode mexer nos pacotes por vez.</p>
+<p><strong>Como resolver:</strong> espere ele terminar. Veja quem é com <code>ps -p 9748 -o pid,etime,cmd</code>. Como o próprio aviso diz, <strong>nunca</strong> apague o arquivo de trava.</p>
+</div>
+
+<div class="cenario">
+<strong>"não é um arquivo no formato Debian"</strong>
+<pre class="term" data-user="root">#> dpkg -i programa.deb
+dpkg-deb: erro: 'programa.deb' não é um arquivo no formato Debian
+dpkg: erro processando o arquivo programa.deb (--install):
+ o subprocesso dpkg-deb --control retornou estado de saída de erro 2</pre>
+<p><strong>O que aconteceu:</strong> o arquivo não é um <code>.deb</code> de verdade. Quase sempre o download falhou e o arquivo é uma página de erro HTML, ou ficou incompleto.</p>
+<p><strong>Como resolver:</strong> confira com <code>file programa.deb</code> e baixe de novo.</p>
+</div>
+
+<div class="cenario">
+<strong>"pacote não está instalado"</strong>
+<pre class="term">$ dpkg -s naoexiste
+dpkg-query: pacote 'naoexiste' não está instalado e não há informações disponíveis
+Use dpkg --info (= dpkg-deb --info) para examinar arquivos de pacote.
+$ dpkg -S /etc/xyz
+dpkg-query: nenhum caminho encontrado correspondente ao padrão /etc/xyz</pre>
+<p><strong>O que aconteceu:</strong> o <code>dpkg</code> só sabe do que está instalado. Para pacotes que você ainda não tem, use <code>apt show nome</code> ou <code>apt search palavra</code>. E um arquivo que nenhum pacote instalou (criado por você ou por um programa) não aparece no <code>dpkg -S</code>.</p>
+</div>
+
+<hr>
+
+<h2>Referência de opções</h2>
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Opção</th><th>Descrição</th><th>Exemplo</th></tr>
+<tr><td><code>-i</code></td><td>Instala um <code>.deb</code></td><td><code>dpkg -i a.deb</code></td></tr>
+<tr><td><code>-r</code></td><td>Remove, mantendo configurações</td><td><code>dpkg -r hello</code></td></tr>
+<tr><td><code>-P</code></td><td>Remove tudo (<em>purge</em>)</td><td><code>dpkg -P hello</code></td></tr>
+<tr><td><code>-l</code></td><td>Lista pacotes (aceita curingas entre aspas)</td><td><code>dpkg -l 'nano*'</code></td></tr>
+<tr><td><code>-L</code></td><td>Arquivos de um pacote instalado</td><td><code>dpkg -L nano</code></td></tr>
+<tr><td><code>-S</code></td><td>Pacote dono de um arquivo</td><td><code>dpkg -S /usr/bin/nano</code></td></tr>
+<tr><td><code>-s</code></td><td>Ficha do pacote instalado</td><td><code>dpkg -s nano</code></td></tr>
+<tr><td><code>-I</code> / <code>-c</code></td><td>Ficha / conteúdo de um arquivo <code>.deb</code></td><td><code>dpkg -I a.deb</code></td></tr>
+<tr><td><code>--configure -a</code></td><td>Termina instalações interrompidas</td><td><code>dpkg --configure -a</code></td></tr>
+<tr><td><code>--audit</code></td><td>Mostra pacotes com problemas</td><td><code>dpkg --audit</code></td></tr>
+<tr><td><code>--get-selections</code></td><td>Lista para backup do que está instalado</td><td><code>dpkg --get-selections &gt; lista.txt</code></td></tr>
+</table>
+</div>
+
+<hr>
+
+<h2>Exercícios</h2>
+
+<div class="exercise">
+<h3>1. Instalar com dependências</h3>
+<p>Complete a forma recomendada de instalar o arquivo <code>app_1.0_amd64.deb</code> da pasta atual:</p>
+<div class="ex-code">apt install <input data-answer="./app_1.0_amd64.deb" aria-label="caminho"></div>
+</div>
+
+<div class="exercise">
+<h3>2. De quem é este arquivo?</h3>
+<p>Complete para descobrir qual pacote instalou <code>/usr/bin/lsblk</code>:</p>
+<div class="ex-code">dpkg <input data-answer="-S|--search" aria-label="opção"> /usr/bin/lsblk</div>
+</div>
+
+<div class="exercise">
+<h3>3. Instalação interrompida</h3>
+<p>Complete o comando que termina as instalações que pararam no meio:</p>
+<div class="ex-code">dpkg <input data-answer="--configure -a|--configure --pending" aria-label="opções"></div>
+</div>
+
+<div class="mc" data-answer="2">
+<p class="mc-q">4. No <code>dpkg -l</code>, um pacote aparece com <code>rc</code>. O que isso quer dizer?</p>
+<label><input type="radio" name="q4"> Está instalado e configurado.</label>
+<label><input type="radio" name="q4"> Foi removido, mas as configurações ficaram.</label>
+<label><input type="radio" name="q4"> Está quebrado e precisa ser reinstalado.</label>
+<label><input type="radio" name="q4"> Está segurado e não atualiza.</label>
+</div>
+
+<div class="mc" data-answer="3">
+<p class="mc-q">5. Você rodou <code>dpkg -i</code> e apareceu "problemas de dependência - deixando desconfigurado". Qual o próximo passo?</p>
+<label><input type="radio" name="q5"> Apagar o arquivo de trava do dpkg.</label>
+<label><input type="radio" name="q5"> Reiniciar o computador.</label>
+<label><input type="radio" name="q5"> Rodar <code>apt -f install</code>.</label>
+<label><input type="radio" name="q5"> Rodar o <code>dpkg -i</code> de novo até funcionar.</label>
+</div>
+
+<hr>
+
+<h2>Resumo</h2>
+<ul>
+  <li>O <code>dpkg</code> instala e registra pacotes; o <code>apt</code> fica por cima e resolve dependências.</li>
+  <li>Espie antes: <code>dpkg -I</code> (ficha) e <code>dpkg -c</code> (arquivos).</li>
+  <li>Instale <code>.deb</code> baixados com <code>apt install ./arquivo.deb</code>; depois de um <code>dpkg -i</code> com erro, <code>apt -f install</code>.</li>
+  <li>Consultas: <code>-l</code> (lista), <code>-L</code> (arquivos), <code>-S</code> (quem instalou), <code>-s</code> (ficha).</li>
+  <li>Instalação interrompida: <code>dpkg --configure -a</code>. Trava ocupada: espere; nunca apague o arquivo de trava.</li>
+  <li><code>dpkg-reconfigure</code> refaz as perguntas de pacotes como <code>tzdata</code> e <code>locales</code>.</li>
+</ul>
+
+<div class="pager"></div>
+
+</div>
+</main>
+</div>
+<script src="assets/site.js"></script>
+</body>
+</html>

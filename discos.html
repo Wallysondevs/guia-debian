@@ -1,0 +1,431 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Debian lsblk, df, du — ver discos e espaço livre | Guia Debian</title>
+<meta name="description" content="Aprenda a ver discos, partições e espaço livre no Debian com lsblk, df e du: cada parte explicada, saídas reais do Debian 13 comentadas e como achar o que está enchendo o disco.">
+<link rel="stylesheet" href="assets/style.css">
+<script>try{var t=localStorage.getItem("tema");if(t)document.documentElement.setAttribute("data-theme",t)}catch(e){}</script>
+</head>
+<body>
+<div class="layout">
+<nav class="sidebar" id="sidebar" aria-label="Tópicos"></nav>
+<main class="main">
+<div class="content">
+
+<div class="pager"></div>
+
+<h1>Debian <span class="hl">lsblk, df e du</span></h1>
+
+<p class="intro">Três comandos respondem às perguntas mais comuns sobre armazenamento. <code>lsblk</code> diz <strong>quais discos existem</strong>, <code>df</code> diz <strong>quanto espaço livre sobrou</strong> e <code>du</code> diz <strong>quem está ocupando o espaço</strong>. Nenhum deles altera nada, então você pode usá-los à vontade, mesmo como usuário comum.</p>
+
+<div class="note">
+<strong>Você vai aprender</strong>
+<ul>
+  <li>Como o Linux dá nome aos discos e às partições (<code>sda1</code>, <code>nvme0n1p2</code>…).</li>
+  <li>A ler cada coluna do <code>lsblk</code>, do <code>df</code> e do <code>du</code>.</li>
+  <li>Por que o Debian mostra uma partição de 1K e um <code>/tmp</code> que mora na memória.</li>
+  <li>Três formas de descobrir o que está enchendo o disco.</li>
+  <li>O que fazer quando aparece "Não há espaço disponível no dispositivo".</li>
+</ul>
+</div>
+
+<p>As saídas desta aula vêm de um Debian 13 de verdade, instalado com as opções padrão do instalador. No seu computador, os tamanhos e os nomes podem ser outros.</p>
+
+<hr>
+
+<h2>Antes dos comandos: disco, partição e sistema de arquivos</h2>
+<p>Pense num armário. O <strong>disco</strong> é o armário inteiro (SSD, HD ou pendrive). As <strong>partições</strong> são as prateleiras: o disco é dividido em pedaços independentes. O <strong>sistema de arquivos</strong> é a forma como cada prateleira é organizada por dentro (ext4, FAT32, NTFS…).</p>
+
+<p>No Linux, cada disco aparece como um arquivo especial dentro de <code>/dev</code> (de <em>devices</em>, "dispositivos"):</p>
+
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Nome</th><th>O que é</th></tr>
+<tr><td><code>/dev/sda</code></td><td>O primeiro disco SATA ou USB (HD, SSD SATA, pendrive, disco de máquina virtual). O segundo é <code>sdb</code>, depois <code>sdc</code>…</td></tr>
+<tr><td><code>/dev/sda1</code></td><td>A partição 1 do disco <code>sda</code>.</td></tr>
+<tr><td><code>/dev/nvme0n1</code></td><td>O primeiro SSD NVMe (comum em notebooks novos).</td></tr>
+<tr><td><code>/dev/nvme0n1p1</code></td><td>A partição 1 desse SSD (<code>p</code> de <em>partition</em>).</td></tr>
+<tr><td><code>/dev/sr0</code></td><td>O leitor de CD/DVD (ou o drive virtual de uma VM).</td></tr>
+<tr><td><code>/dev/loop0</code>…</td><td>"Discos virtuais" feitos a partir de arquivos. Um Debian recém-instalado não tem nenhum, porque não usa Snap.</td></tr>
+</table>
+</div>
+
+<p>Para usar uma partição, o Linux a <strong>monta</strong> numa pasta, chamada <strong>ponto de montagem</strong>. A partição principal fica montada em <code>/</code>, e um pendrive costuma aparecer em <code>/media/ana/NOME</code> no desktop. Você vai aprender a montar em <a href="montar.html">mount e fstab</a>.</p>
+
+<hr>
+
+<h2>lsblk: quais discos existem</h2>
+<p><code>lsblk</code> vem de <em>list block devices</em>, "listar dispositivos de bloco". Dispositivo de bloco é qualquer coisa que guarda dados em blocos: discos, partições, pendrives.</p>
+
+<dl class="anatomy">
+  <dt>lsblk</dt><dd>O programa. Sem opções, mostra todos os discos e partições em forma de árvore.</dd>
+</dl>
+
+<pre class="term">$ lsblk
+NAME   MAJ:MIN RM  SIZE RO TYPE MOUNTPOINTS
+sda      8:0    0   25G  0 disk                  « o disco inteiro
+├─sda1   8:1    0 23,7G  0 part /                « a partição do sistema
+├─sda2   8:2    0    1K  0 part                  « partição estendida (só um "envelope")
+└─sda5   8:5    0  1,3G  0 part [SWAP]           « a área de troca (swap)
+sr0     11:0    1 1024M  1 rom                   « o leitor de DVD</pre>
+
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Coluna</th><th>Significado</th></tr>
+<tr><td><code>NAME</code></td><td>Nome do dispositivo. Os traços <code>├─</code> e <code>└─</code> mostram que a partição pertence ao disco de cima.</td></tr>
+<tr><td><code>MAJ:MIN</code></td><td>Números internos do kernel. O <code>8</code> identifica discos SCSI/SATA; você raramente vai precisar disso.</td></tr>
+<tr><td><code>RM</code></td><td><em>Removable</em>: <code>1</code> se é removível (pendrive, cartão, DVD).</td></tr>
+<tr><td><code>SIZE</code></td><td>Tamanho total.</td></tr>
+<tr><td><code>RO</code></td><td><em>Read-only</em>: <code>1</code> se for somente leitura (o DVD é).</td></tr>
+<tr><td><code>TYPE</code></td><td><code>disk</code> (disco), <code>part</code> (partição), <code>rom</code> (CD/DVD), <code>loop</code> (virtual).</td></tr>
+<tr><td><code>MOUNTPOINTS</code></td><td>Onde está montado. <code>[SWAP]</code> é a área de troca. Vazio = não montado.</td></tr>
+</table>
+</div>
+
+<div class="note">
+<strong>Por que existe uma partição de 1K e a numeração pula do 2 para o 5?</strong>
+<p>Na instalação padrão em computadores com BIOS antiga (ou máquinas virtuais), o instalador do Debian usa a tabela de partições MBR, que só aceita 4 partições "principais". Para criar mais, ele faz uma <strong>partição estendida</strong> (<code>sda2</code>, que aparece com 1K) e coloca dentro dela as <strong>partições lógicas</strong>, numeradas a partir de 5. Em computadores com UEFI, o instalador usa GPT: você verá uma partição <code>/boot/efi</code> e numeração seguida (1, 2, 3).</p>
+</div>
+
+<h3>Ver o sistema de arquivos e o UUID: <code>-f</code></h3>
+<p>Com <code>-f</code> (de <em>filesystems</em>), o <code>lsblk</code> mostra o tipo de cada partição, o rótulo (<code>LABEL</code>) e o <strong>UUID</strong>, um código único que identifica a partição. O UUID é o que o Debian usa no <code>/etc/fstab</code>.</p>
+
+<pre class="term">$ lsblk -f
+NAME   FSTYPE FSVER LABEL UUID                                 FSAVAIL FSUSE% MOUNTPOINTS
+sda
+├─sda1 ext4   1.0         50185294-cee5-49de-a27c-2cf995361c67   20,8G     5% /
+├─sda2
+└─sda5 swap   1           889d958f-02ec-4d04-9252-01fabc01bb17                [SWAP]
+sr0</pre>
+
+<p><code>FSAVAIL</code> é o espaço livre e <code>FSUSE%</code> é quanto já foi usado. Só aparecem nas partições montadas.</p>
+
+<h3>Escolher as colunas: <code>-o</code></h3>
+<p>Com <code>-o</code> (de <em>output</em>, "saída") você escolhe só as colunas que quer, na ordem que quiser:</p>
+
+<pre class="term">$ lsblk -o NAME,SIZE,FSTYPE,MOUNTPOINTS
+NAME    SIZE FSTYPE MOUNTPOINTS
+sda      25G
+├─sda1 23,7G ext4   /
+├─sda2    1K
+└─sda5  1,3G swap   [SWAP]
+sr0    1024M</pre>
+
+<h3>Só os discos: <code>-d</code></h3>
+<pre class="term">$ lsblk -d
+NAME MAJ:MIN RM  SIZE RO TYPE MOUNTPOINTS
+sda    8:0    0   25G  0 disk
+sr0   11:0    1 1024M  1 rom</pre>
+
+<div class="tip">
+<strong>Descobrir qual é o pendrive</strong>
+<p>Rode <code>lsblk</code>, conecte o pendrive e rode de novo. O dispositivo que apareceu é ele (geralmente <code>sdb</code>, com <code>RM</code> = 1). Faça isso <strong>sempre</strong> antes de formatar ou gravar uma ISO: errar o nome apaga o disco errado.</p>
+</div>
+
+<h3>E o blkid?</h3>
+<p>O <code>blkid</code> mostra só os UUIDs e tipos. No Debian ele fica em <code>/usr/sbin</code>, que <strong>não está no PATH</strong> da usuária comum. Por isso, como <code>ana</code>, ele "não existe":</p>
+
+<pre class="term">$ blkid
+bash: blkid: comando não encontrado
+$ su -
+Senha:
+#> blkid
+/dev/sda5: UUID="889d958f-02ec-4d04-9252-01fabc01bb17" TYPE="swap" PARTUUID="b4c43cbc-05"
+/dev/sda1: UUID="50185294-cee5-49de-a27c-2cf995361c67" BLOCK_SIZE="4096" TYPE="ext4" PARTUUID="b4c43cbc-01"</pre>
+
+<p>Como root, o PATH inclui <code>/usr/sbin</code> e o comando aparece. Para a usuária comum, <code>lsblk -f</code> resolve quase sempre. Entenda o PATH do Debian em <a href="bashrc.html">.bashrc, alias, PATH</a> e o <code>su</code> em <a href="root-su-sudo.html">root, su e sudo</a>.</p>
+
+<hr>
+
+<h2>df: quanto espaço livre sobrou</h2>
+<p><code>df</code> vem de <em>disk free</em>, "disco livre". Ele mostra, para cada sistema de arquivos montado, o tamanho, quanto foi usado e quanto sobra.</p>
+
+<dl class="anatomy">
+  <dt>df</dt><dd>O programa.</dd>
+  <dt>-h</dt><dd><em>Human-readable</em>: tamanhos em K, M, G em vez de blocos de 1 KB.</dd>
+</dl>
+
+<pre class="term">$ df -h
+Sist. Arq.      Tam. Usado Disp. Uso% Montado em
+udev            1,9G     0  1,9G   0% /dev
+tmpfs           393M  508K  392M   1% /run
+/dev/sda1        24G  1,2G   21G   6% /                     « o que importa
+tmpfs           2,0G     0  2,0G   0% /dev/shm
+tmpfs           1,0M     0  1,0M   0% /run/credentials/systemd-journald.service
+tmpfs           5,0M     0  5,0M   0% /run/lock
+tmpfs           2,0G  8,0K  2,0G   1% /tmp                  « o /tmp está na memória
+tmpfs           1,0M     0  1,0M   0% /run/credentials/getty@tty1.service
+tmpfs           393M  4,0K  393M   1% /run/user/1000</pre>
+
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Coluna</th><th>Significado</th></tr>
+<tr><td><code>Sist. Arq.</code></td><td>Qual partição (ou sistema virtual, como <code>tmpfs</code> e <code>udev</code>).</td></tr>
+<tr><td><code>Tam.</code></td><td>Tamanho total.</td></tr>
+<tr><td><code>Usado</code> / <code>Disp.</code></td><td>Usado e disponível.</td></tr>
+<tr><td><code>Uso%</code></td><td>Porcentagem usada. Acima de 90%, comece a limpar.</td></tr>
+<tr><td><code>Montado em</code></td><td>A pasta onde a partição aparece.</td></tr>
+</table>
+</div>
+
+<p><code>tmpfs</code> e <code>udev</code> são "discos" que moram na memória RAM e somem ao desligar. Você pode ignorá-los quando a pergunta for "meu disco está cheio?".</p>
+
+<div class="warning">
+<strong>No Debian 13, o /tmp some ao reiniciar</strong>
+<p>A partir do Debian 13, a pasta <code>/tmp</code> é um <code>tmpfs</code>: fica na memória e é apagada a cada reinicialização. Nunca guarde em <code>/tmp</code> algo que você queira manter. Se precisar de uma pasta temporária que sobreviva ao reinício, use <code>/var/tmp</code>.</p>
+</div>
+
+<div class="note">
+<strong>Por que Usado + Disp. não dá o Tam.?</strong>
+<p>Na linha do <code>/</code>, 1,2G + 21G = 22,2G, e não 24G. O ext4 reserva cerca de 5% do espaço para o administrador. Assim o sistema ainda consegue funcionar quando um usuário enche o disco.</p>
+</div>
+
+<h3>Formas diferentes de perguntar a mesma coisa</h3>
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Comando</th><th>O que mostra</th></tr>
+<tr><td><code>df -h /</code></td><td>Só a partição onde está a pasta <code>/</code>. Funciona com qualquer pasta: <code>df -h ~</code>.</td></tr>
+<tr><td><code>df -hT</code></td><td>Acrescenta a coluna <code>Tipo</code> (ext4, tmpfs…).</td></tr>
+<tr><td><code>df -h -x tmpfs -x devtmpfs</code></td><td>Esconde os sistemas virtuais. Com <code>--total</code>, soma tudo.</td></tr>
+<tr><td><code>df -i</code></td><td>Mostra <strong>inodes</strong> em vez de bytes (veja "Quando não funciona").</td></tr>
+<tr><td>App <strong>Analisador de uso de disco</strong></td><td>A versão gráfica no GNOME (pacote <code>baobab</code>).</td></tr>
+</table>
+</div>
+
+<pre class="term">$ df -h /
+Sist. Arq.      Tam. Usado Disp. Uso% Montado em
+/dev/sda1        24G  1,2G   21G   6% /
+$ df -h -x tmpfs -x devtmpfs --total
+Sist. Arq.      Tam. Usado Disp. Uso% Montado em
+/dev/sda1        24G  1,2G   21G   6% /
+total            24G  1,2G   21G   6% -</pre>
+
+<div class="try" data-goal="ran:^\s*df,ran:^\s*free">
+<p class="try-task"><strong>Missão:</strong> rode <code>df -h</code> e descubra quanto espaço livre a partição <code>/</code> da máquina fictícia tem. Depois rode <code>free -h</code> e compare: o <code>free</code> fala da memória RAM, não do disco.</p>
+</div>
+
+<hr>
+
+<h2>du: quem está ocupando espaço</h2>
+<p><code>df</code> diz que o disco está cheio; <code>du</code> (de <em>disk usage</em>, "uso de disco") diz <strong>onde</strong>. Ele soma o tamanho dos arquivos de uma pasta.</p>
+
+<dl class="anatomy">
+  <dt>du</dt><dd>O programa.</dd>
+  <dt>-s</dt><dd><em>Summarize</em>: mostra só o total, em vez de cada subpasta.</dd>
+  <dt>-h</dt><dd>Tamanhos legíveis.</dd>
+  <dt>/usr</dt><dd>A pasta a medir.</dd>
+</dl>
+
+<pre class="term">$ du -sh /usr
+737M	/usr</pre>
+
+<p>Sem o <code>-s</code>, o <code>du</code> lista todas as subpastas, uma por linha, o que pode ser muito longo. Veja com uma pasta pequena de exemplo:</p>
+
+<pre class="term" data-cwd="/tmp">$ du -h d
+1,0M	d/b
+5,0M	d/a
+6,0M	d                                « o total vem por último
+$ du -sh d/*
+5,0M	d/a
+1,0M	d/b</pre>
+
+<h3>Um nível de cada vez: <code>-d 1</code></h3>
+<p>A opção <code>-d</code> (de <em>depth</em>, "profundidade") limita quantos níveis de pastas o <code>du</code> mostra. Com <code>-d 1</code>, ele mostra só as pastas de primeiro nível e o total.</p>
+
+<h3>Ordenar pelo tamanho: <code>| sort -h</code></h3>
+<p>A saída do <code>du</code> vem fora de ordem. Mandando-a para o <code>sort -h</code> (que entende K, M e G), o maior fica por último:</p>
+
+<dl class="anatomy">
+  <dt>du -h -d 1 ~</dt><dd>Tamanho de cada pasta de primeiro nível da sua pasta pessoal.</dd>
+  <dt>|</dt><dd>O <strong>pipe</strong>: entrega a saída para o próximo comando (veja <a href="pipes.html">Pipes</a>).</dd>
+  <dt>sort -h</dt><dd>Ordena tamanhos legíveis, do menor para o maior.</dd>
+  <dt>| tail -5</dt><dd>Mostra só as 5 últimas linhas: as maiores.</dd>
+</dl>
+
+<pre class="term" data-cwd="/tmp">$ du -h -d 1 d | sort -h
+1,0M	d/b
+5,0M	d/a
+6,0M	d</pre>
+
+<p>Num notebook de verdade, troque <code>d</code> por <code>~</code>. O culpado costuma ser <code>Downloads</code>, <code>.cache</code> ou <code>.local/share/Trash</code> (a lixeira). Depois, repita o comando dentro da pasta maior para descer mais um nível.</p>
+
+<hr>
+
+<h2>Três formas de achar o que enche o disco</h2>
+
+<h3>Forma 1: du + sort, descendo pasta por pasta</h3>
+<p>É o método acima. Funciona em qualquer Debian, inclusive em servidor sem interface gráfica e sem instalar nada.</p>
+
+<h3>Forma 2: ncdu, interativo</h3>
+<p>O <code>ncdu</code> (<em>NCurses Disk Usage</em>) mostra as pastas ordenadas e deixa você navegar com as setas. Ele não vem instalado:</p>
+
+<pre class="term">$ ncdu ~
+bash: ncdu: comando não encontrado
+$ su -c "apt install ncdu"
+Senha:</pre>
+
+<p>Depois de instalado, use <kbd>↑</kbd> <kbd>↓</kbd> para escolher, <kbd>Enter</kbd> para entrar na pasta, <kbd>d</kbd> para apagar (pede confirmação) e <kbd>q</kbd> para sair.</p>
+
+<h3>Forma 3: arquivos grandes com find</h3>
+<p>Às vezes o problema é um arquivo enorme escondido. O <code>find</code> procura por tamanho:</p>
+
+<pre class="term">$ find ~ -type f -size +1G
+/home/ana/Downloads/debian-13.5.0-amd64-DVD-1.iso</pre>
+
+<p>A saída acima é ilustrativa. Veja mais em <a href="find.html">find e locate</a>.</p>
+
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Forma</th><th>Melhor quando…</th></tr>
+<tr><td><code>du -h -d 1 | sort -h</code></td><td>Você quer saber qual pasta cresceu. Funciona em qualquer lugar.</td></tr>
+<tr><td><code>ncdu</code></td><td>Você vai investigar e limpar várias pastas.</td></tr>
+<tr><td><code>find -size +1G</code></td><td>Você suspeita de poucos arquivos gigantes.</td></tr>
+<tr><td>Analisador de uso de disco</td><td>Você está no desktop e prefere gráficos.</td></tr>
+</table>
+</div>
+
+<hr>
+
+<h2>Quando não funciona</h2>
+
+<div class="cenario">
+<strong>"Não há espaço disponível no dispositivo"</strong>
+<pre class="term">$ cp video.mp4 ~/Vídeos/
+cp: erro de escrita de '/home/ana/Vídeos/video.mp4': Não há espaço disponível no dispositivo</pre>
+<p><strong>O que aconteceu:</strong> a partição encheu. Programas podem travar e o sistema pode não conseguir salvar configurações. Em inglês, a mensagem é <code>No space left on device</code>.</p>
+<p><strong>Como confirmar:</strong> <code>df -h /</code> mostra <code>Uso%</code> perto de 100%.</p>
+<p><strong>Como resolver:</strong> ache o culpado com <code>du -h -d 1 ~ | sort -h</code>. Lugares que costumam crescer: <code>~/Downloads</code>, <code>~/.cache</code>, a lixeira (<code>~/.local/share/Trash</code>), os logs (como root: <code>journalctl --vacuum-size=200M</code>) e o cache do apt (como root: <code>apt clean</code>). Veja <a href="manutencao.html">Manutenção</a>.</p>
+</div>
+
+<div class="cenario">
+<strong>df diz que há espaço, mas nada pode ser criado</strong>
+<pre class="term">$ df -i /
+Sist. Arq.        Inós IUsado  ILivre IUso% Montado em
+/dev/sda1      1553440  38465 1514975    3% /</pre>
+<p><strong>O que aconteceu:</strong> cada arquivo gasta um <strong>inode</strong> (uma "ficha" que guarda suas informações; o Debian em português chama de "inó"). Milhões de arquivos pequenos, como caches e sessões, esgotam as fichas antes do espaço. Quando isso acontece, a coluna <code>IUso%</code> chega a 100% e <code>ILivre</code> fica em 0.</p>
+<p><strong>Como resolver:</strong> ache a pasta com mais arquivos (<code>find /var -xdev -type f | cut -d/ -f2-3 | sort | uniq -c | sort -n | tail</code>) e apague o que não serve.</p>
+</div>
+
+<div class="cenario">
+<strong>du mostra "Permissão negada"</strong>
+<pre class="term">$ du -sh /etc
+du: não foi possível ler diretório '/etc/credstore': Permissão negada
+du: não foi possível ler diretório '/etc/credstore.encrypted': Permissão negada
+4,2M	/etc</pre>
+<p><strong>O que aconteceu:</strong> algumas pastas só o root pode ler. O total mostrado fica <strong>menor</strong> que o real (como root, o mesmo comando mostra <code>4,3M</code>).</p>
+<p><strong>Como resolver:</strong> para medir pastas do sistema, entre como root (<code>su -</code>) e rode de novo. Para só esconder os avisos: <code>du -sh /etc 2&gt;/dev/null</code>.</p>
+</div>
+
+<div class="cenario">
+<strong>Apaguei um arquivo grande e o espaço não voltou</strong>
+<p><strong>O que aconteceu:</strong> se um programa ainda está com o arquivo aberto (por exemplo, um log que um serviço continua escrevendo), o espaço só é liberado quando o programa fecha o arquivo. Outra possibilidade: o arquivo foi para a lixeira do desktop.</p>
+<p><strong>Como resolver:</strong> esvazie a lixeira ou reinicie o serviço que usava o arquivo. Para listar arquivos apagados que ainda estão abertos, como root: <code>lsof +L1</code> (o <code>lsof</code> vem instalado no Debian).</p>
+</div>
+
+<hr>
+
+<h2>Referência de opções</h2>
+<h3>lsblk</h3>
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Opção</th><th>Descrição</th><th>Exemplo</th></tr>
+<tr><td><code>-f</code></td><td>Mostra tipo, rótulo, UUID e espaço livre</td><td><code>lsblk -f</code></td></tr>
+<tr><td><code>-o</code></td><td>Escolhe as colunas</td><td><code>lsblk -o NAME,SIZE,MOUNTPOINTS</code></td></tr>
+<tr><td><code>-d</code></td><td>Só os discos, sem as partições</td><td><code>lsblk -d</code></td></tr>
+<tr><td><code>-p</code></td><td>Mostra o caminho completo (<code>/dev/sda1</code>)</td><td><code>lsblk -p</code></td></tr>
+<tr><td><code>-e N</code></td><td>Esconde dispositivos pelo número (7 = loop)</td><td><code>lsblk -e7</code></td></tr>
+</table>
+</div>
+<h3>df</h3>
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Opção</th><th>Descrição</th><th>Exemplo</th></tr>
+<tr><td><code>-h</code></td><td>Tamanhos legíveis</td><td><code>df -h</code></td></tr>
+<tr><td><code>-T</code></td><td>Mostra o tipo do sistema de arquivos</td><td><code>df -hT</code></td></tr>
+<tr><td><code>-x TIPO</code></td><td>Esconde um tipo</td><td><code>df -h -x tmpfs</code></td></tr>
+<tr><td><code>-i</code></td><td>Mostra inodes</td><td><code>df -i</code></td></tr>
+<tr><td><code>--total</code></td><td>Acrescenta uma linha de total</td><td><code>df -h --total</code></td></tr>
+</table>
+</div>
+<h3>du</h3>
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Opção</th><th>Descrição</th><th>Exemplo</th></tr>
+<tr><td><code>-s</code></td><td>Só o total</td><td><code>du -sh pasta</code></td></tr>
+<tr><td><code>-h</code></td><td>Tamanhos legíveis</td><td><code>du -h</code></td></tr>
+<tr><td><code>-d N</code></td><td>Mostra até N níveis</td><td><code>du -h -d 1</code></td></tr>
+<tr><td><code>-a</code></td><td>Inclui arquivos, não só pastas</td><td><code>du -ah pasta</code></td></tr>
+<tr><td><code>-c</code></td><td>Acrescenta uma linha de total</td><td><code>du -ch *.iso</code></td></tr>
+<tr><td><code>-x</code></td><td>Não atravessa para outras partições</td><td><code>du -xh -d 1 /</code></td></tr>
+<tr><td><code>--exclude</code></td><td>Ignora um padrão</td><td><code>du -sh --exclude=.cache ~</code></td></tr>
+</table>
+</div>
+
+<hr>
+
+<h2>Exercícios</h2>
+
+<div class="exercise">
+<h3>1. Discos com UUID</h3>
+<p>Complete para listar os discos mostrando o tipo do sistema de arquivos e o UUID:</p>
+<div class="ex-code">lsblk <input data-answer="-f|--fs" aria-label="opção"></div>
+</div>
+
+<div class="exercise">
+<h3>2. Total de uma pasta</h3>
+<p>Complete para ver só o tamanho total da pasta Imagens, em formato legível:</p>
+<div class="ex-code">du <input data-answer="-sh|-hs|-s -h|-h -s" aria-label="opções"> ~/Imagens</div>
+</div>
+
+<div class="exercise">
+<h3>3. As maiores pastas</h3>
+<p>Complete para ordenar o resultado do <code>du</code> pelo tamanho:</p>
+<div class="ex-code">du -h -d 1 ~ | sort <input data-answer="-h" aria-label="opção"></div>
+</div>
+
+<div class="mc" data-answer="2">
+<p class="mc-q">4. O sistema diz "Não há espaço disponível no dispositivo". Qual comando você roda primeiro?</p>
+<label><input type="radio" name="q4"> <code>lsblk</code></label>
+<label><input type="radio" name="q4"> <code>df -h</code></label>
+<label><input type="radio" name="q4"> <code>free -h</code></label>
+<label><input type="radio" name="q4"> <code>mount</code></label>
+</div>
+
+<div class="mc" data-answer="3">
+<p class="mc-q">5. Como usuária comum, você digita <code>blkid</code> e aparece "comando não encontrado". Por quê?</p>
+<label><input type="radio" name="q5"> O Debian não tem blkid.</label>
+<label><input type="radio" name="q5"> O disco está desmontado.</label>
+<label><input type="radio" name="q5"> Ele fica em <code>/usr/sbin</code>, que não está no PATH do usuário comum.</label>
+<label><input type="radio" name="q5"> Falta instalar o pacote <code>blkid</code>.</label>
+</div>
+
+<div class="mc" data-answer="1">
+<p class="mc-q">6. Você salvou um relatório em <code>/tmp</code> e reiniciou o Debian 13. O que acontece com ele?</p>
+<label><input type="radio" name="q6"> Some: o <code>/tmp</code> é um tmpfs, que fica na memória.</label>
+<label><input type="radio" name="q6"> Continua lá até alguém apagar.</label>
+<label><input type="radio" name="q6"> Vai para a lixeira.</label>
+<label><input type="radio" name="q6"> É movido para <code>/var/tmp</code>.</label>
+</div>
+
+<hr>
+
+<h2>Resumo</h2>
+<ul>
+  <li><code>lsblk</code> lista discos e partições; <code>-f</code> mostra tipo e UUID.</li>
+  <li>Na instalação MBR do Debian, a partição de 1K é a estendida e as lógicas começam no 5.</li>
+  <li><code>df -h</code> mostra o espaço livre; ignore <code>tmpfs</code> e <code>udev</code>.</li>
+  <li><code>du -sh pasta</code> mede uma pasta; <code>du -h -d 1 | sort -h</code> acha a maior.</li>
+  <li>No Debian 13, <code>/tmp</code> fica na memória e é apagado ao reiniciar.</li>
+  <li><code>blkid</code> e outros programas de <code>/usr/sbin</code> só aparecem para o root.</li>
+</ul>
+
+<div class="pager"></div>
+
+</div>
+</main>
+</div>
+<script src="assets/site.js"></script>
+</body>
+</html>

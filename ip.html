@@ -1,0 +1,441 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Debian ip, ping, ss — ver a rede pelo terminal | Guia Debian</title>
+<meta name="description" content="Aprenda ip a, ip -br a, ip r, ip neigh, ping e ss no Debian 13: cada linha da saída explicada, os códigos de saída do ping, portas abertas e erros comuns.">
+<link rel="stylesheet" href="assets/style.css">
+<script>try{var t=localStorage.getItem("tema");if(t)document.documentElement.setAttribute("data-theme",t)}catch(e){}</script>
+</head>
+<body>
+<div class="layout">
+<nav class="sidebar" id="sidebar" aria-label="Tópicos"></nav>
+<main class="main">
+<div class="content">
+
+<div class="pager"></div>
+
+<h1>Debian <span class="hl">ip, ping, ss</span></h1>
+
+<p class="intro">Três ferramentas respondem quase todas as perguntas sobre a rede: <code>ip</code> mostra as placas, os endereços e as rotas; <code>ping</code> testa se um destino responde; <code>ss</code> lista as conexões e as portas abertas. As três já vêm instaladas em qualquer Debian, até na instalação mínima.</p>
+
+<div class="note">
+<strong>Você vai aprender</strong>
+<ul>
+  <li>Ler a saída completa do <code>ip a</code> e a versão resumida <code>ip -br a</code>.</li>
+  <li>Ver o gateway, as rotas e os vizinhos com <code>ip r</code> e <code>ip neigh</code>.</li>
+  <li>Usar o <code>ping</code> com limite de tentativas e entender o código de saída dele.</li>
+  <li>Descobrir quais portas estão abertas e qual programa usa cada uma com <code>ss</code>.</li>
+  <li>Por que, no Debian, o <code>ss</code> não mostra os processos para a usuária comum.</li>
+</ul>
+</div>
+
+<p>Se ainda não leu <a href="redes.html">Conceitos de Rede</a>, comece por lá: esta aula usa IP, máscara, gateway e porta o tempo todo. Os exemplos são da máquina fictícia <strong>notebook</strong>, ligada no cabo de rede (placa <code>enp1s0</code>), com IP <code>192.168.0.15</code>. As saídas foram tiradas de um Debian 13 real; só os endereços foram trocados.</p>
+
+<hr>
+
+<h2>O comando ip</h2>
+<p>O <code>ip</code> faz parte do pacote <strong>iproute2</strong>, a ferramenta oficial de rede do Linux. Ele tem <strong>subcomandos</strong>, e cada um cuida de uma parte da rede:</p>
+
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Subcomando</th><th>Abreviação</th><th>Mostra</th></tr>
+<tr><td><code>ip address</code></td><td><code>ip a</code></td><td>Endereços IP de cada placa</td></tr>
+<tr><td><code>ip route</code></td><td><code>ip r</code></td><td>Rotas: por onde sai cada destino</td></tr>
+<tr><td><code>ip link</code></td><td><code>ip l</code></td><td>As placas em si: ligadas ou não, endereço físico (MAC)</td></tr>
+<tr><td><code>ip neighbour</code></td><td><code>ip n</code></td><td>Vizinhos: aparelhos da rede local que o computador já conhece</td></tr>
+</table>
+</div>
+
+<p>Qualquer abreviação sem ambiguidade funciona: <code>ip a</code>, <code>ip addr</code> e <code>ip address</code> são o mesmo comando. Ler informações com o <code>ip</code> não precisa de root; só <strong>mudar</strong> a rede precisa.</p>
+
+<div class="note">
+<strong>E o ifconfig?</strong>
+<p>Tutoriais antigos usam <code>ifconfig</code> e <code>netstat</code>, do pacote <code>net-tools</code>. Eles não vêm no Debian 13 e estão parados há anos. No Debian, digitar <code>ifconfig</code> como usuária comum dá <code>bash: ifconfig: comando não encontrado</code>. Use <code>ip</code> e <code>ss</code>.</p>
+</div>
+
+<hr>
+
+<h2>Ver os endereços: <code>ip -br a</code></h2>
+<p>Comece pela versão resumida. Ela mostra uma linha por placa:</p>
+
+<dl class="anatomy">
+  <dt>ip</dt><dd>A ferramenta de rede.</dd>
+  <dt>-br</dt><dd>Opção <em>brief</em>, "resumido": uma linha por placa.</dd>
+  <dt>a</dt><dd>Subcomando <code>address</code>: os endereços.</dd>
+</dl>
+
+<pre class="term">$ ip -br a
+lo               UNKNOWN        127.0.0.1/8 ::1/128
+enp1s0           UP             192.168.0.15/24 fd17:625c:f037:2:a00:27ff:fe90:fbde/64 fe80::ae13:e729:e153:39c/64</pre>
+
+<p>Cada linha tem três colunas: o <strong>nome da placa</strong>, o <strong>estado</strong> e os <strong>endereços</strong>.</p>
+
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Nome</th><th>O que é</th></tr>
+<tr><td><code>lo</code></td><td><em>Loopback</em>: a placa virtual que o computador usa para falar consigo mesmo. Sempre existe.</td></tr>
+<tr><td><code>enp1s0</code>, <code>eno1</code>, <code>ens3</code></td><td>Placa de <strong>cabo</strong> (Ethernet). O "en" vem de Ethernet; o resto indica onde a placa está ligada na máquina.</td></tr>
+<tr><td><code>wlp2s0</code></td><td>Placa <strong>Wi-Fi</strong>. O "wl" vem de <em>wireless</em>, "sem fio".</td></tr>
+<tr><td><code>docker0</code>, <code>virbr0</code>, <code>wg0</code></td><td>Placas virtuais criadas pelo Docker, por máquinas virtuais ou por VPN.</td></tr>
+</table>
+</div>
+
+<p>Na coluna de estado, <code>UP</code> quer dizer ligada e com conexão, e <code>DOWN</code>, desligada ou sem cabo. O <code>lo</code> aparece como <code>UNKNOWN</code>, o que é normal. O endereço que interessa quase sempre é o primeiro <strong>IPv4</strong> da placa ativa: <code>192.168.0.15/24</code>.</p>
+
+<div class="tip">
+<strong>Com cores</strong>
+<p>Acrescente <code>-c</code> (de <em>color</em>): <code>ip -br -c a</code> pinta o estado de verde ou vermelho e os endereços IPv4 e IPv6 em cores diferentes. Fica bem mais fácil de ler.</p>
+</div>
+
+<h3>Os endereços IPv6</h3>
+<p>Ao lado do IPv4 aparecem endereços longos com <code>:</code>. Os que começam com <code>fe80::</code> são <strong>de enlace local</strong>: existem em toda placa e só valem dentro da rede local. Os outros são IPv6 dados pelo roteador. Para o dia a dia, você pode ignorá-los.</p>
+
+<hr>
+
+<h2>A saída completa: <code>ip a</code></h2>
+<p>Sem o <code>-br</code>, o <code>ip</code> mostra todos os detalhes de cada placa. Veja a placa de cabo, com cada linha explicada:</p>
+
+<pre class="term">$ ip a show enp1s0
+2: enp1s0: &lt;BROADCAST,MULTICAST,UP,LOWER_UP&gt; mtu 1500 qdisc fq_codel state UP group default qlen 1000   « número, nome e situação da placa
+    link/ether 08:00:27:90:fb:de brd ff:ff:ff:ff:ff:ff                                                      « endereço físico (MAC)
+    altname enx08002790fbde                                                                                 « nome alternativo
+    inet 192.168.0.15/24 brd 192.168.0.255 scope global dynamic noprefixroute enp1s0                       « o IPv4
+       valid_lft 85782sec preferred_lft 74982sec                                                           « tempo até renovar
+    inet6 fe80::ae13:e729:e153:39c/64 scope link                                                            « IPv6 local
+       valid_lft forever preferred_lft forever</pre>
+
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Parte</th><th>Significado</th></tr>
+<tr><td><code>2: enp1s0:</code></td><td>Número interno da placa e o nome dela.</td></tr>
+<tr><td><code>&lt;…UP,LOWER_UP&gt;</code></td><td><code>UP</code>: a placa foi ligada. <code>LOWER_UP</code>: há sinal físico (o cabo está conectado). Sem o <code>LOWER_UP</code>, o cabo está solto.</td></tr>
+<tr><td><code>mtu 1500</code></td><td>Tamanho máximo de cada pacote, em bytes. 1500 é o padrão.</td></tr>
+<tr><td><code>link/ether 08:00:27:…</code></td><td>O endereço físico (MAC) da placa, gravado de fábrica.</td></tr>
+<tr><td><code>inet 192.168.0.15/24</code></td><td>O endereço IPv4 e a máscara em notação CIDR (<code>/24</code> = 255.255.255.0).</td></tr>
+<tr><td><code>brd 192.168.0.255</code></td><td>Endereço de <em>broadcast</em>: falar com todos da rede local de uma vez.</td></tr>
+<tr><td><code>dynamic</code></td><td>O endereço veio por DHCP (do roteador). Um IP fixo não tem essa palavra.</td></tr>
+<tr><td><code>valid_lft 85782sec</code></td><td>Por quanto tempo o endereço emprestado pelo DHCP ainda vale (cerca de 24 horas).</td></tr>
+</table>
+</div>
+
+<p>Para ver só uma placa, use <code>ip a show &lt;placa&gt;</code>. Sem nome, o <code>ip a</code> lista todas, começando pelo <code>lo</code>.</p>
+
+<hr>
+
+<h2>Rotas e gateway: <code>ip r</code></h2>
+<p>A tabela de rotas diz por onde cada destino sai. A linha mais importante é a <strong>rota padrão</strong> (<em>default</em>): tudo o que não é da rede local vai para o gateway, normalmente o roteador.</p>
+
+<pre class="term">$ ip r
+default via 192.168.0.1 dev enp1s0 proto dhcp src 192.168.0.15 metric 1002    « gateway: 192.168.0.1
+192.168.0.0/24 dev enp1s0 proto dhcp scope link src 192.168.0.15 metric 1002   « a rede local</pre>
+
+<dl class="anatomy">
+  <dt>default</dt><dd>Qualquer destino que não tenha uma rota mais específica.</dd>
+  <dt>via 192.168.0.1</dt><dd>Mande para este endereço: o gateway (roteador).</dd>
+  <dt>dev enp1s0</dt><dd>Saindo por esta placa.</dd>
+  <dt>proto dhcp</dt><dd>A rota foi criada pelo cliente DHCP. No Debian 13, quem faz isso é o <code>dhcpcd</code>.</dd>
+  <dt>metric 1002</dt><dd>Prioridade: com duas rotas iguais, vence a de número menor.</dd>
+</dl>
+
+<p>Quer saber por qual caminho um endereço específico vai sair? Pergunte direto:</p>
+
+<pre class="term">$ ip route get 8.8.8.8
+8.8.8.8 via 192.168.0.1 dev enp1s0 src 192.168.0.15 uid 1000
+    cache</pre>
+
+<div class="warning">
+<strong>Sem linha default, sem internet</strong>
+<p>Se o <code>ip r</code> não mostra nenhuma linha começando com <code>default</code>, o computador não sabe como sair da rede local: os sites não abrem, mesmo com IP. Veja o roteiro em <a href="redes.html">Conceitos de Rede</a> e <a href="configurar-rede.html">Configurar a Rede</a>.</p>
+</div>
+
+<hr>
+
+<h2>Vizinhos e placas: <code>ip neigh</code> e <code>ip link</code></h2>
+<p>O <code>ip neigh</code> mostra quais aparelhos da rede local o computador já encontrou, com o endereço físico de cada um:</p>
+
+<pre class="term">$ ip neigh
+192.168.0.1 dev enp1s0 lladdr 52:54:00:12:35:00 REACHABLE    « o roteador respondeu há pouco
+192.168.0.20 dev enp1s0 lladdr 3c:22:fb:9a:10:4e STALE        « visto antes, não confirmado agora</pre>
+
+<p><code>REACHABLE</code> quer dizer "respondeu recentemente"; <code>STALE</code>, "conheço, mas faz tempo"; <code>FAILED</code>, "tentei e não respondeu".</p>
+
+<p>O <code>ip -s link</code> (<code>-s</code> de <em>statistics</em>) conta os pacotes que passaram pela placa, incluindo erros:</p>
+
+<pre class="term">$ ip -s link show enp1s0
+2: enp1s0: &lt;BROADCAST,MULTICAST,UP,LOWER_UP&gt; mtu 1500 qdisc fq_codel state UP mode DEFAULT group default qlen 1000
+    link/ether 08:00:27:90:fb:de brd ff:ff:ff:ff:ff:ff
+    RX:  bytes packets errors dropped  missed   mcast
+      17075134   15955      0       0       0       4    « recebidos
+    TX:  bytes packets errors dropped carrier collsns
+       1260981    9207      0       0       0       0    « enviados
+    altname enx08002790fbde</pre>
+
+<p>RX (de <em>receive</em>) é o que chegou e TX (de <em>transmit</em>), o que saiu. Números crescendo em <code>errors</code> ou <code>dropped</code> indicam cabo ruim ou placa com problema.</p>
+
+<hr>
+
+<h2>ping: o destino responde?</h2>
+<p>O <code>ping</code> manda pequenos pacotes de teste e mede quanto tempo a resposta demora. No Linux ele <strong>não para sozinho</strong>: sem limite, fica rodando até você apertar <kbd>Ctrl</kbd>+<kbd>C</kbd>. Por isso, quase sempre se usa <code>-c</code>.</p>
+
+<dl class="anatomy">
+  <dt>ping</dt><dd>O programa de teste.</dd>
+  <dt>-c 3</dt><dd>De <em>count</em>: envia 3 pacotes e para.</dd>
+  <dt>deb.debian.org</dt><dd>O destino: um nome ou um IP.</dd>
+</dl>
+
+<pre class="term">$ ping -c 3 deb.debian.org
+PING debian.map.fastlydns.net (151.101.66.132) 56(84) bytes of data.            « o nome virou este IP
+64 bytes from 151.101.66.132: icmp_seq=1 ttl=58 time=39.8 ms                     « resposta 1, em 39,8 ms
+64 bytes from 151.101.66.132: icmp_seq=2 ttl=58 time=41.2 ms
+64 bytes from 151.101.66.132: icmp_seq=3 ttl=58 time=40.5 ms
+
+--- debian.map.fastlydns.net ping statistics ---
+3 packets transmitted, 3 received, 0% packet loss, time 2003ms                   « nenhum pacote perdido
+rtt min/avg/max/mdev = 39.815/40.503/41.200/0.565 ms                              « tempo mínimo/médio/máximo</pre>
+
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Parte</th><th>Significado</th></tr>
+<tr><td><code>icmp_seq=1</code></td><td>Número do pacote. Se aparecer 1, 2, 4, o 3 se perdeu.</td></tr>
+<tr><td><code>ttl=58</code></td><td>"Tempo de vida": quantos roteadores o pacote ainda poderia atravessar.</td></tr>
+<tr><td><code>time=39.8 ms</code></td><td>Ida e volta, em milissegundos. Até uns 50 ms é rápido; acima de 200 ms dá para sentir.</td></tr>
+<tr><td><code>0% packet loss</code></td><td>Porcentagem de pacotes sem resposta. O ideal é 0%.</td></tr>
+</table>
+</div>
+
+<p>O <code>ping</code> mostra as mensagens em inglês mesmo com o sistema em português, exceto os erros de nome, que vêm do sistema e saem traduzidos.</p>
+
+<h3>O que o ping devolve</h3>
+<p>Em scripts, o que importa é o <strong>código de saída</strong>. O <code>ping</code> usa três valores:</p>
+
+<pre class="term">$ ping -c 1 127.0.0.1 &gt; /dev/null; echo $?
+0                                                   « respondeu
+$ ping -c 1 -W 1 192.0.2.1 &gt; /dev/null; echo $?
+1                                                   « não houve resposta
+$ ping -c 1 nada.invalid; echo $?
+ping: nada.invalid: Nome ou serviço desconhecido
+2                                                   « erro antes de enviar: nome inexistente</pre>
+
+<p>O <code>-W 1</code> (de <em>wait</em>) espera no máximo 1 segundo pela resposta. Com isso dá para escrever, por exemplo, <code>ping -c 1 -W 2 192.168.0.1 &gt; /dev/null &amp;&amp; echo "roteador ok"</code>.</p>
+
+<h3>Outras opções úteis</h3>
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Opção</th><th>Faz</th><th>Exemplo</th></tr>
+<tr><td><code>-c N</code></td><td>Envia N pacotes e para</td><td><code>ping -c 4 debian.org</code></td></tr>
+<tr><td><code>-i N</code></td><td>Intervalo entre pacotes, em segundos</td><td><code>ping -i 0.5 -c 10 192.168.0.1</code></td></tr>
+<tr><td><code>-W N</code></td><td>Espera no máximo N segundos por cada resposta</td><td><code>ping -c 1 -W 1 192.168.0.1</code></td></tr>
+<tr><td><code>-4</code> / <code>-6</code></td><td>Força IPv4 ou IPv6</td><td><code>ping -4 -c 2 debian.org</code></td></tr>
+<tr><td><code>-q</code></td><td>Silencioso: só a estatística final</td><td><code>ping -q -c 20 debian.org</code></td></tr>
+</table>
+</div>
+
+<div class="note">
+<strong>Ping que não responde nem sempre é problema</strong>
+<p>Muitos servidores e firewalls bloqueiam o ping de propósito. Se o site abre no navegador mas o ping dá 100% de perda, está tudo certo com a sua rede.</p>
+</div>
+
+<hr>
+
+<h2>ss: conexões e portas abertas</h2>
+<p>O <code>ss</code> (de <em>socket statistics</em>) lista as conexões de rede. A combinação mais usada é <code>ss -tulpn</code>, que responde "quais portas estão esperando conexões nesta máquina?".</p>
+
+<dl class="anatomy">
+  <dt>ss</dt><dd>O programa.</dd>
+  <dt>-t</dt><dd>Conexões TCP.</dd>
+  <dt>-u</dt><dd>Conexões UDP.</dd>
+  <dt>-l</dt><dd>Só as que estão <em>listening</em>, "escutando", à espera de alguém.</dd>
+  <dt>-p</dt><dd>Mostra o programa (<em>process</em>) dono de cada porta.</dd>
+  <dt>-n</dt><dd>Números em vez de nomes: <code>22</code> em vez de <code>ssh</code>.</dd>
+</dl>
+
+<p>Rodando como usuária comum, a coluna do processo fica vazia. Isso não é erro: o Debian não deixa um usuário ver os processos dos outros.</p>
+
+<pre class="term">$ ss -tulpn
+Netid State  Recv-Q Send-Q   Local Address:Port  Peer Address:PortProcess
+udp   UNCONN 0      0         192.168.0.15:68         0.0.0.0:*
+tcp   LISTEN 0      128            0.0.0.0:22         0.0.0.0:*                 « alguém escuta na porta 22
+tcp   LISTEN 0      128               [::]:22            [::]:*</pre>
+
+<p>Como root (veja <a href="root-su-sudo.html">root, su e sudo</a>), aparece o nome do programa:</p>
+
+<pre class="term">$ su -
+Senha:
+#> ss -tulpn
+Netid State  Recv-Q Send-Q   Local Address:Port  Peer Address:PortProcess
+udp   UNCONN 0      0         192.168.0.15:68         0.0.0.0:*    users:(("dhcpcd",pid=858,fd=3))   « cliente DHCP
+tcp   LISTEN 0      128            0.0.0.0:22         0.0.0.0:*    users:(("sshd",pid=778,fd=6))     « servidor SSH
+tcp   LISTEN 0      128               [::]:22            [::]:*    users:(("sshd",pid=778,fd=7))</pre>
+
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Coluna</th><th>Significado</th></tr>
+<tr><td><code>Netid</code></td><td>Protocolo: <code>tcp</code> ou <code>udp</code>.</td></tr>
+<tr><td><code>State</code></td><td><code>LISTEN</code>: esperando conexões. <code>UNCONN</code>: UDP aberto (UDP não tem "conexão").</td></tr>
+<tr><td><code>Local Address:Port</code></td><td>Em qual endereço e porta o programa escuta. <code>0.0.0.0</code> = todas as placas IPv4; <code>[::]</code> = todas IPv6; <code>127.0.0.1</code> = só a própria máquina.</td></tr>
+<tr><td><code>Peer Address:Port</code></td><td>O outro lado. <code>*</code> quando ainda não há ninguém.</td></tr>
+<tr><td><code>Process</code></td><td>Programa, PID e descritor do arquivo. Só aparece para root.</td></tr>
+</table>
+</div>
+
+<p>Essa lista curta é típica de um Debian recém-instalado: só o SSH (porta 22) e o cliente DHCP (porta 68). Um Debian com desktop terá mais linhas, como impressora (631) e descoberta de rede (5353).</p>
+
+<h3>Conexões ativas</h3>
+<p>Sem o <code>-l</code>, o <code>ss</code> mostra as conexões já estabelecidas. <code>ss -tn</code> lista as TCP:</p>
+
+<pre class="term">$ ss -tn
+State Recv-Q Send-Q Local Address:Port  Peer Address:Port
+ESTAB 0      0       192.168.0.15:22    192.168.0.20:58430    « alguém do 192.168.0.20 conectado por SSH</pre>
+
+<hr>
+
+<h2>Formas diferentes de descobrir o seu IP</h2>
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Comando</th><th>Mostra</th><th>Quando usar</th></tr>
+<tr><td><code>ip -br a</code></td><td>Todas as placas, uma por linha</td><td>O jeito mais claro, no terminal.</td></tr>
+<tr><td><code>hostname -I</code></td><td>Só os endereços, sem nomes de placa</td><td>Em scripts: <code>hostname -I | cut -d' ' -f1</code>.</td></tr>
+<tr><td><code>ip a show enp1s0</code></td><td>Todos os detalhes de uma placa</td><td>Investigar uma placa específica.</td></tr>
+<tr><td><code>ip route get 1.1.1.1</code></td><td>O IP de saída para a internet (<code>src</code>)</td><td>Com várias placas, para saber qual é usada.</td></tr>
+<tr><td>Configurações → Rede</td><td>O IP na interface gráfica</td><td>No desktop.</td></tr>
+</table>
+</div>
+
+<pre class="term">$ hostname -I
+192.168.0.15 fd17:625c:f037:2:a00:27ff:fe90:fbde</pre>
+
+<p>Repare: esse é o IP <strong>da rede local</strong>. O IP com que você aparece na internet (o do roteador) só se descobre perguntando a um site, por exemplo <code>wget -qO- https://ifconfig.me/ip</code>. Veja <a href="curl-wget.html">curl, wget, dig</a>.</p>
+
+<hr>
+
+<h2>Quando não funciona</h2>
+
+<div class="cenario">
+<strong>"Nome ou serviço desconhecido"</strong>
+<pre class="term">$ ping -c 2 debian.org
+ping: debian.org: Nome ou serviço desconhecido</pre>
+<p><strong>O que aconteceu:</strong> o computador não conseguiu transformar o nome em IP. É um problema de DNS, ou falta de rede por completo.</p>
+<p><strong>Como confirmar:</strong> teste um IP direto, sem nome: <code>ping -c 2 1.1.1.1</code>. Se o IP responde e o nome não, o problema é o DNS. Confira os servidores em <code>cat /etc/resolv.conf</code>.</p>
+<p><strong>Como resolver:</strong> veja <a href="configurar-rede.html">Configurar a Rede</a>.</p>
+</div>
+
+<div class="cenario">
+<strong>100% de perda de pacotes</strong>
+<pre class="term">$ ping -c 3 -W 1 192.168.0.50
+PING 192.168.0.50 (192.168.0.50) 56(84) bytes of data.
+
+--- 192.168.0.50 ping statistics ---
+3 packets transmitted, 0 received, 100% packet loss, time 2050ms</pre>
+<p><strong>O que aconteceu:</strong> o destino não respondeu. Ele pode estar desligado, num IP diferente ou bloqueando ping.</p>
+<p><strong>Como confirmar:</strong> faça ping no seu gateway (o <code>via</code> do <code>ip r</code>). Se nem o gateway responde, o problema é a sua própria conexão.</p>
+</div>
+
+<div class="cenario">
+<strong>A placa aparece DOWN ou sem IP</strong>
+<pre class="term">$ ip -br a
+lo               UNKNOWN        127.0.0.1/8 ::1/128
+enp1s0           DOWN</pre>
+<p><strong>O que aconteceu:</strong> a placa está desligada ou o cabo está solto (falta o <code>LOWER_UP</code> no <code>ip a</code>).</p>
+<p><strong>Como resolver:</strong> confira o cabo. Num servidor Debian com ifupdown, suba a placa como root com <code>ifup enp1s0</code>. Detalhes em <a href="configurar-rede.html">Configurar a Rede</a>.</p>
+</div>
+
+<div class="cenario">
+<strong>"ifconfig: comando não encontrado"</strong>
+<pre class="term">$ ifconfig
+bash: ifconfig: comando não encontrado</pre>
+<p><strong>O que aconteceu:</strong> o <code>ifconfig</code> é do pacote antigo <code>net-tools</code>, que não vem no Debian. Além disso, ele fica em <code>/usr/sbin</code>, que não está no PATH da usuária comum.</p>
+<p><strong>Como resolver:</strong> use <code>ip a</code>. Não há necessidade de instalar o net-tools.</p>
+</div>
+
+<div class="cenario">
+<strong>O ss não mostra o programa</strong>
+<p><strong>O que aconteceu:</strong> sem root, a coluna <code>Process</code> fica vazia para portas de outros usuários.</p>
+<p><strong>Como resolver:</strong> rode como root: <code>su -</code> e depois <code>ss -tulpn</code>, ou <code>su -c 'ss -tulpn'</code>.</p>
+</div>
+
+<hr>
+
+<h2>Referência rápida</h2>
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Comando</th><th>Faz</th></tr>
+<tr><td><code>ip -br -c a</code></td><td>Endereços, uma linha por placa, com cores</td></tr>
+<tr><td><code>ip a show &lt;placa&gt;</code></td><td>Detalhes de uma placa</td></tr>
+<tr><td><code>ip r</code></td><td>Rotas e gateway</td></tr>
+<tr><td><code>ip route get &lt;ip&gt;</code></td><td>Por onde sai um destino</td></tr>
+<tr><td><code>ip neigh</code></td><td>Vizinhos conhecidos (ARP)</td></tr>
+<tr><td><code>ip -s link</code></td><td>Estatísticas de tráfego e erros</td></tr>
+<tr><td><code>ping -c 4 &lt;destino&gt;</code></td><td>Testa resposta com 4 pacotes</td></tr>
+<tr><td><code>ss -tulpn</code></td><td>Portas escutando (programa só como root)</td></tr>
+<tr><td><code>ss -tn</code></td><td>Conexões TCP ativas</td></tr>
+<tr><td><code>hostname -I</code></td><td>Só os endereços IP</td></tr>
+</table>
+</div>
+
+<hr>
+
+<h2>Exercícios</h2>
+
+<div class="exercise">
+<h3>1. Endereços resumidos</h3>
+<p>Complete para ver os endereços de todas as placas, uma por linha:</p>
+<div class="ex-code">ip <input data-answer="-br a|-br addr|-br address|-brief a|-br -c a|-c -br a" aria-label="opções"></div>
+</div>
+
+<div class="exercise">
+<h3>2. Ping limitado</h3>
+<p>Complete para enviar exatamente 5 pacotes ao gateway:</p>
+<div class="ex-code">ping <input data-answer="-c 5|-c5" aria-label="opção"> 192.168.0.1</div>
+</div>
+
+<div class="exercise">
+<h3>3. Portas</h3>
+<p>Complete para listar as portas TCP e UDP escutando, com números e o programa:</p>
+<div class="ex-code">ss <input data-answer="-tulpn|-tlunp|-lntup|-tulnp|-plntu|-ltunp" aria-label="opções"></div>
+</div>
+
+<div class="mc" data-answer="2">
+<p class="mc-q">4. No <code>ip r</code>, qual linha mostra o gateway?</p>
+<label><input type="radio" name="q4"> A que começa com <code>192.168.0.0/24</code></label>
+<label><input type="radio" name="q4"> A que começa com <code>default via</code></label>
+<label><input type="radio" name="q4"> A que tem <code>scope link</code></label>
+<label><input type="radio" name="q4"> Nenhuma; o gateway só aparece no <code>ip a</code></label>
+</div>
+
+<div class="mc" data-answer="3">
+<p class="mc-q">5. <code>ping -c 1 nada.invalid; echo $?</code> mostra qual código?</p>
+<label><input type="radio" name="q5"> 0</label>
+<label><input type="radio" name="q5"> 1</label>
+<label><input type="radio" name="q5"> 2</label>
+<label><input type="radio" name="q5"> 127</label>
+</div>
+
+<div class="mc" data-answer="4">
+<p class="mc-q">6. A Ana rodou <code>ss -tulpn</code> e a coluna Process veio vazia. Por quê?</p>
+<label><input type="radio" name="q6"> O SSH está parado.</label>
+<label><input type="radio" name="q6"> Faltou instalar o net-tools.</label>
+<label><input type="radio" name="q6"> A opção <code>-p</code> não existe no Debian.</label>
+<label><input type="radio" name="q6"> Usuária comum não vê os processos de outros usuários; é preciso root.</label>
+</div>
+
+<hr>
+
+<h2>Resumo</h2>
+<ul>
+  <li><code>ip -br a</code> mostra o IP de cada placa; <code>ip a</code>, todos os detalhes.</li>
+  <li><code>ip r</code> mostra o gateway na linha <code>default via</code>; sem ela não há internet.</li>
+  <li><code>ping -c N</code> testa resposta; código 0 = respondeu, 1 = sem resposta, 2 = erro (como nome inexistente).</li>
+  <li><code>ss -tulpn</code> lista as portas abertas; o nome do programa só aparece como root.</li>
+  <li>No Debian, <code>ifconfig</code> e <code>netstat</code> não existem: use <code>ip</code> e <code>ss</code>.</li>
+</ul>
+
+<div class="pager"></div>
+
+</div>
+</main>
+</div>
+<script src="assets/site.js"></script>
+</body>
+</html>

@@ -1,0 +1,362 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Debian RAID com mdadm — espelhar discos e trocar um disco com defeito | Guia Debian</title>
+<meta name="description" content="Aprenda RAID por software no Debian 13 com mdadm: níveis 0, 1, 5 e 10, criar um espelho, ler /proc/mdstat, salvar o mdadm.conf, simular a falha de um disco e reconstruir, com saídas reais do mdadm 4.4.">
+<link rel="stylesheet" href="assets/style.css">
+<script>try{var t=localStorage.getItem("tema");if(t)document.documentElement.setAttribute("data-theme",t)}catch(e){}</script>
+</head>
+<body>
+<div class="layout">
+<nav class="sidebar" id="sidebar" aria-label="Tópicos"></nav>
+<main class="main">
+<div class="content">
+
+<div class="pager"></div>
+
+<h1>Debian <span class="hl">RAID (mdadm)</span></h1>
+
+<p class="intro">Discos quebram. <strong>RAID</strong> (<em>Redundant Array of Independent Disks</em>, "conjunto redundante de discos independentes") junta vários discos para que a falha de um não leve seus dados junto. No Debian, o RAID por software é feito pelo próprio kernel e controlado pelo programa <code>mdadm</code>.</p>
+
+<div class="note">
+<strong>Você vai aprender</strong>
+<ul>
+  <li>Os níveis de RAID mais usados e quanto espaço cada um entrega.</li>
+  <li>Criar um espelho (RAID 1) e responder às perguntas do <code>mdadm</code>.</li>
+  <li>Ler o <code>/proc/mdstat</code> e o <code>mdadm --detail</code>.</li>
+  <li>Salvar a configuração no lugar certo do Debian.</li>
+  <li>Simular um disco com defeito, removê-lo e reconstruir com um disco novo.</li>
+</ul>
+</div>
+
+<div class="warning">
+<strong>RAID não é backup</strong>
+<p>RAID protege contra a <em>falha de um disco</em>. Ele não protege contra arquivo apagado por engano, vírus, incêndio ou erro de comando: o que você apaga num disco é apagado no outro na mesma hora. Continue fazendo <a href="backup.html">backup</a>.</p>
+</div>
+
+<p>Os comandos rodam como <strong>root</strong> (<code>su -</code>) na máquina fictícia <strong>servidor</strong>. As saídas vêm de um Debian 13 real com mdadm 4.4. O <code>mdadm</code> responde em inglês.</p>
+
+<hr>
+
+<h2>Conceito: os níveis de RAID</h2>
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Nível</th><th>Como funciona</th><th>Discos mínimos</th><th>Espaço útil (4 discos de 1 TB)</th><th>Aguenta perder</th></tr>
+<tr><td><strong>RAID 0</strong></td><td>Divide os dados entre os discos (mais rápido)</td><td>2</td><td>4 TB</td><td><strong>Nenhum</strong> disco</td></tr>
+<tr><td><strong>RAID 1</strong></td><td>Cópia idêntica em todos os discos (espelho)</td><td>2</td><td>1 TB</td><td>Todos menos um</td></tr>
+<tr><td><strong>RAID 5</strong></td><td>Dados + paridade espalhada</td><td>3</td><td>3 TB</td><td>1 disco</td></tr>
+<tr><td><strong>RAID 6</strong></td><td>Dados + paridade dupla</td><td>4</td><td>2 TB</td><td>2 discos</td></tr>
+<tr><td><strong>RAID 10</strong></td><td>Espelhos combinados (1 + 0)</td><td>4</td><td>2 TB</td><td>1 disco de cada espelho</td></tr>
+</table>
+</div>
+
+<p>Para um servidor pequeno com dois discos, o RAID 1 é a escolha mais comum: simples e seguro.</p>
+
+<hr>
+
+<h2>Laboratório seguro</h2>
+<p>Instale o <code>mdadm</code> e crie três "discos" de 512 MB com arquivos (dois para o espelho, um para ser o disco de troca):</p>
+
+<pre class="term" data-host="servidor" data-user="root" data-cwd="~/lab">#> apt install mdadm
+#> truncate -s 512M m1.img m2.img m3.img
+#> losetup -f --show m1.img
+/dev/loop0
+#> losetup -f --show m2.img
+/dev/loop1
+#> losetup -f --show m3.img
+/dev/loop2</pre>
+
+<p>O pacote <code>mdadm</code> do Debian também traz timers do systemd (<code>mdcheck_start.timer</code> e <code>mdcheck_continue.timer</code>) que fazem verificações periódicas dos arrays, e cria o <code>/etc/mdadm/mdadm.conf</code> com <code>MAILADDR root</code>: os avisos de falha vão para o e-mail do root.</p>
+
+<hr>
+
+<h2>Criar um espelho (RAID 1)</h2>
+
+<dl class="anatomy">
+  <dt>mdadm --create /dev/md0</dt><dd>Cria um array novo chamado <code>/dev/md0</code> (<em>md</em> = <em>multiple devices</em>).</dd>
+  <dt>--level=1</dt><dd>RAID 1, espelho.</dd>
+  <dt>--raid-devices=2</dt><dd>Quantos discos fazem parte do array.</dd>
+  <dt>/dev/loop0 /dev/loop1</dt><dd>Os discos (num servidor real: <code>/dev/sdb /dev/sdc</code>).</dd>
+</dl>
+
+<p>O <code>mdadm</code> 4.4 faz <strong>duas perguntas</strong> antes de criar:</p>
+
+<pre class="term" data-host="servidor" data-user="root">#> mdadm --create /dev/md0 --level=1 --raid-devices=2 /dev/loop0 /dev/loop1
+To optimalize recovery speed, it is recommended to enable write-indent bitmap, do you want to enable it now? [y/N]? y
+mdadm: Note: this array has metadata at the start and
+    may not be suitable as a boot device.  If you plan to
+    store '/boot' on this device please ensure that
+    your boot-loader understands md/v1.x metadata, or use
+    --metadata=0.90
+Continue creating array [y/N]? y
+mdadm: Defaulting to version 1.2 metadata
+mdadm: array /dev/md0 started.</pre>
+
+<ol>
+  <li><strong>Bitmap:</strong> um pequeno mapa que registra quais áreas mudaram. Se um disco cair e voltar, o array só ressincroniza o que mudou, em vez de copiar tudo. Responda <code>y</code>.</li>
+  <li><strong>Metadados no início do disco:</strong> só importa se você for colocar o <code>/boot</code> no array. Para dados, responda <code>y</code>.</li>
+</ol>
+
+<p>Em scripts, evite as perguntas passando as respostas como opções: <code>--bitmap=internal --run</code>.</p>
+
+<hr>
+
+<h2>Ler o estado: <code>/proc/mdstat</code></h2>
+<p>O kernel mostra todos os arrays nesse arquivo. Logo depois de criar, o espelho começa a se sincronizar:</p>
+
+<pre class="term" data-host="servidor" data-user="root">#> cat /proc/mdstat
+Personalities : [raid6] [raid5] [raid4] [raid1]
+md0 : active raid1 loop1[1] loop0[0]                            « o array e seus discos
+      523264 blocks super 1.2 [2/2] [UU]                        « 2 de 2 discos, ambos "U" (up)
+      [==========&gt;..........]  resync = 50.8% (266240/523264) finish=0.2min speed=17749K/sec
+      bitmap: 1/1 pages [4KB], 65536KB chunk
+
+unused devices: &lt;none&gt;</pre>
+
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Trecho</th><th>Significado</th></tr>
+<tr><td><code>active raid1</code></td><td>Array funcionando, nível 1</td></tr>
+<tr><td><code>loop1[1] loop0[0]</code></td><td>Os discos e a posição de cada um</td></tr>
+<tr><td><code>[2/2]</code></td><td>Discos esperados / discos funcionando</td></tr>
+<tr><td><code>[UU]</code></td><td>Um caractere por disco: <code>U</code> = ok, <code>_</code> = faltando</td></tr>
+<tr><td><code>resync</code> / <code>recovery</code></td><td>Sincronização inicial / reconstrução depois de uma troca</td></tr>
+<tr><td><code>(F)</code> e <code>(S)</code></td><td>Disco com falha (<em>failed</em>) e disco reserva (<em>spare</em>)</td></tr>
+</table>
+</div>
+
+<h3>Detalhes: <code>mdadm --detail</code></h3>
+<pre class="term" data-host="servidor" data-user="root">#> mdadm --detail /dev/md0
+/dev/md0:
+           Version : 1.2
+     Creation Time : Thu Oct 15 22:50:40 2026
+        Raid Level : raid1
+        Array Size : 523264 (511.00 MiB 535.82 MB)
+     Used Dev Size : 523264 (511.00 MiB 535.82 MB)
+      Raid Devices : 2
+     Total Devices : 2
+       Persistence : Superblock is persistent
+
+     Intent Bitmap : Internal
+
+       Update Time : Thu Oct 15 22:50:56 2026
+             State : clean, resyncing                          « funcionando, ainda sincronizando
+    Active Devices : 2
+   Working Devices : 2
+    Failed Devices : 0
+     Spare Devices : 0
+
+Consistency Policy : bitmap
+
+     Resync Status : 50% complete
+
+              Name : servidor:0  (local to host servidor)
+              UUID : 032d52dd:a7737174:c586c48f:26832879
+            Events : 9
+
+    Number   Major   Minor   RaidDevice State
+       0       7        0        0      active sync   /dev/loop0
+       1       7        1        1      active sync   /dev/loop1</pre>
+
+<p>Você pode usar o array enquanto ele sincroniza; só fica um pouco mais lento.</p>
+
+<hr>
+
+<h2>Usar o RAID</h2>
+<p>Para o resto do sistema, <code>/dev/md0</code> é um disco comum: formate e monte.</p>
+<pre class="term" data-host="servidor" data-user="root">#> mkfs.ext4 -q /dev/md0
+#> mkdir -p /mnt/raid
+#> mount /dev/md0 /mnt/raid
+#> echo teste &gt; /mnt/raid/a.txt</pre>
+
+<hr>
+
+<h2>Salvar a configuração (essencial)</h2>
+<p>Para o array voltar com o mesmo nome depois de reiniciar, registre-o no arquivo de configuração. No Debian ele fica em <strong><code>/etc/mdadm/mdadm.conf</code></strong>:</p>
+
+<pre class="term" data-host="servidor" data-user="root">#> mdadm --detail --scan
+ARRAY /dev/md0 metadata=1.2 UUID=032d52dd:a7737174:c586c48f:26832879
+#> mdadm --detail --scan &gt;&gt; /etc/mdadm/mdadm.conf
+#> update-initramfs -u
+update-initramfs: Generating /boot/initrd.img-6.12.111+deb13-amd64</pre>
+
+<p>O <code>update-initramfs -u</code> copia a configuração para a imagem de inicialização, que é quem monta os arrays bem no começo do boot. Para o array ser montado automaticamente, adicione-o ao <code>/etc/fstab</code> pelo UUID do sistema de arquivos (veja <a href="montar.html">mount e fstab</a>).</p>
+
+<div class="warning">
+<strong>Sem esse passo</strong>
+<p>Depois de reiniciar, o array pode voltar com outro nome, como <code>/dev/md127</code>, e o <code>fstab</code> que usava <code>/dev/md0</code> deixa de funcionar.</p>
+</div>
+
+<hr>
+
+<h2>Simular um disco com defeito e trocá-lo</h2>
+<p>O treino mais importante: o que fazer quando um disco quebra. Primeiro, marque um disco como falho:</p>
+
+<ol class="passo">
+  <li><strong>Marque a falha</strong> (num servidor real, o kernel faz isso sozinho quando o disco dá erro):
+<pre class="term" data-host="servidor" data-user="root">#> mdadm /dev/md0 --fail /dev/loop1
+#> cat /proc/mdstat
+Personalities : [raid6] [raid5] [raid4] [raid1]
+md0 : active raid1 loop1[1](F) loop0[0]                        « (F) = falhou
+      523264 blocks super 1.2 [2/1] [U_]                       « só 1 de 2 funcionando
+      bitmap: 1/1 pages [4KB], 65536KB chunk
+
+unused devices: &lt;none&gt;
+#> cat /mnt/raid/a.txt
+teste                                                          « os dados continuam acessíveis</pre></li>
+  <li><strong>Remova o disco quebrado</strong> do array:
+<pre class="term" data-host="servidor" data-user="root">#> mdadm /dev/md0 --remove /dev/loop1
+mdadm: hot removed /dev/loop1 from /dev/md0</pre></li>
+  <li><strong>Troque o disco</strong> fisicamente (no laboratório, o "disco novo" é o <code>/dev/loop2</code>) e <strong>adicione</strong>:
+<pre class="term" data-host="servidor" data-user="root">#> mdadm /dev/md0 --add /dev/loop2
+mdadm: added /dev/loop2
+#> cat /proc/mdstat
+Personalities : [raid6] [raid5] [raid4] [raid1]
+md0 : active raid1 loop2[2] loop0[0]
+      523264 blocks super 1.2 [2/1] [U_]
+      [======&gt;..............]  recovery = 32.0% (167936/523264) finish=0.4min speed=13994K/sec   « copiando
+      bitmap: 1/1 pages [4KB], 65536KB chunk
+
+unused devices: &lt;none&gt;</pre></li>
+  <li><strong>Acompanhe</strong> até o <code>[UU]</code> voltar. Enquanto isso, o <code>--detail</code> mostra o disco novo como <code>spare rebuilding</code>:
+<pre class="term" data-host="servidor" data-user="root">#> mdadm --detail /dev/md0 | tail -3
+    Number   Major   Minor   RaidDevice State
+       0       7        0        0      active sync   /dev/loop0
+       2       7        2        1      spare rebuilding   /dev/loop2</pre></li>
+</ol>
+
+<div class="tip">
+<strong>Acompanhar ao vivo</strong>
+<p><code>watch -n 2 cat /proc/mdstat</code> atualiza a tela a cada 2 segundos. Saia com <kbd>Ctrl</kbd>+<kbd>C</kbd>.</p>
+</div>
+
+<hr>
+
+<h2>Outros níveis</h2>
+<p>O comando é o mesmo; mudam o <code>--level</code> e a quantidade de discos. Um RAID 5 com três discos, sem perguntas:</p>
+<pre class="term" data-host="servidor" data-user="root">#> mdadm --create /dev/md1 --level=5 --raid-devices=3 /dev/loop0 /dev/loop1 /dev/loop2 --run
+mdadm: Defaulting to version 1.2 metadata
+mdadm: array /dev/md1 started.
+#> cat /proc/mdstat
+Personalities : [raid6] [raid5] [raid4] [raid1]
+md1 : active raid5 loop2[3](S) loop1[1] loop0[0]
+      1044480 blocks super 1.2 level 5, 512k chunk, algorithm 2 [3/2] [UU_]
+
+unused devices: &lt;none&gt;</pre>
+
+<p>Repare no detalhe: logo depois de criar, o RAID 5 monta a paridade tratando o terceiro disco como reserva <code>(S)</code> e reconstruindo para ele. Quando terminar, o estado vira <code>[3/3] [UUU]</code>. O espaço útil é de dois discos (1044480 blocos ≈ 1 GB), porque um disco inteiro de espaço vai para a paridade.</p>
+
+<hr>
+
+<h2>Desmontar o laboratório</h2>
+<pre class="term" data-host="servidor" data-user="root" data-cwd="~/lab">#> umount /mnt/raid
+#> mdadm --stop /dev/md0
+mdadm: stopped /dev/md0
+#> mdadm --zero-superblock /dev/loop0 /dev/loop1 /dev/loop2     « apaga a marca de RAID dos discos
+#> losetup -d /dev/loop0 /dev/loop1 /dev/loop2
+#> rm m1.img m2.img m3.img</pre>
+
+<hr>
+
+<h2>Quando não funciona</h2>
+
+<div class="cenario">
+<strong>"mdadm: create aborted."</strong>
+<pre class="term" data-host="servidor" data-user="root">Continue creating array [y/N]? n
+mdadm: create aborted.</pre>
+<p><strong>O que aconteceu:</strong> você respondeu <code>n</code> (ou só apertou <kbd>Enter</kbd>, que vale <code>N</code>) na pergunta final.</p>
+<p><strong>Como resolver:</strong> rode de novo e responda <code>y</code>, ou use <code>--run</code> para não perguntar.</p>
+</div>
+
+<div class="cenario">
+<strong>O array voltou como <code>/dev/md127</code> depois de reiniciar</strong>
+<p><strong>O que aconteceu:</strong> a configuração não foi salva no <code>/etc/mdadm/mdadm.conf</code> ou o initramfs não foi atualizado.</p>
+<p><strong>Como resolver:</strong> confira com <code>cat /proc/mdstat</code>, salve com <code>mdadm --detail --scan &gt;&gt; /etc/mdadm/mdadm.conf</code> (apague linhas repetidas), rode <code>update-initramfs -u</code> e reinicie.</p>
+</div>
+
+<div class="cenario">
+<strong>"[2/1] [U_]" e ninguém percebeu</strong>
+<p><strong>O que aconteceu:</strong> um disco falhou e o array seguiu funcionando, degradado. Se o segundo disco falhar, os dados se perdem.</p>
+<p><strong>Como resolver:</strong> troque o disco o quanto antes. Para ser avisado, configure o e-mail do administrador: a linha <code>MAILADDR</code> do <code>/etc/mdadm/mdadm.conf</code> (o Debian já vem com <code>MAILADDR root</code>) e um servidor de e-mail funcionando.</p>
+</div>
+
+<div class="cenario">
+<strong>"Unrecognised md component device"</strong>
+<pre class="term" data-host="servidor" data-user="root">#> mdadm --zero-superblock /dev/loop2
+mdadm: Unrecognised md component device - /dev/loop2</pre>
+<p><strong>O que aconteceu:</strong> o disco não tem marca de RAID. Não é um erro grave: não havia nada para apagar.</p>
+</div>
+
+<hr>
+
+<h2>Referência rápida</h2>
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Comando</th><th>O que faz</th></tr>
+<tr><td><code>mdadm --create /dev/md0 --level=1 --raid-devices=2 /dev/sdb /dev/sdc</code></td><td>Cria um espelho</td></tr>
+<tr><td><code>cat /proc/mdstat</code></td><td>Estado de todos os arrays</td></tr>
+<tr><td><code>mdadm --detail /dev/md0</code></td><td>Detalhes de um array</td></tr>
+<tr><td><code>mdadm --detail --scan &gt;&gt; /etc/mdadm/mdadm.conf</code></td><td>Salva a configuração</td></tr>
+<tr><td><code>update-initramfs -u</code></td><td>Atualiza a imagem de boot com a configuração</td></tr>
+<tr><td><code>mdadm /dev/md0 --fail /dev/sdc</code></td><td>Marca um disco como falho</td></tr>
+<tr><td><code>mdadm /dev/md0 --remove /dev/sdc</code></td><td>Remove um disco do array</td></tr>
+<tr><td><code>mdadm /dev/md0 --add /dev/sdd</code></td><td>Adiciona um disco (reconstrução automática)</td></tr>
+<tr><td><code>mdadm --stop /dev/md0</code></td><td>Para um array</td></tr>
+<tr><td><code>mdadm --zero-superblock /dev/sdb</code></td><td>Apaga a marca de RAID de um disco</td></tr>
+</table>
+</div>
+
+<hr>
+
+<h2>Exercícios</h2>
+
+<div class="exercise">
+<h3>1. Espelho</h3>
+<p>Complete para criar um RAID 1 com dois discos:</p>
+<div class="ex-code">mdadm --create /dev/md0 --level=<input data-answer="1" aria-label="nível"> --raid-devices=<input data-answer="2" aria-label="discos"> /dev/sdb /dev/sdc</div>
+</div>
+
+<div class="exercise">
+<h3>2. Onde salvar</h3>
+<p>No Debian, qual é o caminho do arquivo de configuração do mdadm?</p>
+<div class="ex-code"><input data-answer="/etc/mdadm/mdadm.conf" aria-label="caminho"></div>
+</div>
+
+<div class="mc" data-answer="2">
+<p class="mc-q">3. O <code>/proc/mdstat</code> mostra <code>[2/1] [U_]</code>. O que significa?</p>
+<label><input type="radio" name="q3"> O array está sincronizando pela primeira vez.</label>
+<label><input type="radio" name="q3"> O array está degradado: só 1 dos 2 discos funciona.</label>
+<label><input type="radio" name="q3"> O array tem um disco reserva.</label>
+<label><input type="radio" name="q3"> Os dois discos estão funcionando.</label>
+</div>
+
+<div class="mc" data-answer="4">
+<p class="mc-q">4. Quatro discos de 2 TB em RAID 5 entregam quanto espaço útil?</p>
+<label><input type="radio" name="q4"> 2 TB</label>
+<label><input type="radio" name="q4"> 4 TB</label>
+<label><input type="radio" name="q4"> 8 TB</label>
+<label><input type="radio" name="q4"> 6 TB</label>
+</div>
+
+<hr>
+
+<h2>Resumo</h2>
+<ul>
+  <li>RAID 1 espelha, RAID 5/6 usam paridade, RAID 0 só ganha velocidade (sem proteção).</li>
+  <li><code>mdadm --create</code> cria; o mdadm 4.4 pergunta sobre o <em>bitmap</em> e sobre os metadados.</li>
+  <li><code>/proc/mdstat</code>: <code>[UU]</code> é saudável, <code>[U_]</code> é degradado, <code>(F)</code> é disco falho.</li>
+  <li>Salve em <code>/etc/mdadm/mdadm.conf</code> e rode <code>update-initramfs -u</code>.</li>
+  <li>Troca de disco: <code>--fail</code> → <code>--remove</code> → trocar → <code>--add</code> → esperar o <code>[UU]</code>.</li>
+  <li>RAID não substitui backup.</li>
+</ul>
+
+<div class="pager"></div>
+
+</div>
+</main>
+</div>
+<script src="assets/site.js"></script>
+</body>
+</html>

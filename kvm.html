@@ -1,0 +1,370 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Debian KVM e virt-manager — máquinas virtuais | Guia Debian</title>
+<meta name="description" content="Máquinas virtuais no Debian 13 com KVM, QEMU e libvirt: verificar o suporte do processador, instalar, grupos libvirt e kvm, a rede default que vem desligada no Debian, virsh, virt-install, virt-manager e virtualização aninhada.">
+<link rel="stylesheet" href="assets/style.css">
+<script>try{var t=localStorage.getItem("tema");if(t)document.documentElement.setAttribute("data-theme",t)}catch(e){}</script>
+</head>
+<body>
+<div class="layout">
+<nav class="sidebar" id="sidebar" aria-label="Tópicos"></nav>
+<main class="main">
+<div class="content">
+
+<div class="pager"></div>
+
+<h1>Debian <span class="hl">KVM e virt-manager</span></h1>
+
+<p class="intro">Uma <strong>máquina virtual</strong> (VM) é um computador inteiro de mentira rodando dentro do seu: com disco, memória, placa de rede e o sistema que você quiser, até Windows. No Linux, o motor é o <strong>KVM</strong>, que vem no próprio kernel, mais o <strong>QEMU</strong>, que simula o hardware, e o <strong>libvirt</strong>, que organiza tudo. O <code>virt-manager</code> é a janela para clicar; o <code>virsh</code> é o comando para o terminal.</p>
+
+<div class="note">
+<strong>Você vai aprender</strong>
+<ul>
+  <li>Quem é quem: KVM, QEMU, libvirt, virsh, virt-install e virt-manager.</li>
+  <li>Verificar se o seu processador aguenta VMs rápidas.</li>
+  <li>Instalar no Debian e liberar o acesso para a sua usuária.</li>
+  <li>Ligar a rede <code>default</code>, que no Debian vem <strong>desligada</strong>.</li>
+  <li>Criar, listar, ligar e apagar VMs pelo terminal.</li>
+  <li>O que é virtualização aninhada, e por que a VM deste guia não a tem.</li>
+</ul>
+</div>
+
+<p>As saídas vêm do Debian 13 de laboratório (libvirt 11.3.0, QEMU 10.0.13). Esse Debian é, ele mesmo, uma VM do VirtualBox, e isso aparece nos testes.</p>
+
+<hr>
+
+<h2>Conceito: as peças</h2>
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Peça</th><th>O que faz</th><th>Pacote no Debian</th></tr>
+<tr><td><strong>KVM</strong></td><td>Parte do kernel que usa o processador para rodar VMs em velocidade quase nativa</td><td>(já vem no kernel)</td></tr>
+<tr><td><strong>QEMU</strong></td><td>Simula o resto do hardware (disco, rede, tela). Sem KVM, simula até o processador, mas fica muito lento</td><td><code>qemu-system-x86</code></td></tr>
+<tr><td><strong>libvirt</strong></td><td>Serviço que guarda as definições das VMs, das redes e dos discos</td><td><code>libvirt-daemon-system</code></td></tr>
+<tr><td><strong>virsh</strong></td><td>Comando do libvirt no terminal</td><td><code>libvirt-clients</code></td></tr>
+<tr><td><strong>virt-install</strong></td><td>Cria VMs pelo terminal</td><td><code>virtinst</code></td></tr>
+<tr><td><strong>virt-manager</strong></td><td>Interface gráfica</td><td><code>virt-manager</code></td></tr>
+</table>
+</div>
+
+<hr>
+
+<h2>Passo 1: o processador aguenta?</h2>
+<p>O KVM precisa das extensões de virtualização do processador: <strong>VT-x</strong> (Intel) ou <strong>AMD-V</strong> (AMD). Elas aparecem como <code>vmx</code> ou <code>svm</code> em <code>/proc/cpuinfo</code>.</p>
+
+<dl class="anatomy">
+  <dt>grep -E -c</dt><dd><code>-E</code> = expressão regular estendida, <code>-c</code> = só contar as linhas.</dd>
+  <dt>'(vmx|svm)'</dt><dd>"vmx ou svm".</dd>
+  <dt>/proc/cpuinfo</dt><dd>As informações do processador, uma seção por núcleo.</dd>
+</dl>
+
+<p>Num computador de verdade, com a virtualização ligada na BIOS/UEFI (o número é a quantidade de núcleos, e varia):</p>
+<pre class="term">$ grep -E -c '(vmx|svm)' /proc/cpuinfo
+8                                          « maior que zero: tem suporte
+$ lscpu | grep Virtualização
+Virtualização:                             VT-x
+$ ls -l /dev/kvm
+crw-rw---- 1 root kvm 10, 232 out 15 08:00 /dev/kvm   « o KVM está pronto</pre>
+
+<p>Dentro da VM de laboratório deste guia, a resposta é outra:</p>
+<pre class="term" data-host="notebook">$ grep -E -c '(vmx|svm)' /proc/cpuinfo
+0                                          « o processador "virtual" não tem as extensões
+$ lscpu | grep -E "hipervisor|Tipo de virt"
+Fabricante do hipervisor:                  KVM
+Tipo de virtualização:                     completo         « eu mesmo sou uma VM
+$ systemd-detect-virt
+oracle                                     « …do VirtualBox
+$ ls -l /dev/kvm
+ls: não foi possível acessar '/dev/kvm': Arquivo ou diretório inexistente</pre>
+
+<h3>A ferramenta pronta: <code>kvm-ok</code></h3>
+<p>O pacote <code>cpu-checker</code> traz o <code>kvm-ok</code>, que faz o diagnóstico de uma vez. Ele fica em <code>/usr/sbin</code>, fora do PATH da ana, então rode como root:</p>
+<pre class="term" data-user="root" data-cwd="/root">#> apt install cpu-checker
+#> kvm-ok
+INFO: Your CPU does not support KVM extensions
+KVM acceleration can NOT be used</pre>
+<p>Numa máquina com suporte, a resposta é <code>INFO: /dev/kvm exists</code> e <code>KVM acceleration can be used</code>.</p>
+
+<hr>
+
+<h2>Passo 2: instalar</h2>
+<pre class="term">$ su -
+Senha:</pre>
+<pre class="term" data-user="root" data-cwd="/root">#> apt install qemu-system-x86 libvirt-daemon-system libvirt-clients virtinst virt-manager
+#> virsh --version
+11.3.0
+#> qemu-system-x86_64 --version | head -1
+QEMU emulator version 10.0.13 (Debian 1:10.0.13+ds-0+deb13u1)</pre>
+
+<p>Num servidor sem interface gráfica, deixe o <code>virt-manager</code> de fora: você pode instalá-lo no seu notebook e conectar ao servidor por SSH.</p>
+
+<hr>
+
+<h2>Passo 3: quem pode usar</h2>
+<p>O libvirt tem duas "conexões":</p>
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Conexão</th><th>O que é</th><th>Quem usa</th></tr>
+<tr><td><code>qemu:///system</code></td><td>As VMs do sistema, gerenciadas pelo serviço; podem usar a rede <code>default</code> e ligar no boot</td><td>root e o grupo <code>libvirt</code></td></tr>
+<tr><td><code>qemu:///session</code></td><td>VMs particulares do usuário, com recursos limitados</td><td>Qualquer usuário</td></tr>
+</table>
+</div>
+
+<p>Sem grupo, a ana cai na sessão dela, vazia, e não acessa as VMs do sistema:</p>
+<pre class="term">$ virsh uri
+qemu:///session
+$ virsh -c qemu:///system list
+error: failed to connect to the hypervisor
+error: authentication unavailable: no polkit agent available to authenticate action 'org.libvirt.unix.manage'</pre>
+
+<p>Para liberar, o root coloca a ana no grupo <code>libvirt</code> (e no <code>kvm</code>, para as VMs da sessão dela usarem o KVM):</p>
+<pre class="term" data-user="root" data-cwd="/root">#> getent group libvirt kvm
+libvirt:x:110:
+kvm:x:993:
+#> usermod -aG libvirt,kvm ana</pre>
+<p>Depois de sair e entrar de novo, a ana usa <code>virsh -c qemu:///system …</code>. Para não digitar isso toda vez, acrescente <code>export LIBVIRT_DEFAULT_URI=qemu:///system</code> ao <a href="bashrc.html">.bashrc</a>.</p>
+
+<div class="warning">
+<strong>Atenção: grupo libvirt = poder de root</strong>
+<p>Quem gerencia VMs do sistema pode montar discos e arquivos do computador dentro delas. Dê o grupo só a quem já administraria a máquina.</p>
+</div>
+
+<hr>
+
+<h2>Passo 4: a rede <code>default</code> (desligada no Debian)</h2>
+<p>O libvirt cria uma rede chamada <code>default</code>: uma ponte <code>virbr0</code> com NAT, em <code>192.168.122.0/24</code>, que dá internet às VMs. No Ubuntu ela já vem ligada. <strong>No Debian, não</strong>:</p>
+
+<pre class="term" data-user="root" data-cwd="/root">#> virsh net-list --all
+ Name      State      Autostart   Persistent
+----------------------------------------------
+ default   inactive   no          yes                 « inativa e sem início automático</pre>
+
+<dl class="anatomy">
+  <dt>virsh net-start default</dt><dd>Liga a rede agora.</dd>
+  <dt>virsh net-autostart default</dt><dd>Liga a rede sozinha a cada boot.</dd>
+</dl>
+
+<pre class="term" data-user="root" data-cwd="/root">#> virsh net-start default
+Network default started
+
+#> virsh net-autostart default
+Network default marked as autostarted
+
+#> virsh net-list --all
+ Name      State    Autostart   Persistent
+--------------------------------------------
+ default   active   yes         yes
+#> ip -br a show virbr0
+virbr0           DOWN           192.168.122.1/24       « DOWN só até a primeira VM se conectar</pre>
+
+<p>Esquecer esse passo é a causa número um de "a VM não tem internet" ou de "Network not found: no network with matching name 'default'".</p>
+
+<hr>
+
+<h2>Passo 5: criar uma VM</h2>
+<h3>Pela janela: <code>virt-manager</code></h3>
+<ol class="passo">
+  <li>Abra o <strong>Gerenciador de máquinas virtuais</strong> pelo menu (ou <code>virt-manager</code> no terminal).</li>
+  <li>Clique em <strong>Criar uma nova máquina virtual</strong> e escolha <strong>Mídia de instalação local</strong>.</li>
+  <li>Aponte a ISO (por exemplo, a <code>debian-13-amd64-netinst.iso</code>), defina memória, CPUs e disco.</li>
+  <li>Na última tela, confira a rede: <strong>Rede virtual 'default': NAT</strong>.</li>
+</ol>
+
+<h3>Pelo terminal: <code>virt-install</code></h3>
+<dl class="anatomy">
+  <dt>--name debian-teste</dt><dd>O nome da VM.</dd>
+  <dt>--memory 2048 --vcpus 2</dt><dd>2 GB de memória e 2 processadores.</dd>
+  <dt>--disk size=20</dt><dd>Cria um disco novo de 20 GB (em <code>/var/lib/libvirt/images</code>).</dd>
+  <dt>--cdrom …iso</dt><dd>A ISO de instalação.</dd>
+  <dt>--osinfo debian13</dt><dd>Diz o sistema, para o libvirt escolher bons padrões (<code>virt-install --osinfo list</code> mostra os nomes).</dd>
+  <dt>--network network=default</dt><dd>Liga a VM à rede <code>default</code>.</dd>
+</dl>
+
+<pre class="term" data-user="root" data-cwd="/root">#> virt-install --name debian-teste --memory 2048 --vcpus 2 --disk size=20 \
+     --cdrom /var/lib/libvirt/images/debian-13-amd64-netinst.iso \
+     --osinfo debian13 --network network=default</pre>
+
+<p>Para conferir as mensagens reais sem instalar nada, criamos na VM de laboratório uma VM mínima, sem disco e sem rede:</p>
+<pre class="term" data-user="root" data-cwd="/root">#> virt-install --name teste --memory 256 --vcpus 1 --disk none --network none --pxe --osinfo detect=on,require=off --noautoconsole --graphics none
+Iniciando instalação...
+Criando o domínio...                                        |         00:00
+
+O domínio ainda está em execução. A instalação pode estar em andamento.
+Você pode se reconectar ao console para concluir o processo de instalação.</pre>
+
+<p>O <code>virt-install</code> fala português; o <code>virsh</code>, como você vai ver, fala inglês. "Domínio" (<em>domain</em>) é o nome que o libvirt dá às VMs.</p>
+
+<hr>
+
+<h2>Passo 6: gerenciar com <code>virsh</code></h2>
+<pre class="term" data-user="root" data-cwd="/root">#> virsh list --all
+ Id   Name    State
+-----------------------
+ 1    teste   running
+#> virsh dominfo teste
+Id:             1
+Name:           teste
+UUID:           97ea5a7c-b0c5-4189-9d6b-a5d7ee14f22e
+OS Type:        hvm
+State:          running
+CPU(s):         1
+CPU time:       0,8s
+Max memory:     262144 KiB
+#> virsh shutdown teste
+Domain 'teste' is being shutdown
+#> virsh destroy teste
+Domain 'teste' destroyed
+#> virsh undefine teste
+Domain 'teste' has been undefined</pre>
+
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Comando</th><th>O que faz</th><th>Comparação</th></tr>
+<tr><td><code>virsh start vm</code></td><td>Liga</td><td>Apertar o botão de energia</td></tr>
+<tr><td><code>virsh shutdown vm</code></td><td>Pede para desligar</td><td>Desligar pelo menu do sistema</td></tr>
+<tr><td><code>virsh destroy vm</code></td><td>Desliga na hora</td><td>Tirar da tomada (não apaga nada, apesar do nome)</td></tr>
+<tr><td><code>virsh undefine vm</code></td><td>Apaga a definição da VM</td><td>Jogar o gabinete fora (o disco fica, a menos que use <code>--remove-all-storage</code>)</td></tr>
+<tr><td><code>virsh autostart vm</code></td><td>Liga a VM no boot do Debian</td><td>—</td></tr>
+<tr><td><code>virsh console vm</code></td><td>Console de texto da VM (sai com <kbd>Ctrl</kbd>+<kbd>]</kbd>)</td><td>—</td></tr>
+</table>
+</div>
+
+<hr>
+
+<h2>Sem KVM: o que acontece?</h2>
+<p>O libvirt ainda funciona, mas o QEMU passa a simular o processador por software. O <code>virt-host-validate</code> explica:</p>
+<pre class="term" data-user="root" data-cwd="/root">#> virt-host-validate qemu
+  QEMU: Checking for hardware virtualization                                 : FAIL (Host not compatible with KVM; HW virtualization CPU features not found. Only emulated CPUs are available; performance will be significantly limited)
+  QEMU: Checking if device '/dev/vhost-net' exists                           : PASS
+  QEMU: Checking if device '/dev/net/tun' exists                             : PASS
+  QEMU: Checking for cgroup 'cpu' controller support                         : PASS
+…
+#> virsh capabilities | grep -o "domain type=.[a-z]*." | sort -u
+domain type='qemu'                         « só emulação; com KVM, apareceria também domain type='kvm'</pre>
+
+<p>Na prática, uma VM emulada é dezenas de vezes mais lenta: serve para testes curtos, não para uso diário.</p>
+
+<h3>Virtualização aninhada</h3>
+<p>Rodar uma VM dentro de outra VM se chama <strong>virtualização aninhada</strong>. É o caso do Debian de laboratório: ele roda no VirtualBox, que não repassa o VT-x por padrão. No computador de fora:</p>
+<pre class="term" data-host="computador-de-fora">$ VBoxManage showvminfo debian-guia --machinereadable | grep nested-hw-virt
+nested-hw-virt="off"
+$ VBoxManage modifyvm debian-guia --nested-hw-virt on       « com a VM desligada</pre>
+<p>No KVM, o equivalente é o módulo <code>kvm_intel</code> ou <code>kvm_amd</code> com a opção <code>nested=1</code> no computador de fora.</p>
+
+<hr>
+
+<h2>Formas diferentes de ter VMs no Debian</h2>
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Forma</th><th>Melhor quando…</th></tr>
+<tr><td><code>virt-manager</code></td><td>Desktop, poucas VMs, quer ver a tela</td></tr>
+<tr><td><code>virt-install</code> + <code>virsh</code></td><td>Servidores, scripts, automação</td></tr>
+<tr><td>GNOME Boxes</td><td>O jeito mais simples no desktop GNOME</td></tr>
+<tr><td><a href="incus.html">Incus</a> com <code>--vm</code></td><td>Já usa Incus para containers e quer VMs no mesmo comando</td></tr>
+<tr><td>VirtualBox</td><td>Precisa do mesmo programa no Windows/macOS (não vem nos repositórios do Debian)</td></tr>
+<tr><td>Proxmox VE</td><td>Um servidor dedicado só para VMs, com painel web (é baseado em Debian)</td></tr>
+</table>
+</div>
+
+<hr>
+
+<h2>Quando não funciona</h2>
+
+<div class="cenario">
+<strong>"KVM acceleration can NOT be used" num computador de verdade</strong>
+<p><strong>O que aconteceu:</strong> a virtualização está desligada na BIOS/UEFI (é o mais comum), ou o processador é muito antigo.</p>
+<p><strong>Como resolver:</strong> reinicie, entre na configuração da placa-mãe e ligue "Intel Virtualization Technology", "VT-x", "SVM Mode" ou "AMD-V".</p>
+</div>
+
+<div class="cenario">
+<strong>"Network not found: no network with matching name 'default'" ou VM sem internet</strong>
+<p><strong>O que aconteceu:</strong> no Debian, a rede <code>default</code> vem inativa. <strong>Como resolver:</strong> <code>virsh net-start default</code> e <code>virsh net-autostart default</code>, como root.</p>
+</div>
+
+<div class="cenario">
+<strong>"authentication unavailable: no polkit agent available"</strong>
+<p><strong>O que aconteceu:</strong> a usuária tentou usar <code>qemu:///system</code> sem estar no grupo <code>libvirt</code>. <strong>Como resolver:</strong> como root, <code>usermod -aG libvirt ana</code>; depois saia e entre de novo.</p>
+</div>
+
+<div class="cenario">
+<strong>As VMs criadas pela ana não aparecem no virt-manager (ou o contrário)</strong>
+<p><strong>O que aconteceu:</strong> uma está em <code>qemu:///session</code> e a outra em <code>qemu:///system</code>. São listas separadas. <strong>Como confirmar:</strong> <code>virsh uri</code>.</p>
+</div>
+
+<div class="cenario">
+<strong>VirtualBox e KVM ao mesmo tempo</strong>
+<p><strong>O que aconteceu:</strong> os dois querem o VT-x com exclusividade; uma VM de um deles pode falhar ao ligar enquanto o outro está rodando.</p>
+<p><strong>Como resolver:</strong> use um de cada vez (desligue as VMs do outro).</p>
+</div>
+
+<hr>
+
+<h2>Referência</h2>
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Comando</th><th>O que faz</th></tr>
+<tr><td><code>grep -E -c '(vmx|svm)' /proc/cpuinfo</code></td><td>Suporte do processador</td></tr>
+<tr><td><code>kvm-ok</code> (root)</td><td>Diagnóstico pronto</td></tr>
+<tr><td><code>virt-host-validate qemu</code></td><td>Checklist do host</td></tr>
+<tr><td><code>virsh list --all</code></td><td>Todas as VMs</td></tr>
+<tr><td><code>virsh net-list --all</code></td><td>Redes</td></tr>
+<tr><td><code>virsh net-start</code> / <code>net-autostart default</code></td><td>Liga a rede padrão</td></tr>
+<tr><td><code>virsh start</code> / <code>shutdown</code> / <code>destroy</code> / <code>undefine</code></td><td>Ciclo de vida</td></tr>
+<tr><td><code>virt-install --osinfo list</code></td><td>Nomes de sistemas conhecidos</td></tr>
+<tr><td><code>virsh uri</code></td><td>Qual conexão está em uso</td></tr>
+</table>
+</div>
+
+<hr>
+
+<h2>Exercícios</h2>
+
+<div class="exercise">
+<h3>1. Contar o suporte</h3>
+<p>Complete para contar as linhas com <code>vmx</code> ou <code>svm</code>:</p>
+<div class="ex-code">grep -E <input data-answer="-c" aria-label="opção"> '(vmx|svm)' /proc/cpuinfo</div>
+</div>
+
+<div class="exercise">
+<h3>2. A rede no boot</h3>
+<p>Complete para a rede <code>default</code> ligar sozinha a cada boot:</p>
+<div class="ex-code">virsh <input data-answer="net-autostart" aria-label="subcomando"> default</div>
+</div>
+
+<div class="mc" data-answer="2">
+<p class="mc-q">3. O que o <code>virsh destroy vm</code> faz?</p>
+<label><input type="radio" name="q3"> Apaga a VM e o disco.</label>
+<label><input type="radio" name="q3"> Desliga a VM na hora, como tirar da tomada, sem apagar nada.</label>
+<label><input type="radio" name="q3"> Apaga só o disco.</label>
+<label><input type="radio" name="q3"> Reinicia a VM.</label>
+</div>
+
+<div class="mc" data-answer="4">
+<p class="mc-q">4. Dentro de uma VM do VirtualBox, <code>grep -E -c '(vmx|svm)' /proc/cpuinfo</code> mostra 0. Por quê?</p>
+<label><input type="radio" name="q4"> O Debian não suporta KVM.</label>
+<label><input type="radio" name="q4"> Falta instalar o libvirt.</label>
+<label><input type="radio" name="q4"> A ana não está no grupo kvm.</label>
+<label><input type="radio" name="q4"> A virtualização aninhada está desligada no VirtualBox.</label>
+</div>
+
+<hr>
+
+<h2>Resumo</h2>
+<ul>
+  <li>KVM (kernel) + QEMU (hardware) + libvirt (organização) = VMs no Linux.</li>
+  <li>Confira <code>vmx</code>/<code>svm</code> e <code>/dev/kvm</code>; sem eles, só emulação lenta.</li>
+  <li>Instale <code>qemu-system-x86 libvirt-daemon-system virtinst virt-manager</code> como root.</li>
+  <li>Grupo <code>libvirt</code> para gerenciar as VMs do sistema (equivale a root).</li>
+  <li>No Debian, ligue a rede: <code>virsh net-start default</code> e <code>net-autostart default</code>.</li>
+</ul>
+
+<div class="pager"></div>
+
+</div>
+</main>
+</div>
+<script src="assets/site.js"></script>
+</body>
+</html>

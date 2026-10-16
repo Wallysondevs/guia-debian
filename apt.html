@@ -1,0 +1,364 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Debian apt — instalar, atualizar e remover programas | Guia Debian</title>
+<meta name="description" content="Aprenda o apt no Debian 13: update, upgrade, install, remove, purge, autoremove, search, show e policy, sempre como root com su -, com as mensagens reais do apt 3 em português.">
+<link rel="stylesheet" href="assets/style.css">
+<script>try{var t=localStorage.getItem("tema");if(t)document.documentElement.setAttribute("data-theme",t)}catch(e){}</script>
+</head>
+<body>
+<div class="layout">
+<nav class="sidebar" id="sidebar" aria-label="Tópicos"></nav>
+<main class="main">
+<div class="content">
+
+<div class="pager"></div>
+
+<h1>Debian <span class="hl">apt</span></h1>
+
+<p class="intro">No Debian, os programas vêm em <strong>pacotes</strong>, baixados dos servidores do projeto. O <code>apt</code> (de <em>Advanced Package Tool</em>) é a ferramenta que procura, instala, atualiza e remove esses pacotes. Ele foi criado no próprio Debian e depois adotado pelo Ubuntu e por dezenas de outras distribuições.</p>
+
+<div class="note">
+<strong>Você vai aprender</strong>
+<ul>
+  <li>O que são pacotes, repositórios e dependências.</li>
+  <li>Por que, no Debian, o <code>apt</code> é usado como root (com <code>su -</code>).</li>
+  <li>A diferença entre <code>update</code>, <code>upgrade</code> e <code>full-upgrade</code>.</li>
+  <li>Procurar, instalar, remover e limpar pacotes.</li>
+  <li>As mensagens reais do apt 3 e o que fazer quando ele reclama.</li>
+</ul>
+</div>
+
+<hr>
+
+<h2>Pacotes, repositórios e dependências</h2>
+<ul>
+  <li>Um <strong>pacote</strong> é um arquivo <code>.deb</code> com o programa e as informações de instalação.</li>
+  <li>Um <strong>repositório</strong> é um servidor com milhares de pacotes. O Debian usa <code>deb.debian.org</code> (pacotes) e <code>security.debian.org</code> (correções de segurança). A lista fica em <code>/etc/apt/sources.list</code> (veja <a href="repositorios.html">Repositórios</a>).</li>
+  <li>Uma <strong>dependência</strong> é outro pacote de que o programa precisa. O apt as instala sozinho.</li>
+</ul>
+
+<h3>Quem pode usar o apt</h3>
+<p>Instalar e remover programas muda o sistema inteiro, então exige o administrador. Como a ana, o apt avisa:</p>
+
+<pre class="term">$ apt install htop
+Erro: Não foi possível abrir arquivo de trava /var/lib/dpkg/lock-frontend - open (13: Permissão negada)
+Erro: Não é possível adquirir a trava da interface do dpkg (/var/lib/dpkg/lock-frontend), você é root?</pre>
+
+<p>Por isso, nesta aula, os comandos rodam como root, depois de um <code>su -</code> (prompt <code>#</code>). Se o seu Debian tem <code>sudo</code> liberado, escreva <code>sudo</code> antes de cada comando. Veja <a href="root-su-sudo.html">root, su e sudo</a>.</p>
+
+<pre class="term">$ su -
+Senha:
+#> </pre>
+
+<div class="note">
+<strong>Comandos que não precisam de root</strong>
+<p><code>apt search</code>, <code>apt show</code>, <code>apt list</code> e <code>apt policy</code> só consultam informações e funcionam também como ana.</p>
+</div>
+
+<hr>
+
+<h2>update e upgrade: não é a mesma coisa</h2>
+
+<dl class="anatomy">
+  <dt>apt</dt><dd>O gerenciador de pacotes.</dd>
+  <dt>update</dt><dd>Baixa a <strong>lista</strong> de pacotes e versões disponíveis. Não instala nada.</dd>
+</dl>
+
+<pre class="term">#> apt update
+Atingido:1 http://security.debian.org/debian-security trixie-security InRelease
+Atingido:2 http://deb.debian.org/debian trixie InRelease
+Atingido:3 http://deb.debian.org/debian trixie-updates InRelease
+Todos os pacotes estão atualizados.</pre>
+
+<p>Cada linha é um repositório consultado. <code>Atingido</code> quer dizer que a lista não mudou desde a última vez; <code>Obter</code> quer dizer que uma lista nova foi baixada. A última linha diz se há algo para atualizar; quando há, aparece algo como <code>3 pacotes podem ser atualizados. Execute 'apt list --upgradable' para vê-los.</code></p>
+
+<dl class="anatomy">
+  <dt>apt</dt><dd>O gerenciador de pacotes.</dd>
+  <dt>upgrade</dt><dd>Instala as versões novas dos pacotes que já estão instalados.</dd>
+</dl>
+
+<pre class="term">#> apt upgrade
+Resumo:
+  Atualizando: 0, Instalando: 0, Removendo: 0, Não atualizando: 0</pre>
+
+<p>Antes do resumo, o apt mostra linhas de progresso como <code>Lendo listas de pacotes...</code> e <code>Calculando atualização...</code>; elas foram omitidas aqui. Zero em tudo quer dizer que não havia nada para atualizar.</p>
+
+<p>A ordem certa é sempre <strong>primeiro <code>update</code>, depois <code>upgrade</code></strong>: o upgrade só sabe das versões novas que o update baixou.</p>
+
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Comando</th><th>O que faz</th></tr>
+<tr><td><code>apt update</code></td><td>Atualiza a lista do que existe nos repositórios</td></tr>
+<tr><td><code>apt upgrade</code></td><td>Atualiza os pacotes instalados, sem remover nenhum</td></tr>
+<tr><td><code>apt full-upgrade</code></td><td>Atualiza mesmo que precise instalar ou <strong>remover</strong> pacotes para resolver dependências</td></tr>
+<tr><td><code>apt list --upgradable</code></td><td>Mostra o que tem atualização</td></tr>
+</table>
+</div>
+
+<div class="tip">
+<strong>Rotina recomendada</strong>
+<p><code>apt update &amp;&amp; apt upgrade</code>. O <code>&amp;&amp;</code> só roda o segundo comando se o primeiro der certo. O <code>full-upgrade</code> fica para quando o <code>upgrade</code> diz que "não atualizou" alguns pacotes, e para a troca de versão do Debian (veja <a href="upgrade-versao.html">Atualizar a Versão do Debian</a>).</p>
+</div>
+
+<hr>
+
+<h2>Achar o nome do pacote</h2>
+<p>O nome do pacote nem sempre é o nome do programa. Procure com <code>search</code>, que olha o nome e a descrição:</p>
+
+<pre class="term">$ apt search htop
+Ordenando...
+Pesquisa de texto completo...
+aha/stable 0.5.1-3 amd64
+  ANSI color to HTML converter
+
+bashtop/stable 0.9.25-1 all
+  Resource monitor that shows usage and stats
+
+htop/stable 3.4.1-5 amd64
+  visualizador de processos interativo</pre>
+
+<p>Cada resultado mostra <code>nome/origem versão arquitetura</code> e a descrição. A origem <code>stable</code> é a versão estável do Debian (a 13, "trixie"). Algumas descrições estão traduzidas, outras não.</p>
+
+<p>Para ver os detalhes de um pacote, use <code>show</code>:</p>
+
+<pre class="term">$ apt show htop
+Package: htop
+Version: 3.4.1-5
+Priority: optional
+Section: utils
+Maintainer: Daniel Lange &lt;DLange@debian.org&gt;
+Installed-Size: 434 kB
+Depends: libc6 (&gt;= 2.38), libncursesw6 (&gt;= 6), libtinfo6 (&gt;= 6)
+Suggests: lm-sensors, lsof, strace
+Homepage: https://htop.dev/
+Download-Size: 171 kB
+APT-Sources: http://deb.debian.org/debian trixie/main amd64 Packages
+Description: visualizador de processos interativo
+ Htop é um visualizador de processos baseado em ncurses similar ao top, mas
+ permite percorrer a lista verticalmente e horizontalmente para ver</pre>
+
+<p>Os campos importantes: <code>Version</code> (versão), <code>Depends</code> (dependências), <code>Installed-Size</code> (espaço depois de instalado) e <code>APT-Sources</code> (de qual repositório vem).</p>
+
+<h3>O aviso "does not have a stable CLI interface"</h3>
+<p>Se você mandar a saída do apt para outro comando ou arquivo, ele avisa:</p>
+
+<pre class="term">$ apt search htop | head -3
+
+WARNING: apt does not have a stable CLI interface. Use with caution in scripts.
+
+Ordenando...</pre>
+
+<p>Não é erro. O apt foi feito para pessoas, e o formato da saída pode mudar entre versões. Em scripts, use os comandos mais antigos <code>apt-get</code> e <code>apt-cache</code>, que mantêm o formato estável.</p>
+
+<hr>
+
+<h2>Instalar</h2>
+
+<dl class="anatomy">
+  <dt>apt</dt><dd>O gerenciador.</dd>
+  <dt>install</dt><dd>Instalar.</dd>
+  <dt>htop</dt><dd>Um ou mais nomes de pacote, separados por espaço.</dd>
+</dl>
+
+<pre class="term" id="apt-install">#> apt install htop
+Instalando:
+  htop
+
+Pacotes sugeridos:
+  lm-sensors  lsof  strace
+
+Resumo:
+  Atualizando: 0, Instalando: 1, Removendo: 0, Não atualizando: 0
+  Tamanho de download: 171 kB
+  Espaço necessário: 434 kB / 21,6 GB disponível
+
+Obter:1 http://deb.debian.org/debian trixie/main amd64 htop amd64 3.4.1-5 [171 kB]
+Obtidos 171 kB em 0s (612 kB/s)
+Selecionando pacote previamente não selecionado htop.
+Preparando para desempacotar .../htop_3.4.1-5_amd64.deb ...
+Desempacotando htop (3.4.1-5) ...
+Configurando htop (3.4.1-5) ...
+Processando gatilhos para man-db (2.13.1-1) ...</pre>
+
+<p>O apt mostra antes o que vai fazer (<strong>Instalando</strong>, <strong>Pacotes sugeridos</strong>, <strong>Resumo</strong>). Quando a instalação traz outros pacotes junto, ele pergunta <code>Você quer continuar? [S/n]</code>: <kbd>Enter</kbd> ou <code>S</code> confirma, <code>n</code> cancela. Os "sugeridos" não são instalados; são só ideias de pacotes que combinam. Se o pacote já estiver instalado, a resposta é <code>htop já é a versão mais nova (3.4.1-5).</code></p>
+
+<h3>Formas diferentes de instalar</h3>
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Comando</th><th>O que faz</th></tr>
+<tr><td><code>apt install htop tree curl</code></td><td>Vários de uma vez</td></tr>
+<tr><td><code>apt install -y htop</code></td><td>Responde "sim" sozinho (scripts)</td></tr>
+<tr><td><code>apt install --no-install-recommends pacote</code></td><td>Não instala os pacotes "recomendados", só os obrigatórios</td></tr>
+<tr><td><code>apt install ./programa.deb</code></td><td>Instala um <code>.deb</code> baixado, resolvendo as dependências (veja <a href="dpkg.html">dpkg</a>)</td></tr>
+<tr><td><code>apt reinstall htop</code></td><td>Reinstala um pacote estragado</td></tr>
+<tr><td>Aplicativo "Programas" (GNOME Software)</td><td>Instala pela interface gráfica, se você instalou o GNOME</td></tr>
+</table>
+</div>
+
+<hr>
+
+<h2>Remover: remove, purge e autoremove</h2>
+
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Comando</th><th>Remove o programa?</th><th>Remove as configurações do sistema?</th></tr>
+<tr><td><code>apt remove htop</code></td><td>Sim</td><td>Não (ficam em <code>/etc</code>, se houver)</td></tr>
+<tr><td><code>apt purge htop</code></td><td>Sim</td><td>Sim</td></tr>
+<tr><td><code>apt autoremove</code></td><td>Remove dependências que ninguém mais usa</td><td>—</td></tr>
+</table>
+</div>
+
+<pre class="term" id="apt-remove">#> apt remove htop
+REMOVENDO:
+  htop
+
+Resumo:
+  Atualizando: 0, Instalando: 0, Removendo: 1, Não atualizando: 0
+  Espaço liberado: 434 kB
+
+Você quer continuar? [S/n] S
+(Lendo banco de dados ... 33975 arquivos e diretórios atualmente instalados).
+Removendo htop (3.4.1-5) ...
+Processando gatilhos para man-db (2.13.1-1) ...</pre>
+
+<p>Em maiúsculas, <code>REMOVENDO</code> chama a atenção de propósito: confira a lista antes de confirmar. Se aparecerem pacotes que você não esperava (por exemplo, o ambiente gráfico inteiro), responda <code>n</code>.</p>
+
+<div class="warning">
+<strong>Atenção com o -y na remoção</strong>
+<p><code>apt remove -y</code> não mostra a pergunta. Um nome errado pode levar junto dezenas de pacotes. Na dúvida, rode sem <code>-y</code> e leia a lista.</p>
+</div>
+
+<hr>
+
+<h2>Outras tarefas úteis</h2>
+
+<h3>De onde vem e qual versão: apt policy</h3>
+<pre class="term">$ apt policy htop
+htop:
+  Instalado: (nenhum)
+  Candidato: 3.4.1-5
+  Tabela de versão:
+     3.4.1-5 500
+        500 http://deb.debian.org/debian trixie/main amd64 Packages</pre>
+
+<p><code>Instalado</code> é a versão que você tem; <code>Candidato</code>, a que o apt instalaria. O número 500 é a prioridade do repositório; ele importa quando você usa <a href="backports.html">backports</a>.</p>
+
+<h3>Listar</h3>
+<pre class="term">$ apt list --installed | wc -l
+307</pre>
+
+<h3>Limpar o cache</h3>
+<p>Os <code>.deb</code> baixados ficam em <code>/var/cache/apt/archives/</code>. <code>apt clean</code> apaga todos; <code>apt autoclean</code> apaga só os que não estão mais nos repositórios.</p>
+
+<hr>
+
+<h2>Quando não funciona</h2>
+
+<div class="cenario">
+<strong>"você é root?"</strong>
+<pre class="term">$ apt install htop
+Erro: Não foi possível abrir arquivo de trava /var/lib/dpkg/lock-frontend - open (13: Permissão negada)
+Erro: Não é possível adquirir a trava da interface do dpkg (/var/lib/dpkg/lock-frontend), você é root?</pre>
+<p><strong>O que aconteceu:</strong> você rodou como usuário comum.</p>
+<p><strong>Como resolver:</strong> <code>su -</code> e repita (ou <code>sudo apt install htop</code>, se tiver sudo).</p>
+</div>
+
+<div class="cenario">
+<strong>"Aguardando por trava de cache"</strong>
+<pre class="term">#> apt install htop
+Aguardando por trava de cache: Não foi possível obter a trava /var/lib/dpkg/lock-frontend. Ela está sendo mantida pelo processo 9748 (apt-get)... 36s</pre>
+<p><strong>O que aconteceu:</strong> outro programa está instalando pacotes (outro terminal, a atualização automática ou o aplicativo Programas). Só um pode mexer nos pacotes por vez.</p>
+<p><strong>Como resolver:</strong> espere; o apt continua sozinho quando a trava for liberada. Veja quem é com <code>ps -p 9748 -o pid,etime,args</code>. <strong>Não apague</strong> os arquivos de trava.</p>
+</div>
+
+<div class="cenario">
+<strong>"Não é possível encontrar o pacote"</strong>
+<pre class="term">#> apt install pacoteinexistente
+Erro: Não é possível encontrar o pacote pacoteinexistente</pre>
+<p><strong>O que aconteceu:</strong> o nome está errado, a lista está desatualizada, ou o pacote está num componente que você não ativou (como <code>contrib</code> ou <code>non-free</code>).</p>
+<p><strong>Como resolver:</strong> <code>apt update</code>, depois <code>apt search parte-do-nome</code>. Se for software não livre, veja <a href="repositorios.html">Repositórios</a>.</p>
+</div>
+
+<div class="cenario">
+<strong>"dpkg foi interrompido"</strong>
+<p><strong>O que aconteceu:</strong> uma instalação anterior parou no meio (queda de energia, terminal fechado).</p>
+<p><strong>Como resolver:</strong> como root, <code>dpkg --configure -a</code> e depois <code>apt -f install</code>.</p>
+</div>
+
+<hr>
+
+<h2>Referência</h2>
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Comando (como root)</th><th>Descrição</th></tr>
+<tr><td><code>apt update</code></td><td>Atualiza a lista de pacotes</td></tr>
+<tr><td><code>apt upgrade</code></td><td>Atualiza o que está instalado</td></tr>
+<tr><td><code>apt full-upgrade</code></td><td>Atualiza podendo instalar/remover pacotes</td></tr>
+<tr><td><code>apt install pacote</code></td><td>Instala (<code>-y</code> confirma sozinho)</td></tr>
+<tr><td><code>apt reinstall pacote</code></td><td>Reinstala</td></tr>
+<tr><td><code>apt remove pacote</code></td><td>Remove, mantendo configurações</td></tr>
+<tr><td><code>apt purge pacote</code></td><td>Remove tudo, inclusive configurações</td></tr>
+<tr><td><code>apt autoremove</code></td><td>Remove dependências órfãs</td></tr>
+<tr><td><code>apt clean</code> / <code>autoclean</code></td><td>Limpa o cache de .deb</td></tr>
+<tr><th>Consulta (qualquer usuário)</th><th></th></tr>
+<tr><td><code>apt search texto</code></td><td>Procura no nome e na descrição</td></tr>
+<tr><td><code>apt show pacote</code></td><td>Detalhes</td></tr>
+<tr><td><code>apt policy pacote</code></td><td>Versão instalada, candidata e origem</td></tr>
+<tr><td><code>apt list --installed</code> / <code>--upgradable</code></td><td>Lista pacotes</td></tr>
+</table>
+</div>
+
+<hr>
+
+<h2>Exercícios</h2>
+
+<div class="exercise">
+<h3>1. A rotina</h3>
+<p>Complete a rotina de atualização (como root):</p>
+<div class="ex-code">apt <input data-answer="update" aria-label="primeiro"> &amp;&amp; apt <input data-answer="upgrade|full-upgrade" aria-label="segundo"></div>
+</div>
+
+<div class="exercise">
+<h3>2. Remover tudo</h3>
+<p>Qual subcomando remove o pacote <strong>e</strong> as configurações dele?</p>
+<div class="ex-code">apt <input data-answer="purge" aria-label="subcomando"> htop</div>
+</div>
+
+<div class="mc" data-answer="3">
+<p class="mc-q">3. Como ana, você roda <code>apt install htop</code> e vê "você é root?". O que fazer?</p>
+<label><input type="radio" name="q3"> Apagar o arquivo de trava.</label>
+<label><input type="radio" name="q3"> Rodar <code>apt update</code>.</label>
+<label><input type="radio" name="q3"> Virar root com <code>su -</code> e repetir.</label>
+<label><input type="radio" name="q3"> Reiniciar o computador.</label>
+</div>
+
+<div class="mc" data-answer="1">
+<p class="mc-q">4. O que o <code>apt update</code> faz?</p>
+<label><input type="radio" name="q4"> Baixa a lista de pacotes disponíveis, sem instalar nada.</label>
+<label><input type="radio" name="q4"> Atualiza todos os programas.</label>
+<label><input type="radio" name="q4"> Atualiza o Debian para a próxima versão.</label>
+<label><input type="radio" name="q4"> Atualiza só o kernel.</label>
+</div>
+
+<hr>
+
+<h2>Resumo</h2>
+<ul>
+  <li>O apt instala, atualiza e remove pacotes; no Debian, use-o como root (<code>su -</code>).</li>
+  <li><code>update</code> baixa a lista; <code>upgrade</code> instala as atualizações.</li>
+  <li><code>remove</code> mantém configurações; <code>purge</code> apaga tudo; <code>autoremove</code> limpa órfãos.</li>
+  <li><code>search</code>, <code>show</code> e <code>policy</code> funcionam sem root.</li>
+  <li>Leia o resumo antes de confirmar, principalmente a lista <code>REMOVENDO</code>.</li>
+</ul>
+
+<div class="pager"></div>
+
+</div>
+</main>
+</div>
+<script src="assets/site.js"></script>
+</body>
+</html>

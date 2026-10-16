@@ -1,0 +1,454 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Debian Preseed — instalação automática explicada | Guia Debian</title>
+<meta name="description" content="Instale o Debian sem responder nenhuma pergunta: o que é o preseed, como o instalador lê o arquivo (file=, url=, initrd), um preseed completo comentado linha a linha, partman, tasksel, late_command e como testar numa VM.">
+<link rel="stylesheet" href="assets/style.css">
+<script>try{var t=localStorage.getItem("tema");if(t)document.documentElement.setAttribute("data-theme",t)}catch(e){}</script>
+</head>
+<body>
+<div class="layout">
+<nav class="sidebar" id="sidebar" aria-label="Tópicos"></nav>
+<main class="main">
+<div class="content">
+
+<div class="pager"></div>
+
+<h1>Debian <span class="hl">Instalação Automática (preseed)</span></h1>
+
+<p class="intro">O instalador do Debian faz umas trinta perguntas: idioma, teclado, rede, senha, partições, programas. Para uma máquina, tudo bem. Para dez servidores iguais, ou para uma VM que você recria toda semana, é trabalho repetido e sujeito a erro. O <strong>preseed</strong> ("pré-semear") é um arquivo de texto com todas as respostas prontas: você dá o arquivo ao instalador e ele termina sozinho.</p>
+
+<div class="note">
+<strong>Você vai aprender</strong>
+<ul>
+  <li>Como cada linha de um preseed é montada (dono, pergunta, tipo, valor).</li>
+  <li>As três formas de entregar o arquivo ao instalador: <code>file=</code>, <code>url=</code> e dentro do <code>initrd</code>.</li>
+  <li>Um preseed completo, comentado linha a linha: o mesmo que instalou a VM usada neste guia.</li>
+  <li>Como escolher partições (<code>partman</code>), programas (<code>tasksel</code>) e rodar comandos no fim (<code>late_command</code>).</li>
+  <li>Como descobrir o nome de uma pergunta e testar o arquivo numa VM antes de usar de verdade.</li>
+</ul>
+</div>
+
+<div class="tip">
+<strong>Feito de verdade</strong>
+<p>A máquina de laboratório deste guia (Debian 13.7, usuária <code>ana</code>, máquina <code>notebook</code>) foi instalada com o preseed desta página, sem nenhum clique. As saídas abaixo vêm dela.</p>
+</div>
+
+<hr>
+
+<h2>Conceito: o instalador é um questionário</h2>
+<p>Por baixo dos panos, cada pergunta do instalador é uma <strong>pergunta do debconf</strong>, o sistema de configuração do Debian (o mesmo que faz perguntas quando você instala alguns pacotes). Cada pergunta tem um <strong>nome</strong> único, como <code>passwd/username</code>. O preseed só diz ao debconf: "para a pergunta tal, a resposta já é esta".</p>
+
+<p>Uma linha de preseed tem sempre quatro partes:</p>
+
+<dl class="anatomy">
+  <dt>d-i</dt><dd><strong>Dono</strong> da pergunta. <code>d-i</code> = <em>debian-installer</em>, o próprio instalador. Perguntas de pacotes usam o nome do pacote (<code>tasksel</code>, <code>popularity-contest</code>).</dd>
+  <dt>passwd/username</dt><dd><strong>Nome</strong> da pergunta: "qual o login do primeiro usuário?".</dd>
+  <dt>string</dt><dd><strong>Tipo</strong> da resposta: <code>string</code> (texto), <code>boolean</code> (<code>true</code>/<code>false</code>), <code>select</code> (uma opção), <code>multiselect</code> (várias, separadas por vírgula), <code>password</code>, <code>note</code>.</dd>
+  <dt>ana</dt><dd><strong>Valor</strong>: a resposta. Tudo até o fim da linha.</dd>
+</dl>
+
+<p>Linhas que começam com <code>#</code> são comentários. Uma linha muito longa pode continuar na seguinte terminando com <code>\</code>.</p>
+
+<hr>
+
+<h2>Como o instalador encontra o arquivo</h2>
+<p>O preseed é passado na <strong>linha de boot</strong> do instalador: os parâmetros que você digita (ou que já vêm prontos) antes de ele começar. Há três formas:</p>
+
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Forma</th><th>Parâmetro de boot</th><th>Melhor quando…</th></tr>
+<tr><td><strong>Arquivo no pendrive/ISO</strong></td><td><code>auto=true preseed/file=/cdrom/preseed.cfg</code></td><td>Você monta sua própria mídia de instalação.</td></tr>
+<tr><td><strong>Pela rede</strong></td><td><code>auto=true url=http://192.168.0.10/preseed.cfg</code></td><td>Várias máquinas na mesma rede: o arquivo fica num servidor web e você muda num lugar só.</td></tr>
+<tr><td><strong>Dentro do initrd</strong></td><td>(nenhum: o arquivo <code>/preseed.cfg</code> dentro do <code>initrd.gz</code> é lido sozinho)</td><td>Quando a rede ainda não existe no começo da instalação (perguntas de idioma e rede também ficam respondidas).</td></tr>
+</table>
+</div>
+
+<p>A VM deste guia usou a primeira forma. O próprio instalador deixa a linha de boot registrada no log:</p>
+
+<pre class="term" data-user="root" data-cwd="/root">#> grep -m1 "Command line" /var/log/installer/syslog
+Oct 15 23:10:25 kernel: [    0.000000] Command line: BOOT_IMAGE=/install.amd/vmlinuz vga=788 initrd=/install.amd/initrd.gz --- quiet  auto=true preseed/file=/cdrom/preseed.cfg priority=critical quiet splash noprompt noshell automatic-ubiquity debian-installer/locale=pt_BR keyboard-configuration/layoutcode=us languagechooser/language-name=English localechooser/supported-locales=pt_BR.UTF-8 countrychooser/shortlist=BR --</pre>
+
+<p>As partes que importam:</p>
+
+<dl class="anatomy">
+  <dt>auto=true</dt><dd>Modo automático: adia as perguntas de idioma e rede até o preseed ser carregado, para que ele possa respondê-las.</dd>
+  <dt>preseed/file=/cdrom/preseed.cfg</dt><dd>Onde está o arquivo. <code>/cdrom</code> é a mídia de instalação. A forma curta é <code>file=</code>.</dd>
+  <dt>priority=critical</dt><dd>Só pergunta o que for crítico. Qualquer pergunta que o preseed esquecer e tiver resposta padrão usa o padrão em vez de parar.</dd>
+  <dt>debian-installer/locale=pt_BR</dt><dd>Respostas também podem ir direto na linha de boot, no formato <code>pergunta=valor</code>.</dd>
+</dl>
+
+<div class="note">
+<strong>Linha de boot também conta</strong>
+<p>Repare que essa linha diz <code>keyboard-configuration/layoutcode=us</code>, mas o preseed pede teclado <code>br</code>. Quando os dois respondem a mesma pergunta, vale o que for lido por último, e o arquivo é lido depois da linha de boot. Por isso a VM ficou com teclado ABNT2.</p>
+</div>
+
+<hr>
+
+<h2>Um preseed completo, comentado</h2>
+<p>Este é o arquivo que instalou a VM do guia, só com as senhas e a chave SSH trocadas por marcadores. Ele faz uma instalação "típica" do Debian: português do Brasil, teclado ABNT2, <strong>root com senha</strong> e a usuária comum <strong>sem sudo</strong>, sistema padrão e servidor SSH.</p>
+
+<pre class="file" data-file="preseed.cfg">### Idioma, país e teclado
+d-i debian-installer/locale string pt_BR.UTF-8
+d-i debian-installer/language string pt_BR
+d-i debian-installer/country string BR
+# idiomas extras a gerar (o en_US ajuda a ler erros em inglês)
+d-i localechooser/supported-locales multiselect pt_BR.UTF-8, en_US.UTF-8
+d-i console-setup/ask_detect boolean false
+d-i keyboard-configuration/xkb-keymap select br
+d-i keyboard-configuration/layoutcode string br
+d-i keyboard-configuration/modelcode string abnt2
+
+### Rede
+# escolhe sozinho a primeira placa com cabo/sinal
+d-i netcfg/choose_interface select auto
+d-i netcfg/get_hostname string notebook
+d-i netcfg/get_domain string lan
+# força o nome mesmo que o DHCP sugira outro
+d-i netcfg/hostname string notebook
+
+### Espelho (de onde vêm os pacotes)
+d-i mirror/country string manual
+d-i mirror/http/hostname string deb.debian.org
+d-i mirror/http/directory string /debian
+d-i mirror/http/proxy string
+
+### Relógio e fuso horário
+d-i clock-setup/utc boolean true
+d-i time/zone string America/Sao_Paulo
+d-i clock-setup/ntp boolean true
+
+### Disco (CUIDADO: apaga o disco inteiro)
+d-i partman-auto/disk string /dev/sda
+d-i partman-auto/method string regular
+# atomic = tudo numa partição só (+ swap)
+d-i partman-auto/choose_recipe select atomic
+d-i partman-partitioning/confirm_write_new_label boolean true
+d-i partman/choose_partition select finish
+d-i partman/confirm boolean true
+d-i partman/confirm_nooverwrite boolean true
+
+### Contas
+# root com senha => o primeiro usuário NÃO entra no grupo sudo
+d-i passwd/root-login boolean true
+d-i passwd/root-password-crypted password $6$SAL$HASH-DA-SENHA-DO-ROOT
+d-i passwd/user-fullname string Ana
+d-i passwd/username string ana
+d-i passwd/user-password-crypted password $6$SAL$HASH-DA-SENHA-DA-ANA
+
+### Repositórios e programas
+d-i apt-setup/non-free-firmware boolean true
+d-i apt-setup/services-select multiselect security, updates
+tasksel tasksel/first multiselect standard, ssh-server
+d-i pkgsel/include string openssh-server locales
+# instala as atualizações já durante a instalação
+d-i pkgsel/upgrade select safe-upgrade
+popularity-contest popularity-contest/participate boolean false
+
+### Carregador de boot e fim
+d-i grub-installer/only_debian boolean true
+d-i grub-installer/bootdev string default
+d-i finish-install/reboot_in_progress note
+
+### Comando final: roda no sistema recém-instalado
+d-i preseed/late_command string \
+  in-target sh -c 'mkdir -p /home/ana/.ssh &amp;&amp; echo "ssh-ed25519 AAAA...SUA-CHAVE" &gt; /home/ana/.ssh/authorized_keys &amp;&amp; chmod 700 /home/ana/.ssh &amp;&amp; chmod 600 /home/ana/.ssh/authorized_keys &amp;&amp; chown -R ana:ana /home/ana/.ssh'</pre>
+
+<p>Nas próximas seções, cada bloco é explicado com mais calma.</p>
+
+<hr>
+
+<h2>Senhas: nunca em texto puro</h2>
+<p>O preseed aceita a senha "limpa" (<code>passwd/root-password password segredo</code>), mas qualquer pessoa que veja o arquivo descobre a senha. Use a versão <code>-crypted</code> com um <strong>hash</strong>: uma versão embaralhada da senha que não dá para desembaralhar.</p>
+
+<dl class="anatomy">
+  <dt>mkpasswd</dt><dd>Gera o hash de uma senha (pacote <code>whois</code>).</dd>
+  <dt>-m sha-512</dt><dd>O método. O hash começa com <code>$6$</code>, que o instalador entende.</dd>
+</dl>
+
+<pre class="term">$ mkpasswd -m sha-512
+Senha:                                      « digite a senha (nada aparece)
+$6$U4txSsGiZZKYCDsB$h2S6CGmUOUKFSNIiqInG…   « o hash: copie a linha inteira</pre>
+<p>O <code>mkpasswd</code> vem no pacote <code>whois</code> e fica em <code>/usr/bin</code>, então a ana consegue usar sem root.</p>
+
+<p>Cole a linha inteira que começa com <code>$6$</code> depois de <code>password</code>. Mesmo com hash, trate o arquivo como confidencial: um hash fraco ainda pode ser quebrado por força bruta.</p>
+
+<hr>
+
+<h2>root com senha ou sudo? Uma linha decide</h2>
+<p>Esta é a diferença que mais surpreende quem vem do Ubuntu, e ela nasce no instalador:</p>
+
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Preseed</th><th>Resultado</th></tr>
+<tr><td><code>d-i passwd/root-login boolean true</code> + senha de root</td><td>root tem senha; o primeiro usuário <strong>não</strong> tem sudo (o pacote nem é instalado). Para administrar: <code>su -</code>. É o caso da VM deste guia.</td></tr>
+<tr><td><code>d-i passwd/root-login boolean false</code></td><td>root fica sem senha (bloqueado); o <code>sudo</code> é instalado e o primeiro usuário entra no grupo <code>sudo</code>. Fica igual ao Ubuntu.</td></tr>
+</table>
+</div>
+
+<p>Veja na VM: a ana não tem o grupo <code>sudo</code>, e o comando nem existe.</p>
+<pre class="term">$ groups
+ana cdrom floppy audio dip video plugdev users netdev
+$ sudo ls
+bash: sudo: comando não encontrado</pre>
+
+<p>Detalhes em <a href="root-su-sudo.html">root, su e sudo</a>.</p>
+
+<hr>
+
+<h2>Partições: <code>partman</code></h2>
+<p>O particionador do instalador se chama <strong>partman</strong>. O jeito mais simples é usar uma das três "receitas" prontas, as mesmas da instalação manual:</p>
+
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Receita</th><th>O que cria</th><th>Para quem</th></tr>
+<tr><td><code>atomic</code></td><td>Uma partição <code>/</code> com tudo + swap</td><td>Iniciantes, VMs, a maioria dos usos</td></tr>
+<tr><td><code>home</code></td><td><code>/</code> e <code>/home</code> separados + swap</td><td>Quem quer reinstalar o sistema sem perder os arquivos pessoais</td></tr>
+<tr><td><code>multi</code></td><td><code>/</code>, <code>/home</code>, <code>/var</code> e <code>/tmp</code> separados + swap</td><td>Servidores</td></tr>
+</table>
+</div>
+
+<dl class="anatomy">
+  <dt>d-i partman-auto/method string regular</dt><dd>Partições comuns. Outras opções: <code>lvm</code> (veja <a href="lvm.html">LVM</a>) e <code>crypto</code> (LVM criptografado).</dd>
+  <dt>d-i partman-auto/choose_recipe select atomic</dt><dd>A receita.</dd>
+  <dt>partman/confirm… true</dt><dd>As quatro linhas de confirmação respondem "sim, pode gravar no disco".</dd>
+</dl>
+
+<div class="warning">
+<strong>Atenção: o preseed apaga o disco sem perguntar</strong>
+<p>Com essas linhas, o instalador formata <code>/dev/sda</code> sem nenhuma confirmação. Nunca deixe um pendrive com preseed automático conectado a um computador com dados, e confira o nome do disco (<code>/dev/sda</code>, <code>/dev/nvme0n1</code>, <code>/dev/vda</code>).</p>
+</div>
+
+<p>Na VM, o instalador registrou a receita escolhida:</p>
+<pre class="term" data-user="root" data-cwd="/root">#> grep -A1 "Name: partman-auto/choose_recipe" /var/log/installer/cdebconf/questions.dat
+Name: partman-auto/choose_recipe
+Value: /lib/partman/recipes-amd64/30atomic</pre>
+
+<hr>
+
+<h2>Programas: <code>tasksel</code> e <code>pkgsel</code></h2>
+<p>O <strong>tasksel</strong> instala grupos prontos de programas, as "tarefas". São as caixinhas da tela "Seleção de software" do instalador. A lista real, tirada da VM:</p>
+
+<pre class="term" data-user="root" data-cwd="/root">#> tasksel --list-tasks
+u desktop	ambiente de área de trabalho no Debian
+u gnome-desktop	GNOME
+u xfce-desktop	Xfce
+u gnome-flashback-desktop	GNOME Flashback
+u kde-desktop	KDE Plasma
+u cinnamon-desktop	Cinnamon
+u mate-desktop	MATE
+u lxde-desktop	LXDE
+u lxqt-desktop	LXQt
+u web-server	servidor web
+i ssh-server	servidor SSH                       « i = instalada, u = não instalada
+u laptop	laptop
+u blendsel	Choose a Debian Blend for installation</pre>
+
+<p>No preseed, você usa os nomes da segunda coluna. A tarefa <code>standard</code> (utilitários básicos) não aparece na lista, mas existe e quase sempre vai junto:</p>
+
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Linha</th><th>Resultado</th></tr>
+<tr><td><code>tasksel tasksel/first multiselect standard, ssh-server</code></td><td>Servidor sem interface gráfica (a VM do guia)</td></tr>
+<tr><td><code>tasksel tasksel/first multiselect standard, desktop, gnome-desktop</code></td><td>Desktop com GNOME</td></tr>
+<tr><td><code>tasksel tasksel/first multiselect standard, desktop, xfce-desktop</code></td><td>Desktop leve com Xfce</td></tr>
+<tr><td><code>d-i pkgsel/include string openssh-server vim curl</code></td><td>Pacotes avulsos, além das tarefas</td></tr>
+</table>
+</div>
+
+<hr>
+
+<h2>Comandos no fim: <code>late_command</code></h2>
+<p>O <code>preseed/late_command</code> roda depois que tudo foi instalado, antes do reinício. Detalhe importante: nesse momento o sistema novo está montado em <code>/target</code>, e o instalador ainda está rodando por cima dele.</p>
+
+<dl class="anatomy">
+  <dt>d-i preseed/late_command string</dt><dd>A pergunta e o tipo.</dd>
+  <dt>in-target</dt><dd>Roda o comando <strong>dentro</strong> do sistema novo (como um <code>chroot /target</code>). Sem ele, o comando roda no instalador e os caminhos precisam do prefixo <code>/target</code>.</dd>
+  <dt>sh -c '…'</dt><dd>Um shell para juntar vários comandos com <code>&amp;&amp;</code>.</dd>
+</dl>
+
+<p>Usos comuns: copiar uma chave SSH (como na VM do guia), instalar o <code>sudo</code> e colocar alguém no grupo, baixar um script de configuração.</p>
+
+<pre class="file" data-file="trecho do preseed.cfg">### exemplo: root com senha, mas a ana também ganha sudo
+d-i pkgsel/include string sudo
+d-i preseed/late_command string in-target usermod -aG sudo ana</pre>
+
+<hr>
+
+<h2>Descobrir o nome de uma pergunta</h2>
+<p>Ninguém decora os nomes. Há três jeitos de descobri-los:</p>
+
+<ol class="passo">
+  <li><strong>O exemplo oficial.</strong> O Debian publica um preseed de exemplo com quase tudo comentado: procure "example-preseed.txt" no <a href="https://www.debian.org/releases/trixie/example-preseed.txt">site do Debian</a> e no apêndice B do <a href="https://www.debian.org/releases/stable/amd64/apb.pt.html">Guia de Instalação</a>.</li>
+  <li><strong>O que o instalador respondeu.</strong> Depois de uma instalação manual, as perguntas e respostas ficam em <code>/var/log/installer/cdebconf/questions.dat</code>, e o <code>debconf-get-selections --installer</code> (pacote <code>debconf-utils</code>) as mostra já no formato de preseed.</li>
+  <li><strong>Perguntas de pacotes.</strong> <code>debconf-get-selections | grep pacote</code> mostra as respostas dos pacotes instalados.</li>
+</ol>
+
+<pre class="term" data-user="root" data-cwd="/root">#> apt install debconf-utils
+#> debconf-get-selections --installer | grep -E "passwd/username|tasksel/first"
+d-i	passwd/username	string	ana
+user-setup-udeb	passwd/username	string	ana
+user-setup-udeb	passwd/username-bad	error
+user-setup-udeb	passwd/username-reserved	error
+d-i	tasksel/first	string	standard, ssh-server</pre>
+<p>A saída vem separada por tabulações e traz algumas linhas internas (como as do tipo <code>error</code>), que você pode ignorar. Copie só as que interessam para o seu arquivo.</p>
+
+<p>Esse é o caminho mais seguro para montar um preseed: instale uma vez à mão, do jeito que você quer, e copie as respostas.</p>
+
+<hr>
+
+<h2>Testar antes de usar</h2>
+
+<h3>1. Conferir a sintaxe</h3>
+<p>O <code>debconf-set-selections -c</code> (de <em>check</em>) lê o arquivo e reclama de linhas mal formadas, sem aplicar nada:</p>
+
+<pre class="term" data-user="root" data-cwd="/root">#> debconf-set-selections -c preseed.cfg
+#> echo $?
+0                                           « nenhuma reclamação: sintaxe certa
+#> debconf-set-selections -c ruim.cfg
+warning: Unknown type ana, skipping line 1           « faltou o tipo (string)
+warning: Unknown type booleano, skipping line 3      « o tipo é "boolean", em inglês
+#> echo $?
+0</pre>
+<div class="warning">
+<strong>Atenção: o código de saída é 0 mesmo com avisos</strong>
+<p>Leia a saída. Um script que confia só no <code>$?</code> deixaria passar um preseed com linhas ignoradas. E o teste confere só a <strong>forma</strong> das linhas, não se os nomes das perguntas existem: isso só uma instalação de teste mostra.</p>
+</div>
+
+<h3>2. Instalar numa VM</h3>
+<ol class="passo">
+  <li>Crie uma VM com um disco vazio (VirtualBox, <a href="kvm.html">KVM</a>).</li>
+  <li>Sirva o arquivo pela rede com um servidor web de teste: <code>python3 -m http.server 8000</code> na pasta do <code>preseed.cfg</code>.</li>
+  <li>No menu do instalador, escolha <strong>Advanced options → Automated install</strong>, ou aperte <kbd>Esc</kbd> e digite <code>auto url=http://IP-DO-SEU-PC:8000/preseed.cfg</code>.</li>
+  <li>Acompanhe. Se ele parar numa pergunta, é uma resposta que faltou: anote o nome da tela e acrescente a linha.</li>
+</ol>
+
+<div class="tip">
+<strong>Atalho do VirtualBox</strong>
+<p>O <code>VBoxManage unattended install --script-template=preseed.cfg</code> monta a mídia e passa o arquivo sozinho. Foi assim que a VM deste guia nasceu.</p>
+</div>
+
+<hr>
+
+<h2>Formas diferentes de instalar sem cliques</h2>
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Forma</th><th>Como funciona</th><th>Melhor quando…</th></tr>
+<tr><td>Preseed</td><td>O instalador normal, com as respostas num arquivo</td><td>Máquinas físicas e VMs que precisam de uma instalação "de verdade"</td></tr>
+<tr><td>Imagem de nuvem + cloud-init</td><td>Uma imagem pronta do Debian que se configura no primeiro boot</td><td>Nuvem (AWS, GCP…) e VMs descartáveis</td></tr>
+<tr><td><code>debootstrap</code></td><td>Cria um Debian mínimo dentro de uma pasta, sem instalador</td><td>Containers, chroots, sistemas montados à mão</td></tr>
+<tr><td>FAI (<em>Fully Automatic Installation</em>)</td><td>Ferramenta do Debian para instalar centenas de máquinas por classes</td><td>Laboratórios e data centers</td></tr>
+<tr><td>Instalação manual</td><td>Responder às perguntas</td><td>Uma máquina só</td></tr>
+</table>
+</div>
+
+<hr>
+
+<h2>Quando não funciona</h2>
+
+<div class="cenario">
+<strong>O instalador parou numa pergunta</strong>
+<p><strong>O que aconteceu:</strong> o preseed não respondeu aquela pergunta, ou respondeu com um valor que não existe na lista.</p>
+<p><strong>Como confirmar:</strong> aperte <kbd>Alt</kbd>+<kbd>F4</kbd> no instalador para ver o log (no fim aparece o nome da pergunta). Depois da instalação, o mesmo log fica em <code>/var/log/installer/syslog</code>.</p>
+<p><strong>Como resolver:</strong> acrescente a linha que falta. Use <code>priority=critical</code> na linha de boot para que perguntas não críticas usem o valor padrão.</p>
+</div>
+
+<div class="cenario">
+<strong>Perguntou idioma e teclado antes de ler o arquivo</strong>
+<p><strong>O que aconteceu:</strong> faltou <code>auto=true</code>. Sem ele, o arquivo só é lido depois das primeiras perguntas (idioma, país, teclado, rede).</p>
+<p><strong>Como resolver:</strong> use <code>auto=true</code> na linha de boot, ou coloque o preseed dentro do <code>initrd</code>.</p>
+</div>
+
+<div class="cenario">
+<strong>O <code>late_command</code> "não fez nada"</strong>
+<p><strong>O que aconteceu:</strong> quase sempre falta o <code>in-target</code>, e o comando rodou no instalador em vez do sistema novo. Ou um erro no meio interrompeu a corrente de <code>&amp;&amp;</code>.</p>
+<p><strong>Como resolver:</strong> use <code>in-target</code>, ou o prefixo <code>/target</code> nos caminhos. Procure "late_command" em <code>/var/log/installer/syslog</code> para ver a saída.</p>
+</div>
+
+<div class="cenario">
+<strong>Não consigo usar <code>sudo</code> depois da instalação</strong>
+<p><strong>O que aconteceu:</strong> o preseed tinha <code>passwd/root-login boolean true</code>. Esse é o comportamento esperado do Debian.</p>
+<p><strong>Como resolver:</strong> entre como root com <code>su -</code>, instale o sudo e adicione o usuário ao grupo (veja <a href="root-su-sudo.html">root, su e sudo</a>). Na próxima vez, use <code>root-login false</code> ou o <code>late_command</code> mostrado acima.</p>
+</div>
+
+<hr>
+
+<h2>Referência rápida</h2>
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Pergunta</th><th>Para quê</th><th>Exemplo de valor</th></tr>
+<tr><td><code>debian-installer/locale</code></td><td>Idioma e país</td><td><code>string pt_BR.UTF-8</code></td></tr>
+<tr><td><code>keyboard-configuration/xkb-keymap</code></td><td>Teclado</td><td><code>select br</code></td></tr>
+<tr><td><code>netcfg/get_hostname</code></td><td>Nome da máquina</td><td><code>string servidor</code></td></tr>
+<tr><td><code>mirror/http/hostname</code></td><td>Espelho</td><td><code>string deb.debian.org</code></td></tr>
+<tr><td><code>time/zone</code></td><td>Fuso horário</td><td><code>string America/Sao_Paulo</code></td></tr>
+<tr><td><code>partman-auto/choose_recipe</code></td><td>Receita de partições</td><td><code>select atomic</code></td></tr>
+<tr><td><code>passwd/root-login</code></td><td>root com senha?</td><td><code>boolean false</code> (= sudo)</td></tr>
+<tr><td><code>passwd/username</code></td><td>Login do primeiro usuário</td><td><code>string ana</code></td></tr>
+<tr><td><code>passwd/user-password-crypted</code></td><td>Senha (hash)</td><td><code>password $6$…</code></td></tr>
+<tr><td><code>tasksel/first</code></td><td>Tarefas</td><td><code>multiselect standard, ssh-server</code></td></tr>
+<tr><td><code>pkgsel/include</code></td><td>Pacotes extras</td><td><code>string vim curl</code></td></tr>
+<tr><td><code>pkgsel/upgrade</code></td><td>Atualizar na instalação</td><td><code>select safe-upgrade</code></td></tr>
+<tr><td><code>preseed/late_command</code></td><td>Comando final</td><td><code>string in-target …</code></td></tr>
+</table>
+</div>
+
+<hr>
+
+<h2>Exercícios</h2>
+
+<div class="exercise">
+<h3>1. O tipo certo</h3>
+<p>Complete a linha que responde "sim" à pergunta "habilitar o login do root?":</p>
+<div class="ex-code">d-i passwd/root-login <input data-answer="boolean true" aria-label="tipo e valor"></div>
+</div>
+
+<div class="exercise">
+<h3>2. Desktop com Xfce</h3>
+<p>Complete para instalar o sistema padrão com o ambiente Xfce:</p>
+<div class="ex-code">tasksel tasksel/first multiselect standard, desktop, <input data-answer="xfce-desktop" aria-label="tarefa"></div>
+</div>
+
+<div class="exercise">
+<h3>3. Rodar no sistema novo</h3>
+<p>Que palavra faz o <code>late_command</code> rodar dentro do sistema instalado?</p>
+<div class="ex-code">d-i preseed/late_command string <input data-answer="in-target" aria-label="palavra"> apt-get install -y vim</div>
+</div>
+
+<div class="mc" data-answer="3">
+<p class="mc-q">4. Você quer que o primeiro usuário tenha <code>sudo</code>, como no Ubuntu. Qual linha resolve?</p>
+<label><input type="radio" name="q4"> <code>d-i pkgsel/include string sudo</code> sozinha</label>
+<label><input type="radio" name="q4"> <code>d-i passwd/root-login boolean true</code></label>
+<label><input type="radio" name="q4"> <code>d-i passwd/root-login boolean false</code></label>
+<label><input type="radio" name="q4"> <code>tasksel tasksel/first multiselect sudo</code></label>
+</div>
+
+<div class="mc" data-answer="2">
+<p class="mc-q">5. O instalador perguntou o idioma antes de usar o seu preseed servido por <code>url=</code>. O que faltou na linha de boot?</p>
+<label><input type="radio" name="q5"> <code>priority=low</code></label>
+<label><input type="radio" name="q5"> <code>auto=true</code></label>
+<label><input type="radio" name="q5"> <code>in-target</code></label>
+<label><input type="radio" name="q5"> <code>noshell</code></label>
+</div>
+
+<hr>
+
+<h2>Resumo</h2>
+<ul>
+  <li>Cada linha é <code>dono pergunta tipo valor</code>, por exemplo <code>d-i passwd/username string ana</code>.</li>
+  <li>O instalador recebe o arquivo por <code>file=</code>, <code>url=</code> ou dentro do <code>initrd</code>; use <code>auto=true priority=critical</code>.</li>
+  <li><code>passwd/root-login</code> decide entre "root com senha" (sem sudo) e "sudo como no Ubuntu".</li>
+  <li><code>partman</code> apaga o disco sem perguntar: teste sempre numa VM.</li>
+  <li>Monte o arquivo a partir de uma instalação manual com <code>debconf-get-selections --installer</code>.</li>
+</ul>
+
+<div class="pager"></div>
+
+</div>
+</main>
+</div>
+<script src="assets/site.js"></script>
+</body>
+</html>

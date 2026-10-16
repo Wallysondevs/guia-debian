@@ -1,0 +1,317 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Debian Boot, GRUB e Kernel — do botão ao login | Guia Debian</title>
+<meta name="description" content="Como o Debian 13 inicia: GRUB 2.12 com o menu visível por 5 segundos, /etc/default/grub, update-grub, kernels instalados, initramfs-tools, parâmetros do kernel e systemd-analyze, com saídas reais.">
+<link rel="stylesheet" href="assets/style.css">
+<script>try{var t=localStorage.getItem("tema");if(t)document.documentElement.setAttribute("data-theme",t)}catch(e){}</script>
+</head>
+<body>
+<div class="layout">
+<nav class="sidebar" id="sidebar" aria-label="Tópicos"></nav>
+<main class="main">
+<div class="content">
+
+<div class="pager"></div>
+
+<h1>Debian <span class="hl">Boot, GRUB e Kernel</span></h1>
+
+<p class="intro">Entre apertar o botão de ligar e ver a tela de login, várias peças trabalham em sequência. Quando o sistema não liga, saber qual peça falhou é metade da solução. Nesta aula você vai conhecer o caminho do boot no Debian 13, o menu do GRUB, os kernels instalados e como medir o tempo de inicialização.</p>
+
+<div class="note">
+<strong>Você vai aprender</strong>
+<ul>
+  <li>O caminho do boot: firmware → GRUB → kernel → initramfs → systemd.</li>
+  <li>Ler o menu do GRUB do Debian, que aparece por 5 segundos a cada boot.</li>
+  <li>Mudar o <code>/etc/default/grub</code> e aplicar com <code>update-grub</code>.</li>
+  <li>Ver os kernels instalados e iniciar com o anterior quando o novo falhar.</li>
+  <li>Medir o boot com <code>systemd-analyze</code>.</li>
+</ul>
+</div>
+
+<p>As saídas desta aula vêm de um Debian 13.7 real. Os comandos que alteram o boot precisam de root (<code>su -</code>).</p>
+
+<hr>
+
+<h2>Antes do comando: o caminho do boot</h2>
+<ol class="passo">
+  <li><strong>Firmware (BIOS ou UEFI).</strong> O programa gravado na placa-mãe testa o hardware e procura um disco para iniciar.</li>
+  <li><strong>GRUB.</strong> O carregador de boot (<em>bootloader</em>) do Debian. Mostra o menu e carrega o kernel escolhido.</li>
+  <li><strong>Kernel</strong> (<code>/boot/vmlinuz-…</code>). O núcleo do sistema: conversa com o hardware.</li>
+  <li><strong>initramfs</strong> (<code>/boot/initrd.img-…</code>). Um mini-sistema temporário com o que o kernel precisa para achar e montar o disco de verdade.</li>
+  <li><strong>systemd.</strong> O primeiro programa (PID 1). Monta os discos do <code>/etc/fstab</code>, liga a rede e os serviços, e mostra o login.</li>
+</ol>
+
+<p>Para saber se a máquina usa BIOS ou UEFI, veja se existe a pasta <code>/sys/firmware/efi</code>:</p>
+
+<pre class="term" data-host="servidor">$ ls /sys/firmware/efi
+ls: não foi possível acessar '/sys/firmware/efi': Arquivo ou diretório inexistente     « não existe: BIOS (modo legado)</pre>
+
+<p>Com BIOS, o Debian usa o pacote <code>grub-pc</code>. Com UEFI, usa <code>grub-efi-amd64</code> e o <code>shim-signed</code> (para o Secure Boot). Confira qual está instalado:</p>
+
+<pre class="term" data-host="servidor">$ dpkg -l 'grub-pc' 'grub-efi-amd64' 2>/dev/null | grep ^ii
+ii  grub-pc         2.12-9+deb13u2 amd64        GRand Unified Bootloader, version 2 (PC/BIOS version)</pre>
+
+<hr>
+
+<h2>O menu do GRUB</h2>
+<p>Diferente do Ubuntu, que esconde o menu, o Debian <strong>mostra o menu em todo boot</strong> e espera 5 segundos. Esta é a tela real do Debian 13 (repare que ela mistura inglês e português, porque a tradução do GRUB está incompleta):</p>
+
+<pre class="term" data-title="tela do GRUB">                     GNU GRUB  versão 2.12-9+deb13u2
+
+ ┌──────────────────────────────────────────────────────────────────┐
+ │*Debian GNU/Linux                                                  │   « a opção padrão
+ │ Advanced options for Debian GNU/Linux                             │   « outros kernels e o modo de recuperação
+ │                                                                   │
+ └──────────────────────────────────────────────────────────────────┘
+
+    Use the ↑ and ↓ keys to select which entry is highlighted.
+    Pressione 'Enter' para iniciar o SO selecionado, 'e' para editar
+    os comandos antes da inicialização or 'c' para linha de comando.
+ A entrada destacada será executada automaticamente em 5 s.</pre>
+
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Tecla</th><th>O que faz no menu</th></tr>
+<tr><td><kbd>↑</kbd> <kbd>↓</kbd></td><td>Escolhe a opção (e para a contagem regressiva)</td></tr>
+<tr><td><kbd>Enter</kbd></td><td>Inicia a opção escolhida</td></tr>
+<tr><td><kbd>e</kbd></td><td>Edita os comandos da opção, só para este boot</td></tr>
+<tr><td><kbd>c</kbd></td><td>Abre a linha de comando do GRUB</td></tr>
+<tr><td><kbd>Esc</kbd></td><td>Volta ao menu anterior</td></tr>
+</table>
+</div>
+
+<p>Dentro de <strong>Advanced options for Debian GNU/Linux</strong> ficam todos os kernels instalados, cada um com uma versão normal e uma <em>(recovery mode)</em>. Você pode ver essa lista sem reiniciar, lendo o arquivo gerado do GRUB:</p>
+
+<pre class="term" data-host="servidor" data-user="root">#> grep -E "^\s*(menuentry|submenu) '" /boot/grub/grub.cfg | cut -d"'" -f2
+Debian GNU/Linux
+Advanced options for Debian GNU/Linux
+Debian GNU/Linux, with Linux 6.12.111+deb13-amd64
+Debian GNU/Linux, with Linux 6.12.111+deb13-amd64 (recovery mode)
+Debian GNU/Linux, with Linux 6.12.86+deb13-amd64
+Debian GNU/Linux, with Linux 6.12.86+deb13-amd64 (recovery mode)
+UEFI Firmware Settings</pre>
+
+<hr>
+
+<h2>Configurar o GRUB: /etc/default/grub</h2>
+<p>Você <strong>não</strong> edita o <code>/boot/grub/grub.cfg</code> direto: ele é gerado de novo a cada atualização de kernel. As preferências ficam em <code>/etc/default/grub</code>. Estas são as linhas ativas no Debian 13:</p>
+
+<pre class="file" data-file="/etc/default/grub (linhas ativas)">GRUB_DEFAULT=0                    # qual opção vem selecionada (0 = a primeira)
+GRUB_TIMEOUT=5                    # segundos de espera no menu
+GRUB_DISTRIBUTOR=`( . /etc/os-release && echo ${NAME} )`   # vira "Debian GNU/Linux" no menu
+GRUB_CMDLINE_LINUX_DEFAULT="quiet"  # parâmetros do kernel no boot normal
+GRUB_CMDLINE_LINUX=""             # parâmetros em todos os boots, inclusive recuperação</pre>
+
+<h3>Exemplo: mais tempo no menu e boot sem "quiet"</h3>
+<ol class="passo">
+  <li>Edite como root: <code>nano /etc/default/grub</code>.</li>
+  <li>Troque <code>GRUB_TIMEOUT=5</code> por <code>GRUB_TIMEOUT=10</code> e <code>"quiet"</code> por <code>""</code> (assim você vê as mensagens do kernel no boot).</li>
+  <li>Gere o menu de novo com <code>update-grub</code>.</li>
+</ol>
+
+<pre class="term" data-host="servidor" data-user="root">#> update-grub
+Generating grub configuration file ...
+Found linux image: /boot/vmlinuz-6.12.111+deb13-amd64          « os kernels que ele achou
+Found initrd image: /boot/initrd.img-6.12.111+deb13-amd64
+Found linux image: /boot/vmlinuz-6.12.86+deb13-amd64
+Found initrd image: /boot/initrd.img-6.12.86+deb13-amd64
+Warning: os-prober will not be executed to detect other bootable partitions.
+Systems on them will not be added to the GRUB boot configuration.
+Check GRUB_DISABLE_OS_PROBER documentation entry.
+Adding boot menu entry for UEFI Firmware Settings ...
+done</pre>
+
+<p>O aviso do <code>os-prober</code> é normal. Ele só importa se você tem outro sistema (Windows, outra distro) no mesmo computador e quer que ele apareça no menu. Nesse caso, descomente <code>GRUB_DISABLE_OS_PROBER=false</code> no <code>/etc/default/grub</code> e rode <code>update-grub</code> de novo.</p>
+
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Opção</th><th>Exemplo</th><th>Efeito</th></tr>
+<tr><td><code>GRUB_DEFAULT</code></td><td><code>saved</code> + <code>GRUB_SAVEDEFAULT=true</code></td><td>Lembra a última opção escolhida</td></tr>
+<tr><td><code>GRUB_TIMEOUT</code></td><td><code>0</code></td><td>Não espera (para ver o menu, segure <kbd>Shift</kbd> ou aperte <kbd>Esc</kbd>)</td></tr>
+<tr><td><code>GRUB_CMDLINE_LINUX_DEFAULT</code></td><td><code>"quiet splash"</code></td><td>Mostra a tela gráfica de boot (com Plymouth instalado)</td></tr>
+<tr><td><code>GRUB_DISABLE_RECOVERY</code></td><td><code>"true"</code></td><td>Esconde as opções de recuperação</td></tr>
+<tr><td><code>GRUB_DISABLE_OS_PROBER</code></td><td><code>false</code></td><td>Procura outros sistemas para pôr no menu</td></tr>
+</table>
+</div>
+
+<hr>
+
+<h2>Kernels instalados</h2>
+<p>O kernel que está rodando agora:</p>
+
+<pre class="term" data-host="servidor">$ uname -r
+6.12.111+deb13-amd64</pre>
+
+<dl class="anatomy">
+  <dt>6.12.111</dt><dd>Versão do kernel Linux (série 6.12, a do Debian 13).</dd>
+  <dt>+deb13</dt><dd>Compilado pelo Debian para o Debian 13.</dd>
+  <dt>-amd64</dt><dd>Arquitetura: PCs de 64 bits.</dd>
+</dl>
+
+<p>E os pacotes de kernel instalados:</p>
+
+<pre class="term" data-host="servidor">$ dpkg -l 'linux-image*' | grep ^ii
+ii  linux-image-6.12.111+deb13-amd64  6.12.111-1  amd64  Linux 6.12 for 64-bit PCs (signed)   « o atual
+ii  linux-image-6.12.86+deb13-amd64   6.12.86-1   amd64  Linux 6.12 for 64-bit PCs (signed)   « o da instalação
+ii  linux-image-amd64                 6.12.111-1  amd64  Linux for 64-bit PCs (meta-package)   « puxa sempre o mais novo</pre>
+
+<p>O pacote <code>linux-image-amd64</code> é um <strong>metapacote</strong>: ele não tem kernel dentro, só aponta para o mais recente. É por causa dele que o <code>apt upgrade</code> instala kernels novos. O Debian mantém o kernel anterior como reserva; o <code>apt autoremove</code> só remove os mais antigos que esses dois.</p>
+
+<p>Cada kernel ocupa três arquivos em <code>/boot</code>:</p>
+
+<pre class="term" data-host="servidor">$ ls -l /boot
+total 110432
+-rw-r--r-- 1 root root   283542 set 28 09:18 config-6.12.111+deb13-amd64
+-rw-r--r-- 1 root root   283190 mai  8 03:54 config-6.12.86+deb13-amd64
+drwxr-xr-x 5 root root     4096 out 15 20:53 grub
+-rw-r--r-- 1 root root 51570311 out 15 21:09 initrd.img-6.12.111+deb13-amd64
+-rw-r--r-- 1 root root 36643546 out 15 20:54 initrd.img-6.12.86+deb13-amd64
+-rw-r--r-- 1 root root       83 set 28 09:18 System.map-6.12.111+deb13-amd64
+-rw-r--r-- 1 root root       83 mai  8 03:54 System.map-6.12.86+deb13-amd64
+-rw-r--r-- 1 root root 12154816 set 28 09:18 vmlinuz-6.12.111+deb13-amd64
+-rw-r--r-- 1 root root 12117952 mai  8 03:54 vmlinuz-6.12.86+deb13-amd64</pre>
+
+<h3>Iniciar com o kernel anterior</h3>
+<p>Se o computador parou de ligar depois de uma atualização de kernel:</p>
+<ol class="passo">
+  <li>No menu do GRUB, escolha <strong>Advanced options for Debian GNU/Linux</strong>.</li>
+  <li>Escolha a linha com o kernel anterior, sem "(recovery mode)": <code>Debian GNU/Linux, with Linux 6.12.86+deb13-amd64</code>.</li>
+  <li>Com o sistema de pé, investigue o problema (<code>journalctl -b -1 -p err</code> mostra os erros do boot que falhou; veja <a href="journalctl.html">Logs</a>).</li>
+</ol>
+
+<h3>O initramfs</h3>
+<p>No Debian o initramfs é gerado pelo <code>initramfs-tools</code>, automaticamente a cada kernel novo. Se você mudar algo que o boot precisa (um módulo, a configuração de criptografia do disco), gere de novo:</p>
+
+<pre class="term" data-host="servidor" data-user="root">#> update-initramfs -u
+update-initramfs: Generating /boot/initrd.img-6.12.111+deb13-amd64</pre>
+
+<hr>
+
+<h2>Parâmetros do kernel</h2>
+<p>Os parâmetros com que o kernel atual foi iniciado ficam em <code>/proc/cmdline</code>:</p>
+
+<pre class="term" data-host="servidor">$ cat /proc/cmdline
+BOOT_IMAGE=/boot/vmlinuz-6.12.111+deb13-amd64 root=UUID=50185294-cee5-49de-a27c-2cf995361c67 ro quiet</pre>
+
+<dl class="anatomy">
+  <dt>root=UUID=…</dt><dd>Qual partição é a raiz (<code>/</code>), pelo identificador único.</dd>
+  <dt>ro</dt><dd>Montar a raiz só para leitura no começo; o systemd remonta como leitura e escrita depois de verificar.</dd>
+  <dt>quiet</dt><dd>Esconder a maior parte das mensagens do kernel.</dd>
+</dl>
+
+<p>Para mudar um parâmetro <strong>só uma vez</strong>, sem tocar em arquivos: no menu do GRUB, selecione a opção, aperte <kbd>e</kbd>, ache a linha que começa com <code>linux</code>, acrescente o parâmetro no fim e aperte <kbd>Ctrl</kbd>+<kbd>X</kbd> (ou <kbd>F10</kbd>) para iniciar. Na próxima vez, tudo volta ao normal.</p>
+
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Parâmetro</th><th>Para quê</th></tr>
+<tr><td><code>systemd.unit=rescue.target</code></td><td>Modo de manutenção (pede a senha do root). Veja <a href="recuperacao.html">Recuperar um Sistema</a>.</td></tr>
+<tr><td><code>systemd.unit=emergency.target</code></td><td>O mínimo possível: só a raiz, em modo leitura</td></tr>
+<tr><td><code>nomodeset</code></td><td>Tela preta com placa de vídeo nova: usa o vídeo básico</td></tr>
+<tr><td><code>3</code> ou <code>systemd.unit=multi-user.target</code></td><td>Inicia sem interface gráfica</td></tr>
+</table>
+</div>
+
+<hr>
+
+<h2>Medir o tempo de boot</h2>
+<pre class="term" data-host="servidor">$ systemd-analyze
+Startup finished in 23.386s (kernel) + 9.122s (userspace) = 32.508s
+graphical.target reached after 9.121s in userspace.</pre>
+
+<p>A primeira parte é o tempo do kernel e do initramfs; a segunda, o dos serviços. Para ver quem demorou mais:</p>
+
+<pre class="term" data-host="servidor">$ systemd-analyze blame | head -6
+2.585s dev-sda1.device
+2.245s e2scrub_reap.service
+2.025s wtmpdb-update-boot.service
+1.659s apparmor.service
+ 895ms ssh.service
+ 822ms systemd-journal-flush.service</pre>
+
+<p>Os números variam muito entre computadores (esses vêm de uma máquina virtual). O <code>blame</code> mostra quanto cada serviço levou, mas serviços rodam em paralelo; para ver o que realmente atrasou o login, use <code>systemd-analyze critical-chain</code>. Veja mais em <a href="desempenho.html">Desempenho e Monitoramento</a>.</p>
+
+<hr>
+
+<h2>Quando não funciona</h2>
+
+<div class="cenario">
+<strong>Mudei o /etc/default/grub e nada mudou</strong>
+<p><strong>O que aconteceu:</strong> faltou rodar <code>update-grub</code>. O GRUB lê o <code>/boot/grub/grub.cfg</code>, não o <code>/etc/default/grub</code>.</p>
+</div>
+
+<div class="cenario">
+<strong>"update-grub: comando não encontrado"</strong>
+<p><strong>O que aconteceu:</strong> você está como usuário comum; o comando fica em <code>/usr/sbin</code>. Entre com <code>su -</code>.</p>
+</div>
+
+<div class="cenario">
+<strong>O Windows sumiu do menu depois de instalar o Debian</strong>
+<p><strong>O que aconteceu:</strong> o <code>os-prober</code> vem desativado (é o aviso que o <code>update-grub</code> mostra).</p>
+<p><strong>Como resolver:</strong> instale o pacote <code>os-prober</code>, descomente <code>GRUB_DISABLE_OS_PROBER=false</code> e rode <code>update-grub</code>. A linha <code>Found Windows Boot Manager …</code> deve aparecer.</p>
+</div>
+
+<div class="cenario">
+<strong>Depois de atualizar, a tela fica preta</strong>
+<p><strong>Como resolver:</strong> inicie com o kernel anterior (Advanced options) ou edite a opção com <kbd>e</kbd> e acrescente <code>nomodeset</code>. Com o sistema de pé, veja os erros com <code>journalctl -b -1 -p err</code>.</p>
+</div>
+
+<div class="cenario">
+<strong>O GRUB nem aparece: tela com "grub rescue&gt;"</strong>
+<p><strong>O que aconteceu:</strong> o GRUB não achou seus arquivos (disco trocado, partição apagada).</p>
+<p><strong>Como resolver:</strong> inicie por um pendrive do Debian e reinstale o GRUB com <code>chroot</code>. Passo a passo em <a href="recuperacao.html">Recuperar um Sistema</a>.</p>
+</div>
+
+<hr>
+
+<h2>Exercícios</h2>
+
+<div class="exercise">
+<h3>1. Aplicar mudanças</h3>
+<p>Você trocou <code>GRUB_TIMEOUT</code>. Qual comando gera o menu de novo?</p>
+<div class="ex-code"><input data-answer="update-grub|grub-mkconfig -o /boot/grub/grub.cfg" aria-label="comando"></div>
+</div>
+
+<div class="exercise">
+<h3>2. Qual kernel?</h3>
+<p>Complete para ver a versão do kernel em execução:</p>
+<div class="ex-code">uname <input data-answer="-r" aria-label="opção"></div>
+</div>
+
+<div class="mc" data-answer="2">
+<p class="mc-q">3. Para que serve o pacote <code>linux-image-amd64</code>?</p>
+<label><input type="radio" name="q3"> É o kernel que está rodando agora.</label>
+<label><input type="radio" name="q3"> É um metapacote que sempre puxa o kernel mais novo nas atualizações.</label>
+<label><input type="radio" name="q3"> É o GRUB para computadores de 64 bits.</label>
+<label><input type="radio" name="q3"> É o initramfs.</label>
+</div>
+
+<div class="mc" data-answer="3">
+<p class="mc-q">4. No menu do GRUB, você quer acrescentar <code>nomodeset</code> só neste boot. O que faz?</p>
+<label><input type="radio" name="q4"> Edita o <code>/etc/default/grub</code>.</label>
+<label><input type="radio" name="q4"> Aperta <kbd>c</kbd> e digita <code>nomodeset</code>.</label>
+<label><input type="radio" name="q4"> Aperta <kbd>e</kbd>, põe <code>nomodeset</code> no fim da linha <code>linux</code> e inicia com <kbd>Ctrl</kbd>+<kbd>X</kbd>.</label>
+<label><input type="radio" name="q4"> Roda <code>update-initramfs -u</code>.</label>
+</div>
+
+<hr>
+
+<h2>Resumo</h2>
+<ul>
+  <li>Boot: firmware → GRUB → kernel → initramfs → systemd.</li>
+  <li>O Debian mostra o menu do GRUB por 5 segundos; os outros kernels e a recuperação ficam em "Advanced options".</li>
+  <li>Preferências em <code>/etc/default/grub</code>; aplique com <code>update-grub</code>.</li>
+  <li><code>linux-image-amd64</code> traz kernels novos; o anterior fica como reserva.</li>
+  <li><kbd>e</kbd> no menu muda parâmetros só uma vez; <code>systemd-analyze</code> mede o boot.</li>
+</ul>
+
+<div class="pager"></div>
+
+</div>
+</main>
+</div>
+<script src="assets/site.js"></script>
+</body>
+</html>

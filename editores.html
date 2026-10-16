@@ -1,0 +1,325 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Debian nano e vim — editar arquivos no terminal | Guia Debian</title>
+<meta name="description" content="Edite arquivos no terminal do Debian: o nano 8.4 passo a passo com a tela real em português, o vi (vim.tiny) para sobreviver, o editor padrão e como editar arquivos do sistema como root.">
+<link rel="stylesheet" href="assets/style.css">
+<script>try{var t=localStorage.getItem("tema");if(t)document.documentElement.setAttribute("data-theme",t)}catch(e){}</script>
+</head>
+<body>
+<div class="layout">
+<nav class="sidebar" id="sidebar" aria-label="Tópicos"></nav>
+<main class="main">
+<div class="content">
+
+<div class="pager"></div>
+
+<h1>Debian <span class="hl">nano e vim</span></h1>
+
+<p class="intro">Configurar um Debian quase sempre é editar um arquivo de texto. Pelo terminal, você faz isso com um editor. O Debian traz dois: o <strong>nano</strong>, simples e com os atalhos na tela, e o <strong>vi</strong>, que no Debian é uma versão reduzida do Vim.</p>
+
+<div class="note">
+<strong>Você vai aprender</strong>
+<ul>
+  <li>Abrir, editar, salvar e sair do nano, e o que cada mensagem dele quer dizer.</li>
+  <li>O mínimo do vi para não ficar preso nele.</li>
+  <li>Qual é o editor padrão do Debian e como trocá-lo.</li>
+  <li>Como editar arquivos do sistema, que pertencem ao root.</li>
+</ul>
+</div>
+
+<div class="note">
+<strong>Editores não rodam no terminal simulado</strong>
+<p>Eles ocupam a tela inteira. As telas desta aula foram copiadas de um Debian 13 real; pratique no seu.</p>
+</div>
+
+<hr>
+
+<h2>Qual é o editor padrão do Debian?</h2>
+<p>O Debian escolhe o editor padrão por um sistema chamado <strong>alternatives</strong> ("alternativas"). O comando <code>editor</code> abre o que estiver escolhido, e programas como o <code>crontab -e</code> usam a mesma escolha. Numa instalação nova, o vencedor é o nano, que tem prioridade maior:</p>
+
+<pre class="term">$ ls -l /usr/bin/editor /etc/alternatives/editor
+lrwxrwxrwx 1 root root  9 mai  3 20:17 /etc/alternatives/editor -&gt; /bin/nano
+lrwxrwxrwx 1 root root 24 mai  3 20:17 /usr/bin/editor -&gt; /etc/alternatives/editor</pre>
+
+<p>O caminho é uma corrente de atalhos: <code>editor</code> → <code>/etc/alternatives/editor</code> → <code>/bin/nano</code>.</p>
+
+<hr>
+
+<h2>nano: o editor fácil</h2>
+<p>Para abrir um arquivo, passe o nome. Se ele não existir, o nano cria quando você salvar.</p>
+
+<dl class="anatomy">
+  <dt>nano</dt><dd>O editor.</dd>
+  <dt>frutas.txt</dt><dd>O arquivo a abrir.</dd>
+</dl>
+
+<pre class="term">$ nano frutas.txt</pre>
+
+<p>A tela do nano 8.4, a versão do Debian 13, em português:</p>
+
+<pre class="file" data-file="tela do nano">  GNU nano 8.4                       frutas.txt
+banana
+maçã
+laranja
+banana
+uva
+maçã
+banana
+
+                            [ 7 linhas lidas ]
+^G Ajuda     ^O Gravar    ^F Onde está? ^K Recortar  ^T Executar  ^C Local
+^X Sair      ^R Ler o arq ^\ Substituir ^U Colar     ^J Justificar ^/ Ir p/ linha</pre>
+
+<ul>
+  <li><strong>Primeira linha:</strong> a versão e o nome do arquivo. Quando você altera algo, aparece um <code>*</code> ao lado do nome.</li>
+  <li><strong>Meio:</strong> o texto. Você digita normalmente e anda com as setas.</li>
+  <li><strong>Mensagem entre colchetes:</strong> o que acabou de acontecer. Num arquivo que não existe, aparece <code>[ Novo arquivo ]</code>.</li>
+  <li><strong>Duas últimas linhas:</strong> os atalhos. O <code>^</code> quer dizer <kbd>Ctrl</kbd>: <code>^X</code> é <kbd>Ctrl</kbd>+<kbd>X</kbd>.</li>
+</ul>
+
+<h3>Salvar: Ctrl+O</h3>
+<p><kbd>Ctrl</kbd>+<kbd>O</kbd> grava (de <em>Write Out</em>). O nano confirma o nome no rodapé; aperte <kbd>Enter</kbd> para aceitar:</p>
+
+<pre class="file" data-file="rodapé do nano">Escrever para o arquivo: novo.txt
+^G Ajuda          M-D Formato DOS   M-A Anexar        M-B Arquivo reserva
+^C Cancelar       M-M Formato Mac   M-P Pré-anexar    ^T Navegar</pre>
+
+<p>Depois do <kbd>Enter</kbd>, aparece <code>[ Escrita 1 linha ]</code> (ou "Escritas 7 linhas"): o arquivo foi salvo. O <code>M-</code> nas opções quer dizer <kbd>Alt</kbd>.</p>
+
+<h3>Sair: Ctrl+X</h3>
+<p>Se não houver nada por salvar, o nano fecha na hora. Se houver, ele pergunta:</p>
+
+<pre class="file" data-file="rodapé do nano">Salvar o buffer modificado?
+ S Sim
+ N Não          ^C Cancelar</pre>
+
+<p>Aperte <kbd>S</kbd> para salvar (ele pede o nome, <kbd>Enter</kbd> confirma), <kbd>N</kbd> para sair perdendo as mudanças, ou <kbd>Ctrl</kbd>+<kbd>C</kbd> para voltar ao texto. "Buffer" é o texto que está aberto na memória.</p>
+
+<h3>O passo a passo completo</h3>
+<ol class="passo">
+  <li><code>nano novo.txt</code> abre (ou cria) o arquivo.</li>
+  <li>Digite o texto normalmente.</li>
+  <li><kbd>Ctrl</kbd>+<kbd>O</kbd> e <kbd>Enter</kbd> salvam.</li>
+  <li><kbd>Ctrl</kbd>+<kbd>X</kbd> sai.</li>
+  <li><code>cat novo.txt</code> confere o resultado.</li>
+</ol>
+
+<pre class="term">$ nano novo.txt
+$ cat novo.txt
+Comprar leite e pão</pre>
+
+<h3>Os atalhos mais úteis</h3>
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Atalho</th><th>Na tela</th><th>Faz</th></tr>
+<tr><td><kbd>Ctrl</kbd>+<kbd>O</kbd></td><td>Gravar</td><td>Salva</td></tr>
+<tr><td><kbd>Ctrl</kbd>+<kbd>X</kbd></td><td>Sair</td><td>Sai (pergunta se há mudanças)</td></tr>
+<tr><td><kbd>Ctrl</kbd>+<kbd>F</kbd></td><td>Onde está?</td><td>Procura um texto; <kbd>Alt</kbd>+<kbd>W</kbd> vai para a próxima ocorrência</td></tr>
+<tr><td><kbd>Ctrl</kbd>+<kbd>\</kbd></td><td>Substituir</td><td>Procura e troca</td></tr>
+<tr><td><kbd>Ctrl</kbd>+<kbd>K</kbd></td><td>Recortar</td><td>Recorta a linha inteira</td></tr>
+<tr><td><kbd>Ctrl</kbd>+<kbd>U</kbd></td><td>Colar</td><td>Cola o que foi recortado</td></tr>
+<tr><td><kbd>Ctrl</kbd>+<kbd>/</kbd></td><td>Ir p/ linha</td><td>Pula para uma linha (ex.: 42)</td></tr>
+<tr><td><kbd>Ctrl</kbd>+<kbd>C</kbd></td><td>Local</td><td>Mostra a linha e a coluna do cursor</td></tr>
+<tr><td><kbd>Alt</kbd>+<kbd>U</kbd></td><td>—</td><td>Desfaz</td></tr>
+<tr><td><kbd>Ctrl</kbd>+<kbd>G</kbd></td><td>Ajuda</td><td>Lista todos os atalhos</td></tr>
+</table>
+</div>
+
+<div class="tip">
+<strong>Ctrl+F ou Ctrl+W?</strong>
+<p>No nano 8 (Debian 13) a busca aparece como <code>^F Onde está?</code>. Em versões antigas, como a do Debian 12, ela aparecia como <code>^W</code>. Se um tutorial antigo mandar usar <kbd>Ctrl</kbd>+<kbd>W</kbd>, use o que aparece no rodapé do seu nano.</p>
+</div>
+
+<h3>Opções úteis ao abrir</h3>
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Comando</th><th>Faz</th></tr>
+<tr><td><code>nano -l arquivo</code></td><td>Mostra os números das linhas</td></tr>
+<tr><td><code>nano +42 arquivo</code></td><td>Abre já na linha 42</td></tr>
+<tr><td><code>nano -v arquivo</code></td><td>Só leitura: não deixa alterar (<em>view</em>)</td></tr>
+<tr><td><code>nano -B arquivo</code></td><td>Guarda uma cópia do original com <code>~</code> ao salvar</td></tr>
+</table>
+</div>
+
+<hr>
+
+<h2>vi: o mínimo para sobreviver</h2>
+<p>O <code>vi</code> existe em praticamente todo sistema Unix, inclusive em servidores mínimos. No Debian, o comando <code>vi</code> abre o <strong>vim.tiny</strong>, uma versão reduzida do Vim. O Vim completo não vem instalado:</p>
+
+<pre class="term">$ ls -l /usr/bin/vi /etc/alternatives/vi
+lrwxrwxrwx 1 root root 17 mai 22  2025 /etc/alternatives/vi -&gt; /usr/bin/vim.tiny
+lrwxrwxrwx 1 root root 20 mai 22  2025 /usr/bin/vi -&gt; /etc/alternatives/vi
+$ vim notas.txt
+bash: vim: comando não encontrado</pre>
+
+<p>O vi é um editor <strong>de modos</strong>: no modo normal as teclas são comandos, e só no modo de inserção elas viram texto. Isso confunde quem abre o vi pela primeira vez. Guarde esta receita:</p>
+
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Quero…</th><th>Digite</th></tr>
+<tr><td>Começar a escrever</td><td><kbd>i</kbd> (de <em>insert</em>)</td></tr>
+<tr><td>Parar de escrever</td><td><kbd>Esc</kbd></td></tr>
+<tr><td>Salvar e sair</td><td><kbd>Esc</kbd> e depois <code>:wq</code> <kbd>Enter</kbd></td></tr>
+<tr><td>Sair <strong>sem</strong> salvar</td><td><kbd>Esc</kbd> e depois <code>:q!</code> <kbd>Enter</kbd></td></tr>
+<tr><td>Apagar a linha</td><td><kbd>Esc</kbd> e depois <kbd>d</kbd><kbd>d</kbd></td></tr>
+<tr><td>Desfazer</td><td><kbd>Esc</kbd> e depois <kbd>u</kbd></td></tr>
+</table>
+</div>
+
+<div class="warning">
+<strong>Preso no vi?</strong>
+<p>Aperte <kbd>Esc</kbd> duas vezes e digite <code>:q!</code> seguido de <kbd>Enter</kbd>. Você sai sem salvar nada. O vim.tiny do Debian mostra as mensagens em inglês, porque é compilado sem traduções.</p>
+</div>
+
+<p>Para aprender o Vim de verdade, o root instala o pacote completo com <code>apt install vim</code>.</p>
+
+<hr>
+
+<h2>Trocar o editor padrão</h2>
+
+<h3>Para você: select-editor</h3>
+<p>O <code>select-editor</code> pergunta qual editor você prefere e guarda a escolha em <code>~/.selected_editor</code>. Ela vale para programas como o <code>crontab -e</code>:</p>
+
+<pre class="term">$ select-editor
+Select an editor.  To change later, run select-editor again.
+  1. /bin/nano        &lt;---- easiest
+  2. /usr/bin/vim.tiny
+
+Choose 1-2 [1]:</pre>
+
+<h3>Para o sistema inteiro: update-alternatives</h3>
+<p>Como root, o <code>update-alternatives --config editor</code> muda o editor de todos os usuários. Aperte <kbd>Enter</kbd> para manter o atual:</p>
+
+<pre class="term">#> update-alternatives --config editor
+Há 2 escolhas como alternativas de editor. (fornecendo /usr/bin/editor).
+
+  Seleção    Caminho            Prioridade Estado
+------------------------------------------------------------
+* 0            /bin/nano           40        modo automático
+  1            /bin/nano           40        modo manual
+  2            /usr/bin/vim.tiny   15        modo manual
+
+Pressione &lt;enter&gt; para manter o padrão[*] ou digite o número da seleção:</pre>
+
+<h3>Por variável: EDITOR</h3>
+<p>Muitos programas leem a variável <code>EDITOR</code>. No Debian ela vem vazia; para fixá-la, ponha <code>export EDITOR=nano</code> no seu <code>~/.bashrc</code> (veja <a href="bashrc.html">.bashrc, alias, PATH</a>).</p>
+
+<hr>
+
+<h2>Editar arquivos do sistema</h2>
+<p>Arquivos de <code>/etc</code> pertencem ao root. Se você abrir um deles como usuário comum, o nano abre, mas não consegue salvar. No Debian, sem sudo, há duas formas:</p>
+
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Forma</th><th>Exemplo</th><th>Quando usar</th></tr>
+<tr><td>Um comando como root</td><td><code>su -c 'nano /etc/hosts'</code></td><td>Uma edição rápida</td></tr>
+<tr><td>Sessão de root</td><td><code>su -</code>, depois <code>nano /etc/hosts</code>, depois <code>exit</code></td><td>Várias edições seguidas</td></tr>
+<tr><td>sudoedit</td><td><code>sudoedit /etc/hosts</code></td><td>Só se o sudo estiver instalado e configurado (veja <a href="root-su-sudo.html">root, su e sudo</a>)</td></tr>
+</table>
+</div>
+
+<pre class="term">$ su -c 'nano /etc/hosts'
+Senha:</pre>
+
+<div class="warning">
+<strong>Antes de editar um arquivo do sistema</strong>
+<p>Faça uma cópia: <code>cp /etc/hosts /etc/hosts.bak</code> (como root). Se algo der errado, basta copiar de volta.</p>
+</div>
+
+<hr>
+
+<h2>Formas diferentes de editar</h2>
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Editor</th><th>Onde</th><th>Para quem</th></tr>
+<tr><td><code>nano</code></td><td>Terminal</td><td>Iniciantes e edições rápidas</td></tr>
+<tr><td><code>vi</code> (vim.tiny)</td><td>Terminal, em qualquer servidor</td><td>Quando é o único disponível</td></tr>
+<tr><td><code>vim</code> completo</td><td>Terminal (instale com <code>apt install vim</code>)</td><td>Quem quer editar muito rápido (há um guia só dele)</td></tr>
+<tr><td>Editor de Texto do GNOME</td><td>Desktop (<code>gnome-text-editor</code>)</td><td>Quem prefere janela e mouse</td></tr>
+<tr><td><code>echo "texto" &gt;&gt; arq</code></td><td>Terminal</td><td>Acrescentar uma linha sem abrir editor</td></tr>
+</table>
+</div>
+
+<hr>
+
+<h2>Quando não funciona</h2>
+
+<div class="cenario">
+<strong>O nano não consegue salvar</strong>
+<pre class="file" data-file="rodapé do nano">[ Erro ao escrever /etc/hosts: Permissão negada ]</pre>
+<p><strong>O que aconteceu:</strong> o arquivo é do root e você abriu como usuário comum.</p>
+<p><strong>Como resolver:</strong> salve uma cópia na sua pasta (<kbd>Ctrl</kbd>+<kbd>O</kbd> e mude o nome para <code>~/hosts</code>), saia, e copie como root: <code>su -c 'cp ~ana/hosts /etc/hosts'</code>. Na próxima vez, abra com <code>su -c 'nano /etc/hosts'</code>.</p>
+</div>
+
+<div class="cenario">
+<strong>Abri o vi sem querer e não consigo sair</strong>
+<p><strong>O que aconteceu:</strong> um programa (como <code>crontab -e</code>) abriu o vi, ou você digitou <code>vi</code>.</p>
+<p><strong>Como resolver:</strong> <kbd>Esc</kbd>, <code>:q!</code>, <kbd>Enter</kbd>. Para isso não se repetir, rode <code>select-editor</code> e escolha o nano.</p>
+</div>
+
+<div class="cenario">
+<strong>"vim: comando não encontrado"</strong>
+<p><strong>O que aconteceu:</strong> o Debian só instala o vim.tiny, chamado pelo comando <code>vi</code>.</p>
+<p><strong>Como resolver:</strong> use <code>vi</code>, ou instale o Vim completo como root: <code>apt install vim</code>.</p>
+</div>
+
+<div class="cenario">
+<strong>O terminal "congelou" no nano</strong>
+<p><strong>O que aconteceu:</strong> você pode ter apertado <kbd>Ctrl</kbd>+<kbd>S</kbd>, que em muitos terminais pausa a tela.</p>
+<p><strong>Como resolver:</strong> aperte <kbd>Ctrl</kbd>+<kbd>Q</kbd> para destravar.</p>
+</div>
+
+<hr>
+
+<h2>Exercícios</h2>
+
+<div class="exercise">
+<h3>1. Abrir na linha certa</h3>
+<p>Complete para abrir <code>config.txt</code> no nano já na linha 20:</p>
+<div class="ex-code">nano <input data-answer="+20" aria-label="opção"> config.txt</div>
+</div>
+
+<div class="exercise">
+<h3>2. Sair do vi sem salvar</h3>
+<p>Depois do <kbd>Esc</kbd>, o que você digita?</p>
+<div class="ex-code"><input data-answer=":q!" aria-label="comando"></div>
+</div>
+
+<div class="mc" data-answer="2">
+<p class="mc-q">3. No rodapé do nano aparece <code>^O Gravar</code>. Quais teclas você aperta?</p>
+<label><input type="radio" name="q3"> <kbd>Shift</kbd> e <kbd>6</kbd>, depois <kbd>O</kbd></label>
+<label><input type="radio" name="q3"> <kbd>Ctrl</kbd>+<kbd>O</kbd></label>
+<label><input type="radio" name="q3"> <kbd>Alt</kbd>+<kbd>O</kbd></label>
+<label><input type="radio" name="q3"> <kbd>Esc</kbd> e depois <kbd>O</kbd></label>
+</div>
+
+<div class="mc" data-answer="4">
+<p class="mc-q">4. No Debian sem sudo, qual comando abre <code>/etc/hosts</code> no nano com permissão de root?</p>
+<label><input type="radio" name="q4"> <code>sudo nano /etc/hosts</code></label>
+<label><input type="radio" name="q4"> <code>nano -root /etc/hosts</code></label>
+<label><input type="radio" name="q4"> <code>root nano /etc/hosts</code></label>
+<label><input type="radio" name="q4"> <code>su -c 'nano /etc/hosts'</code></label>
+</div>
+
+<hr>
+
+<h2>Resumo</h2>
+<ul>
+  <li>O editor padrão do Debian é o nano; o <code>vi</code> abre o vim.tiny e o Vim completo não vem instalado.</li>
+  <li>nano: <kbd>Ctrl</kbd>+<kbd>O</kbd> salva, <kbd>Ctrl</kbd>+<kbd>X</kbd> sai, <kbd>Ctrl</kbd>+<kbd>F</kbd> procura.</li>
+  <li>vi: <kbd>i</kbd> escreve, <kbd>Esc</kbd> para, <code>:wq</code> salva e sai, <code>:q!</code> sai sem salvar.</li>
+  <li>Troque o editor com <code>select-editor</code> (você) ou <code>update-alternatives --config editor</code> (sistema).</li>
+  <li>Arquivos do sistema: <code>su -c 'nano /etc/arquivo'</code>, com uma cópia de segurança antes.</li>
+</ul>
+
+<div class="pager"></div>
+
+</div>
+</main>
+</div>
+<script src="assets/site.js"></script>
+</body>
+</html>

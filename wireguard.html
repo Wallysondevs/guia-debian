@@ -1,0 +1,303 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Debian VPN com WireGuard — passo a passo | Guia Debian</title>
+<meta name="description" content="Monte uma VPN WireGuard entre um notebook e um servidor Debian 13: wireguard-tools, chaves com wg genkey, wg0.conf comentado dos dois lados, nftables liberando a porta, wg-quick e wg show explicado.">
+<link rel="stylesheet" href="assets/style.css">
+<script>try{var t=localStorage.getItem("tema");if(t)document.documentElement.setAttribute("data-theme",t)}catch(e){}</script>
+</head>
+<body>
+<div class="layout">
+<nav class="sidebar" id="sidebar" aria-label="Tópicos"></nav>
+<main class="main">
+<div class="content">
+
+<div class="pager"></div>
+
+<h1>Debian <span class="hl">VPN (WireGuard)</span></h1>
+
+<p class="intro">Uma <strong>VPN</strong> (<em>Virtual Private Network</em>, rede privada virtual) liga computadores distantes por um "túnel" criptografado, como se estivessem na mesma rede. O <strong>WireGuard</strong> é a VPN moderna do Linux: rápida, com pouca configuração e já embutida no kernel do Debian. Nesta aula você vai ligar o notebook da Ana ao servidor dela.</p>
+
+<div class="note">
+<strong>Você vai aprender</strong>
+<ul>
+  <li>Como o WireGuard funciona: um par de chaves para cada lado.</li>
+  <li>Gerar chaves com <code>wg genkey</code> e <code>wg pubkey</code>.</li>
+  <li>Escrever o <code>/etc/wireguard/wg0.conf</code> do servidor e do notebook.</li>
+  <li>Liberar a porta no nftables, subir o túnel com <code>wg-quick</code> e ler o <code>wg show</code>.</li>
+</ul>
+</div>
+
+<p>Os comandos rodam como root nas duas máquinas (<code>su -</code>). As chaves e saídas mostradas vêm de um Debian 13 real; as suas chaves serão outras, porque são geradas ao acaso.</p>
+
+<hr>
+
+<h2>Antes do comando: o desenho da VPN</h2>
+<div class="table-wrap">
+<table class="ref">
+<tr><th></th><th>servidor</th><th>notebook</th></tr>
+<tr><td>Endereço na internet</td><td><code>203.0.113.10</code> (fixo)</td><td>qualquer (Wi-Fi de casa, 4G…)</td></tr>
+<tr><td>Endereço dentro da VPN</td><td><code>10.8.0.1</code></td><td><code>10.8.0.2</code></td></tr>
+<tr><td>Porta</td><td>escuta em <code>51820/udp</code></td><td>sai por qualquer porta</td></tr>
+<tr><td>Chaves</td><td>privada do servidor + pública do notebook</td><td>privada do notebook + pública do servidor</td></tr>
+</table>
+</div>
+
+<p>Cada lado guarda a sua <strong>chave privada</strong> em segredo e entrega a <strong>chave pública</strong> ao outro. Um lado só aceita pacotes assinados por quem ele conhece. Não existe usuário nem senha.</p>
+
+<hr>
+
+<h2>Passo 1: instalar</h2>
+<p>O módulo do kernel já vem no Debian 13; falta só o pacote com as ferramentas:</p>
+
+<pre class="term" data-host="servidor" data-user="root">#> apt install wireguard-tools
+…
+Configurando wireguard-tools (1.0.20210914-3) ...
+#> wg --version
+wireguard-tools v1.0.20210914 - https://git.zx2c4.com/wireguard-tools/</pre>
+
+<p>Repita no notebook.</p>
+
+<hr>
+
+<h2>Passo 2: gerar as chaves</h2>
+
+<dl class="anatomy">
+  <dt>umask 077</dt><dd>Os arquivos criados a seguir ficam legíveis só pelo root.</dd>
+  <dt>wg genkey</dt><dd>Gera uma chave privada nova e a imprime.</dd>
+  <dt>| tee privada.key</dt><dd>Grava a privada no arquivo e passa adiante.</dd>
+  <dt>| wg pubkey &gt; publica.key</dt><dd>Calcula a chave pública a partir da privada e grava.</dd>
+</dl>
+
+<pre class="term" data-host="servidor" data-user="root">#> cd /etc/wireguard
+#> umask 077
+#> wg genkey | tee privada.key | wg pubkey &gt; publica.key
+#> ls -l
+total 8
+-rw------- 1 root root 45 out 15 21:46 privada.key        « rw------- : só o root lê
+-rw------- 1 root root 45 out 15 21:46 publica.key
+#> cat publica.key
+hOc8h23OVpONrNvL3PY0cAfxaZJtfGCwJ8vTzZ6cJl4=              « esta você pode compartilhar</pre>
+
+<p>Faça o mesmo no notebook e troque as <strong>públicas</strong> entre as máquinas (por SSH, num arquivo, como preferir). A pasta <code>/etc/wireguard</code> já vem com permissão <code>drwx------</code>.</p>
+
+<div class="warning">
+<strong>Nunca compartilhe a chave privada</strong>
+<p>Quem tem a <code>privada.key</code> se passa pela sua máquina na VPN. Ela não sai do computador onde foi gerada.</p>
+</div>
+
+<hr>
+
+<h2>Passo 3: o arquivo do servidor</h2>
+<pre class="file" data-file="/etc/wireguard/wg0.conf (servidor)">[Interface]
+Address = 10.8.0.1/24                       # o endereço do servidor dentro da VPN
+ListenPort = 51820                          # porta UDP em que ele espera conexões
+PrivateKey = (conteúdo de privada.key do SERVIDOR)
+
+[Peer]                                       # um bloco para cada máquina que pode conectar
+PublicKey = (conteúdo de publica.key do NOTEBOOK)
+AllowedIPs = 10.8.0.2/32                    # endereço que esse par pode usar na VPN</pre>
+
+<p>Proteja o arquivo, porque ele tem a chave privada: <code>chmod 600 /etc/wireguard/wg0.conf</code>.</p>
+
+<hr>
+
+<h2>Passo 4: o arquivo do notebook</h2>
+<pre class="file" data-file="/etc/wireguard/wg0.conf (notebook)">[Interface]
+Address = 10.8.0.2/24
+PrivateKey = (conteúdo de privada.key do NOTEBOOK)
+
+[Peer]
+PublicKey = (conteúdo de publica.key do SERVIDOR)
+Endpoint = 203.0.113.10:51820               # onde achar o servidor na internet
+AllowedIPs = 10.8.0.0/24                    # o que mandar pelo túnel: só a rede da VPN
+PersistentKeepalive = 25                    # mantém o túnel vivo atrás de roteador/NAT</pre>
+
+<dl class="anatomy">
+  <dt>AllowedIPs = 10.8.0.0/24</dt><dd>Só o tráfego para a VPN passa pelo túnel; a internet continua saindo normal.</dd>
+  <dt>AllowedIPs = 0.0.0.0/0</dt><dd>(alternativa) Todo o tráfego passa pelo servidor, como uma VPN comercial. Aí o servidor também precisa repassar pacotes (NAT).</dd>
+</dl>
+
+<hr>
+
+<h2>Passo 5: liberar a porta no firewall do servidor</h2>
+<p>No Debian o firewall é o nftables. Acrescente uma linha na cadeia <code>input</code> do <code>/etc/nftables.conf</code> (veja <a href="nftables.html">Firewall (nftables)</a>):</p>
+
+<pre class="file" data-file="/etc/nftables.conf (trecho)">		udp dport 51820 accept                 # WireGuard</pre>
+
+<pre class="term" data-host="servidor" data-user="root">#> nft -c -f /etc/nftables.conf &amp;&amp; systemctl reload nftables</pre>
+
+<p>Se você usa ufw: <code>ufw allow 51820/udp</code>. Em provedores de nuvem, libere também a porta UDP no painel deles.</p>
+
+<hr>
+
+<h2>Passo 6: subir a VPN</h2>
+<p>O <code>wg-quick</code> lê o <code>wg0.conf</code> e faz tudo: cria a interface, coloca o endereço e as rotas.</p>
+
+<pre class="term" data-host="servidor" data-user="root">#> wg-quick up wg0
+[#] ip link add wg0 type wireguard
+[#] wg setconf wg0 /dev/fd/63
+[#] ip -4 address add 10.8.0.1/24 dev wg0
+[#] ip link set mtu 1420 up dev wg0</pre>
+
+<p>Cada linha <code>[#]</code> é um comando que o <code>wg-quick</code> rodou por você (as linhas acima são as típicas). Faça o mesmo no notebook e teste:</p>
+
+<pre class="term">$ ping -c 2 10.8.0.1
+PING 10.8.0.1 (10.8.0.1) 56(84) bytes of data.
+64 bytes from 10.8.0.1: icmp_seq=1 ttl=64 time=21.4 ms
+64 bytes from 10.8.0.1: icmp_seq=2 ttl=64 time=20.9 ms</pre>
+
+<p>Para derrubar: <code>wg-quick down wg0</code>.</p>
+
+<hr>
+
+<h2>Ver o estado: wg show</h2>
+<p>Esta é a saída real de uma interface WireGuard no Debian 13, logo depois de criada, antes de o outro lado conectar:</p>
+
+<pre class="term" data-host="servidor" data-user="root">#> wg show
+interface: wg0
+  public key: hOc8h23OVpONrNvL3PY0cAfxaZJtfGCwJ8vTzZ6cJl4=     « a pública deste lado
+  private key: (hidden)                                     « nunca é mostrada
+  listening port: 51820
+
+peer: BZCpqO5qEQPs6XAn/nRRr/b7hkiSvOgWHMx8mK9PWGg=          « a pública do notebook
+  allowed ips: 10.8.0.2/32</pre>
+
+<p>Quando o notebook conecta, o bloco do <code>peer</code> ganha mais linhas:</p>
+
+<pre class="term" data-host="servidor" data-user="root">#> wg show
+…
+peer: BZCpqO5qEQPs6XAn/nRRr/b7hkiSvOgWHMx8mK9PWGg=
+  endpoint: 198.51.100.7:41263                « de onde o notebook está falando agora
+  allowed ips: 10.8.0.2/32
+  latest handshake: 12 seconds ago            « o "aperto de mão" mais recente: o túnel está vivo
+  transfer: 4.18 KiB received, 3.92 KiB sent</pre>
+
+<p>Sem a linha <code>latest handshake</code>, os dois lados nunca se falaram: confira chaves, porta e firewall. O <code>wg show</code> é em inglês; não há tradução.</p>
+
+<p>A interface também aparece no <code>ip</code>, com a rota da VPN:</p>
+<pre class="term" data-host="servidor">$ ip -br a show wg0
+wg0              UNKNOWN        10.8.0.1/24
+$ ip r | grep wg0
+10.8.0.0/24 dev wg0 proto kernel scope link src 10.8.0.1</pre>
+
+<hr>
+
+<h2>Passo 7: ligar no boot</h2>
+<p>O pacote traz um serviço do systemd para cada arquivo em <code>/etc/wireguard</code>: <code>wg-quick@wg0</code> usa o <code>wg0.conf</code>.</p>
+
+<pre class="term" data-host="servidor" data-user="root">#> wg-quick down wg0
+#> systemctl enable --now wg-quick@wg0
+Created symlink '/etc/systemd/system/multi-user.target.wants/wg-quick@wg0.service' → '/usr/lib/systemd/system/wg-quick@.service'.
+#> systemctl status wg-quick@wg0 --no-pager | head -3</pre>
+
+<hr>
+
+<h2>Formas diferentes de fazer</h2>
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Forma</th><th>Como</th><th>Quando usar</th></tr>
+<tr><td>wg-quick + serviço</td><td><code>wg0.conf</code> + <code>wg-quick@wg0</code></td><td>O jeito mais comum, no servidor e no notebook.</td></tr>
+<tr><td>NetworkManager</td><td>Importar o <code>wg0.conf</code> nas configurações de rede do GNOME</td><td>Notebook com interface gráfica.</td></tr>
+<tr><td>Comandos <code>ip</code> + <code>wg set</code></td><td><code>ip link add wg0 type wireguard</code>…</td><td>Entender o que o wg-quick faz; scripts.</td></tr>
+<tr><td>systemd-networkd</td><td>Arquivos <code>.netdev</code> e <code>.network</code></td><td>Servidores que já usam networkd.</td></tr>
+</table>
+</div>
+
+<hr>
+
+<h2>Quando não funciona</h2>
+
+<div class="cenario">
+<strong>"resolvconf: command not found" ao subir</strong>
+<pre class="term" data-user="root">#> wg-quick up wg0
+…
+[#] resolvconf -a wg0 -m 0 -x
+/usr/bin/wg-quick: line 32: resolvconf: command not found</pre>
+<p><strong>O que aconteceu:</strong> o seu <code>wg0.conf</code> tem uma linha <code>DNS = …</code>, e para aplicá-la o <code>wg-quick</code> precisa do programa <code>resolvconf</code>, que não vem no Debian.</p>
+<p><strong>Como resolver:</strong> instale o <code>openresolv</code> (<code>apt install openresolv</code>) ou apague a linha <code>DNS</code>.</p>
+</div>
+
+<div class="cenario">
+<strong>wg show não mostra "latest handshake"</strong>
+<p><strong>Como confirmar:</strong> as chaves trocadas estão certas? (a <code>PublicKey</code> de um lado tem de ser a pública do <strong>outro</strong>). A porta UDP 51820 está liberada no nftables e na nuvem? O <code>Endpoint</code> do notebook tem o IP público certo?</p>
+</div>
+
+<div class="cenario">
+<strong>O túnel sobe, mas o ping não passa</strong>
+<p><strong>O que aconteceu:</strong> os <code>AllowedIPs</code> não cobrem o endereço. No servidor, o par precisa ter <code>10.8.0.2/32</code>; no notebook, <code>10.8.0.0/24</code> (ou o IP do servidor).</p>
+</div>
+
+<div class="cenario">
+<strong>"wg: comando não encontrado"</strong>
+<p><strong>O que aconteceu:</strong> o pacote <code>wireguard-tools</code> não está instalado, ou você está como usuário comum e o <code>wg</code> exige root. Entre com <code>su -</code>.</p>
+</div>
+
+<hr>
+
+<h2>Referência</h2>
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Comando</th><th>O que faz</th></tr>
+<tr><td><code>wg genkey</code></td><td>Gera uma chave privada</td></tr>
+<tr><td><code>wg pubkey &lt; privada.key</code></td><td>Calcula a pública</td></tr>
+<tr><td><code>wg-quick up wg0</code> / <code>down wg0</code></td><td>Sobe / derruba o túnel do <code>wg0.conf</code></td></tr>
+<tr><td><code>wg show</code></td><td>Estado das interfaces e dos pares</td></tr>
+<tr><td><code>wg showconf wg0</code></td><td>Configuração atual da interface</td></tr>
+<tr><td><code>systemctl enable --now wg-quick@wg0</code></td><td>Liga agora e no boot</td></tr>
+</table>
+</div>
+
+<hr>
+
+<h2>Exercícios</h2>
+
+<div class="exercise">
+<h3>1. Chave pública</h3>
+<p>Complete para gerar a privada e calcular a pública de uma vez:</p>
+<div class="ex-code">wg genkey | tee privada.key | wg <input data-answer="pubkey" aria-label="subcomando"> &gt; publica.key</div>
+</div>
+
+<div class="exercise">
+<h3>2. Ligar no boot</h3>
+<p>Complete o nome do serviço do túnel <code>wg0</code>:</p>
+<div class="ex-code">systemctl enable --now <input data-answer="wg-quick@wg0|wg-quick@wg0.service" aria-label="serviço"></div>
+</div>
+
+<div class="mc" data-answer="3">
+<p class="mc-q">3. O que vai no bloco <code>[Peer]</code> do servidor?</p>
+<label><input type="radio" name="q3"> A chave privada do notebook.</label>
+<label><input type="radio" name="q3"> A chave privada do servidor.</label>
+<label><input type="radio" name="q3"> A chave pública do notebook e o endereço que ele usa na VPN.</label>
+<label><input type="radio" name="q3"> A senha do root do notebook.</label>
+</div>
+
+<div class="mc" data-answer="1">
+<p class="mc-q">4. No <code>wg show</code>, o par não tem a linha <code>latest handshake</code>. O que isso indica?</p>
+<label><input type="radio" name="q4"> Que os dois lados ainda não conseguiram se falar.</label>
+<label><input type="radio" name="q4"> Que o túnel está funcionando perfeitamente.</label>
+<label><input type="radio" name="q4"> Que a chave privada vazou.</label>
+<label><input type="radio" name="q4"> Que o kernel não suporta WireGuard.</label>
+</div>
+
+<hr>
+
+<h2>Resumo</h2>
+<ul>
+  <li>O módulo do WireGuard já está no kernel do Debian; instale só <code>wireguard-tools</code>.</li>
+  <li>Cada lado tem uma privada (secreta) e uma pública (compartilhada).</li>
+  <li><code>wg0.conf</code>: <code>[Interface]</code> com a própria privada; <code>[Peer]</code> com a pública do outro.</li>
+  <li>Libere <code>udp dport 51820</code> no nftables e use <code>wg-quick@wg0</code> para ligar no boot.</li>
+  <li><code>latest handshake</code> no <code>wg show</code> é o sinal de que o túnel está vivo.</li>
+</ul>
+
+<div class="pager"></div>
+
+</div>
+</main>
+</div>
+<script src="assets/site.js"></script>
+</body>
+</html>

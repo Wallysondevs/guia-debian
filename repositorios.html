@@ -1,0 +1,386 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Debian Repositórios — sources.list, componentes e repositórios de terceiros | Guia Debian</title>
+<meta name="description" content="Repositórios no Debian 13: o sources.list linha por linha, componentes main, contrib, non-free e non-free-firmware, o formato .sources e o apt modernize-sources, repositórios de terceiros com Signed-By e por que PPAs não são para o Debian.">
+<link rel="stylesheet" href="assets/style.css">
+<script>try{var t=localStorage.getItem("tema");if(t)document.documentElement.setAttribute("data-theme",t)}catch(e){}</script>
+</head>
+<body>
+<div class="layout">
+<nav class="sidebar" id="sidebar" aria-label="Tópicos"></nav>
+<main class="main">
+<div class="content">
+
+<div class="pager"></div>
+
+<h1>Debian <span class="hl">Repositórios (sources)</span></h1>
+
+<p class="intro">O <code>apt</code> não "procura na internet": ele só conhece os programas dos <strong>repositórios</strong> que estão configurados. Esta aula mostra onde fica essa lista no Debian, como ler cada linha, como ligar as partes "non-free" e como adicionar um repositório de fora com segurança.</p>
+
+<div class="note">
+<strong>Você vai aprender</strong>
+<ul>
+  <li>A ler o <code>/etc/apt/sources.list</code> do Debian 13, palavra por palavra.</li>
+  <li>O que são <code>main</code>, <code>contrib</code>, <code>non-free</code> e <code>non-free-firmware</code>, e como ligar cada um.</li>
+  <li>O formato novo <code>.sources</code> e o comando <code>apt modernize-sources</code>.</li>
+  <li>A adicionar um repositório de terceiros com chave própria (<code>Signed-By</code>).</li>
+  <li>Por que PPAs do Ubuntu não devem entrar num Debian.</li>
+</ul>
+</div>
+
+<hr>
+
+<h2>Antes do comando: como o apt sabe o que existe</h2>
+<p>Um <strong>repositório</strong> é um servidor com milhares de pacotes <code>.deb</code> e um <strong>índice</strong>: a lista de tudo o que ele tem, com versões e dependências. O <code>apt update</code> baixa esses índices; o <code>apt install</code> consulta o que foi baixado.</p>
+
+<pre class="term" data-user="root">#> apt update
+Atingido:1 http://deb.debian.org/debian trixie InRelease                    « nada mudou desde a última vez
+Atingido:2 http://security.debian.org/debian-security trixie-security InRelease
+Obter:3 http://deb.debian.org/debian trixie-updates InRelease [47,3 kB]       « índice novo baixado
+Obtidos 47,3 kB em 1s (39,2 kB/s)
+Todos os pacotes estão atualizados.</pre>
+
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Palavra</th><th>Significa</th></tr>
+<tr><td><code>Atingido</code> (<em>Hit</em>)</td><td>O índice não mudou; nada a baixar.</td></tr>
+<tr><td><code>Obter</code> (<em>Get</em>)</td><td>Havia índice novo, e ele foi baixado.</td></tr>
+<tr><td><code>Ign</code> (<em>Ignore</em>)</td><td>Arquivo opcional que não existe no servidor; normal.</td></tr>
+<tr><td><code>Erro</code> / <code>E:</code></td><td>Falhou; leia a mensagem (veja "Quando não funciona").</td></tr>
+</table>
+</div>
+
+<hr>
+
+<h2>Onde fica a configuração</h2>
+<p>No Debian 13 instalado pelo netinst, os repositórios estão em <strong>um arquivo só</strong>, no formato clássico de uma linha:</p>
+
+<pre class="term">$ cat /etc/apt/sources.list
+#deb cdrom:[Debian GNU/Linux 13.5.0 _Trixie_ - Official amd64 NETINST with firmware 20260516-10:08]/ trixie contrib main non-free-firmware
+
+deb http://deb.debian.org/debian trixie main non-free-firmware
+deb-src http://deb.debian.org/debian trixie main non-free-firmware
+
+deb http://security.debian.org/debian-security trixie-security main non-free-firmware
+deb-src http://security.debian.org/debian-security trixie-security main non-free-firmware
+
+# trixie-updates, to get updates before a point release is made;
+# see https://www.debian.org/doc/manuals/debian-reference/ch02.en.html#_updates_and_backports
+deb http://deb.debian.org/debian trixie-updates main non-free-firmware
+deb-src http://deb.debian.org/debian trixie-updates main non-free-firmware
+…
+$ ls /etc/apt/sources.list.d/
+$                                       « pasta vazia: nenhum repositório extra</pre>
+
+<p>Linhas que começam com <code>#</code> são comentários. A primeira é a do pendrive/DVD de instalação, que o instalador desliga no fim.</p>
+
+<h3>Uma linha, palavra por palavra</h3>
+<dl class="anatomy">
+  <dt>deb</dt><dd>Tipo: <code>deb</code> = pacotes prontos para instalar. <code>deb-src</code> = o código-fonte deles (só para quem vai recompilar; pode ficar comentado).</dd>
+  <dt>http://deb.debian.org/debian</dt><dd>O endereço do repositório. <code>deb.debian.org</code> redireciona para um espelho perto de você.</dd>
+  <dt>trixie</dt><dd>A <strong>suíte</strong>: de qual versão do Debian são os pacotes. <code>trixie</code> é o Debian 13.</dd>
+  <dt>main non-free-firmware</dt><dd>Os <strong>componentes</strong>: quais "prateleiras" do repositório você quer.</dd>
+</dl>
+
+<h3>As três suítes do Debian estável</h3>
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Suíte</th><th>Servidor</th><th>O que traz</th></tr>
+<tr><td><code>trixie</code></td><td>deb.debian.org</td><td>A versão estável em si, atualizada nos "point releases" (13.1, 13.2…)</td></tr>
+<tr><td><code>trixie-security</code></td><td>security.debian.org</td><td>Correções de segurança, assim que saem</td></tr>
+<tr><td><code>trixie-updates</code></td><td>deb.debian.org</td><td>Atualizações que não podem esperar o próximo point release (fusos horários, antivírus…)</td></tr>
+</table>
+</div>
+
+<p>Existe uma quarta, opcional: <code>trixie-backports</code>, com versões mais novas de alguns programas. Ela tem uma aula própria: <a href="backports.html">Backports e Pinning</a>.</p>
+
+<div class="warning">
+<strong>Use o nome (<code>trixie</code>), não "stable"</strong>
+<p>Também funciona escrever <code>stable</code> no lugar de <code>trixie</code>. Mas, quando o Debian 14 for lançado, <code>stable</code> passa a apontar para ele, e o próximo <code>apt full-upgrade</code> faz uma atualização de versão inteira sem você ter decidido. Com o codinome, você só muda quando quiser (veja <a href="upgrade-versao.html">Atualizar a Versão do Debian</a>).</p>
+</div>
+
+<hr>
+
+<h2>Os componentes: main, contrib, non-free e non-free-firmware</h2>
+<p>O Debian separa os pacotes conforme a licença. Por padrão, só entra o que é software livre.</p>
+
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Componente</th><th>O que tem</th><th>Exemplos</th></tr>
+<tr><td><code>main</code></td><td>Software livre, com tudo de que depende também livre. É o Debian "oficial".</td><td><code>bash</code>, <code>firefox-esr</code>, <code>libreoffice</code></td></tr>
+<tr><td><code>non-free-firmware</code></td><td>Firmware fechado de hardware: Wi-Fi, placas de vídeo, microcódigo do processador. Ligado por padrão desde o Debian 12.</td><td><code>firmware-iwlwifi</code>, <code>firmware-realtek</code>, <code>intel-microcode</code></td></tr>
+<tr><td><code>contrib</code></td><td>Software livre que depende de algo não livre (por exemplo, baixa um arquivo proprietário).</td><td><code>ttf-mscorefonts-installer</code></td></tr>
+<tr><td><code>non-free</code></td><td>Software com licença restrita.</td><td><code>nvidia-driver</code>, <code>unrar</code></td></tr>
+</table>
+</div>
+
+<h3>Ligar contrib e non-free</h3>
+<p>Basta acrescentar as palavras no fim das linhas e atualizar os índices. Como root:</p>
+
+<ol class="passo">
+<li><p>Faça uma cópia de segurança e abra o arquivo:</p>
+<pre class="term" data-user="root">#> cp /etc/apt/sources.list /etc/apt/sources.list.bak
+#> nano /etc/apt/sources.list</pre></li>
+<li><p>Nas linhas <code>deb</code> (as que você usa), acrescente os componentes:</p>
+<pre class="file" data-file="/etc/apt/sources.list">deb http://deb.debian.org/debian trixie main contrib non-free non-free-firmware
+deb http://security.debian.org/debian-security trixie-security main contrib non-free non-free-firmware
+deb http://deb.debian.org/debian trixie-updates main contrib non-free non-free-firmware</pre></li>
+<li><p>Atualize e confira:</p>
+<pre class="term" data-user="root">#> apt update
+#> apt policy unrar</pre></li>
+</ol>
+
+<hr>
+
+<h2>O formato novo: arquivos <code>.sources</code></h2>
+<p>O apt também aceita um formato em blocos (chamado deb822), mais fácil de ler e de editar com segurança. Cada repositório vira um bloco de "Campo: valor" dentro de um arquivo <code>.sources</code> em <code>/etc/apt/sources.list.d/</code>.</p>
+
+<p>O apt 3 do Debian 13 tem um comando que converte o arquivo antigo. Responda <kbd>n</kbd> na pergunta para só <strong>simular</strong> e ver o resultado sem mudar nada:</p>
+
+<pre class="term" data-user="root">#> apt modernize-sources
+The following files need modernizing:
+  - /etc/apt/sources.list
+
+Modernizing will replace .list files with the new .sources format,
+add Signed-By values where they can be determined automatically,
+and save the old files into .list.bak files.
+…
+For a simulation, respond N in the following prompt.
+Reescrever 1 fontes? [S/n] n
+Simulating only...
+Modernizing /etc/apt/sources.list...
+
+# Would write to: /etc/apt/sources.list.d/debian.sources
+# Modernized from /etc/apt/sources.list
+Types: deb deb-src
+URIs: http://deb.debian.org/debian/
+Suites: trixie
+Components: main non-free-firmware
+Signed-By: /usr/share/keyrings/debian-archive-keyring.gpg
+…</pre>
+
+<dl class="anatomy">
+  <dt>Types: deb deb-src</dt><dd>Os tipos, que antes eram duas linhas separadas.</dd>
+  <dt>URIs:</dt><dd>O endereço do repositório.</dd>
+  <dt>Suites: trixie</dt><dd>A suíte; pode listar várias: <code>trixie trixie-updates</code>.</dd>
+  <dt>Components:</dt><dd>Os componentes.</dd>
+  <dt>Signed-By:</dt><dd>Qual chave confere a assinatura deste repositório (para o Debian, o chaveiro oficial).</dd>
+</dl>
+
+<p>Respondendo <kbd>S</kbd>, o apt grava <code>/etc/apt/sources.list.d/debian.sources</code> e guarda o antigo como <code>sources.list.bak</code>. Os dois formatos funcionam no Debian 13; não misture o mesmo repositório nos dois, ou ele aparece duplicado (veja os cenários).</p>
+
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Formato</th><th>Arquivo</th><th>Vantagem</th></tr>
+<tr><td>Uma linha</td><td><code>sources.list</code> ou <code>*.list</code></td><td>Compacto; o que a maioria dos tutoriais mostra</td></tr>
+<tr><td>deb822</td><td><code>*.sources</code></td><td>Campos com nome, várias suítes por bloco, chave declarada; é o futuro do apt</td></tr>
+</table>
+</div>
+
+<hr>
+
+<h2>De onde vem este pacote? <code>apt policy</code></h2>
+<p>Quando o mesmo pacote existe em mais de um repositório, o apt escolhe a versão mais alta entre os de maior <strong>prioridade</strong>. O <code>apt policy</code> mostra a escolha:</p>
+
+<pre class="term">$ apt policy curl
+curl:
+  Instalado: (nenhum)
+  Candidato: 8.14.1-2+deb13u7                              « o que o apt install instalaria
+  Tabela de versão:
+     8.14.1-2+deb13u7 500
+        500 http://security.debian.org/debian-security trixie-security/main amd64 Packages
+     8.14.1-2+deb13u5 500
+        500 http://deb.debian.org/debian trixie/main amd64 Packages</pre>
+
+<p>As duas versões têm prioridade 500 (a padrão), então ganha a mais alta: a correção de segurança <code>deb13u7</code>. O <code>apt policy</code> também mostra um aviso em inglês ("apt does not have a stable CLI interface") quando a saída vai para um pipe; é normal.</p>
+
+<hr>
+
+<h2>Repositórios de terceiros</h2>
+<p>Alguns programas (Docker, VS Code, navegadores) têm repositório próprio da empresa. A receita segura tem sempre três partes: a <strong>chave</strong> da empresa, guardada à parte; o <strong>arquivo do repositório</strong>, dizendo que só essa chave vale para ele; e o <code>apt update</code>.</p>
+
+<p>Exemplo com o repositório oficial do Docker para Debian, como root:</p>
+
+<ol class="passo">
+<li><p>Baixe a chave para <code>/etc/apt/keyrings</code>, a pasta das chaves de terceiros:</p>
+<pre class="term" data-user="root">#> install -m 0755 -d /etc/apt/keyrings
+#> wget -qO /etc/apt/keyrings/docker.asc https://download.docker.com/linux/debian/gpg
+#> head -1 /etc/apt/keyrings/docker.asc
+-----BEGIN PGP PUBLIC KEY BLOCK-----</pre></li>
+<li><p>Crie o arquivo do repositório amarrado a essa chave:</p>
+<pre class="file" data-file="/etc/apt/sources.list.d/docker.sources">Types: deb
+URIs: https://download.docker.com/linux/debian
+Suites: trixie
+Components: stable
+Signed-By: /etc/apt/keyrings/docker.asc</pre></li>
+<li><p>Atualize e veja de onde vem o pacote:</p>
+<pre class="term" data-user="root">#> apt update
+Obter:1 https://download.docker.com/linux/debian trixie InRelease [32,5 kB]
+Obter:2 https://download.docker.com/linux/debian trixie/stable amd64 Packages [49,8 kB]
+…
+#> apt policy docker-ce
+docker-ce:
+  Instalado: (nenhum)
+  Candidato: 5:29.9.1-1~debian.13~trixie
+  Tabela de versão:
+     5:29.9.1-1~debian.13~trixie 500
+        500 https://download.docker.com/linux/debian trixie/stable amd64 Packages</pre></li>
+</ol>
+
+<div class="note">
+<strong>Por que a chave fica separada (e o <code>apt-key</code> sumiu)</strong>
+<p>Antigamente, as chaves iam para um chaveiro único com <code>apt-key add</code>: uma chave de terceiros passava a valer para <strong>todos</strong> os repositórios, inclusive para "assinar" pacotes falsos do Debian. O <code>Signed-By</code> limita a chave ao repositório dela. O <code>apt-key</code> nem existe mais no Debian 13.</p>
+</div>
+
+<div class="tip">
+<strong>Atalho do Debian: <code>extrepo</code></strong>
+<p>O pacote <code>extrepo</code> mantém uma lista revisada de repositórios externos populares, com as chaves certas. Depois de <code>apt install extrepo</code>, um <code>extrepo search docker</code> mostra as opções e <code>extrepo enable docker-ce</code> faz os passos acima por você.</p>
+</div>
+
+<hr>
+
+<h2>PPAs não são do Debian</h2>
+<p>Muitos tutoriais mandam rodar <code>add-apt-repository ppa:alguem/programa</code>. PPA (<em>Personal Package Archive</em>) é um serviço do <strong>Ubuntu</strong>: os pacotes ali foram compilados para as bibliotecas de uma versão específica do Ubuntu. No Debian, eles podem instalar até funcionar, mas puxam ou substituem bibliotecas que não batem com as do Debian, e a próxima atualização pode quebrar o sistema.</p>
+
+<pre class="term">$ add-apt-repository ppa:alguem/programa
+bash: add-apt-repository: comando não encontrado        « nem vem instalado no Debian</pre>
+
+<div class="warning">
+<strong>Não transforme o Debian num "FrankenDebian"</strong>
+<p>Misturar repositórios de outras distribuições (PPAs, repositórios do Ubuntu) ou de outras versões do Debian (testing, unstable) no mesmo sistema é o jeito mais comum de quebrar um Debian. Prefira, nesta ordem: o pacote do próprio Debian; o <a href="backports.html">backports</a>; o repositório oficial do fabricante para Debian; um <a href="flatpak.html">Flatpak</a>.</p>
+</div>
+
+<h3>Riscos de cada repositório extra</h3>
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Risco</th><th>Por quê</th></tr>
+<tr><td>Confiança</td><td>Quem controla o repositório pode instalar qualquer coisa como root na sua máquina, a cada atualização.</td></tr>
+<tr><td>Conflitos</td><td>Pacotes de fora podem substituir bibliotecas do Debian e quebrar outros programas.</td></tr>
+<tr><td>Atualização de versão</td><td>Na hora de ir do Debian 13 para o 14, repositórios de terceiros são a principal fonte de problemas; desligue-os antes.</td></tr>
+<tr><td>Abandono</td><td>Um repositório que some passa a dar erro no <code>apt update</code>.</td></tr>
+</table>
+</div>
+
+<hr>
+
+<h2>Quando não funciona</h2>
+
+<div class="cenario">
+<strong>"está configurado várias vezes"</strong>
+<pre class="term" data-user="root">#> apt update
+…
+W: O alvo Packages (main/binary-amd64/Packages) está configurado várias vezes em /etc/apt/sources.list:1 e /etc/apt/sources.list:2</pre>
+<p><strong>O que aconteceu:</strong> o mesmo repositório aparece duas vezes, em duas linhas ou em dois arquivos (por exemplo, no <code>sources.list</code> e num <code>.sources</code>).</p>
+<p><strong>Como resolver:</strong> apague ou comente uma das cópias. A mensagem diz o arquivo e a linha (<code>:1</code> e <code>:2</code>).</p>
+</div>
+
+<div class="cenario">
+<strong>"não tem um arquivo Release"</strong>
+<pre class="term" data-user="root">#> apt update
+Erro:2 http://deb.debian.org/debian trixy Release
+  404  Not Found [IP: 151.101.250.132 80]
+E: O repositório 'http://deb.debian.org/debian trixy Release' não tem um arquivo Release.</pre>
+<p><strong>O que aconteceu:</strong> a suíte não existe nesse servidor. Aqui foi erro de digitação (<code>trixy</code>). Também acontece com versões antigas, que saem do servidor principal e vão para <code>archive.debian.org</code>.</p>
+<p><strong>Como resolver:</strong> confira o nome da suíte e o endereço.</p>
+</div>
+
+<div class="cenario">
+<strong>"não está assinado" / "Missing key"</strong>
+<pre class="term" data-user="root">#> apt update
+Erro:1 https://download.docker.com/linux/debian trixie InRelease
+  Sub-process /usr/bin/sqv returned an error code (1), error message is: Missing key 7EA0A9C3F273FCD8, which is needed to verify signature.
+W: Verificação de assinatura OpenPGP falhou: https://download.docker.com/linux/debian trixie InRelease: …
+E: O repositório 'http://download.docker.com/linux/debian trixie InRelease' não está assinado.</pre>
+<p><strong>O que aconteceu:</strong> o repositório foi adicionado sem a chave dele (ou o <code>Signed-By</code> aponta para o arquivo errado). O apt 3 confere as assinaturas com o programa <code>sqv</code>, que aparece na mensagem.</p>
+<p><strong>Como resolver:</strong> baixe a chave para <code>/etc/apt/keyrings</code> e aponte o <code>Signed-By</code> para ela, como na receita acima. Nunca "resolva" desligando a verificação (<code>trusted=yes</code>).</p>
+</div>
+
+<div class="cenario">
+<strong>Liguei o non-free e o pacote ainda não aparece</strong>
+<pre class="term" data-user="root">#> apt install nvidia-driver
+O pacote nvidia-driver não está disponível, mas é referenciado por outro pacote.
+Isto pode significar que o pacote está faltando, ficou obsoleto ou
+está disponível somente a partir de outra fonte
+
+Erro: O pacote 'nvidia-driver' não tem candidato para instalação</pre>
+<p><strong>O que aconteceu:</strong> o apt sabe que o pacote existe (outro pacote cita o nome dele), mas nenhum repositório ligado o oferece. Ou o <code>non-free</code> não está na linha, ou você editou o arquivo e não rodou o <code>apt update</code>, e os índices ainda são os velhos.</p>
+<p><strong>Como resolver:</strong> confira se <code>non-free</code> está na linha, rode <code>apt update</code> e tente de novo. Um nome errado dá outra mensagem: <code>Erro: Não é possível encontrar o pacote nvidea-driver</code>.</p>
+</div>
+
+<hr>
+
+<h2>Referência</h2>
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Comando / arquivo</th><th>Para quê</th></tr>
+<tr><td><code>/etc/apt/sources.list</code></td><td>Repositórios no formato de uma linha</td></tr>
+<tr><td><code>/etc/apt/sources.list.d/*.list</code> e <code>*.sources</code></td><td>Repositórios extras, um arquivo por repositório</td></tr>
+<tr><td><code>/etc/apt/keyrings/</code></td><td>Chaves de repositórios de terceiros</td></tr>
+<tr><td><code>apt update</code></td><td>Baixa os índices de todos os repositórios</td></tr>
+<tr><td><code>apt policy pacote</code></td><td>De onde vem cada versão e qual será instalada</td></tr>
+<tr><td><code>apt modernize-sources</code></td><td>Converte <code>.list</code> para <code>.sources</code> (responda N para simular)</td></tr>
+<tr><td><code>apt edit-sources</code></td><td>Abre o arquivo de repositórios no editor</td></tr>
+<tr><td><code>extrepo enable nome</code></td><td>Liga um repositório externo revisado pelo Debian</td></tr>
+</table>
+</div>
+
+<hr>
+
+<h2>Exercícios</h2>
+
+<div class="exercise">
+<h3>1. A suíte de segurança</h3>
+<p>Complete a linha do repositório de segurança do Debian 13:</p>
+<div class="ex-code">deb http://security.debian.org/debian-security <input data-answer="trixie-security" aria-label="suíte"> main non-free-firmware</div>
+</div>
+
+<div class="exercise">
+<h3>2. Firmware do Wi-Fi</h3>
+<p>Em qual componente fica o firmware fechado de placas Wi-Fi?</p>
+<div class="ex-code"><input data-answer="non-free-firmware" aria-label="componente"></div>
+</div>
+
+<div class="exercise">
+<h3>3. Chave amarrada</h3>
+<p>No arquivo <code>.sources</code>, qual campo diz qual chave confere o repositório?</p>
+<div class="ex-code"><input data-answer="Signed-By|Signed-By:" aria-label="campo">: /etc/apt/keyrings/empresa.asc</div>
+</div>
+
+<div class="mc" data-answer="3">
+<p class="mc-q">4. Por que preferir <code>trixie</code> em vez de <code>stable</code> no sources.list?</p>
+<label><input type="radio" name="q4"> Porque <code>stable</code> não existe mais.</label>
+<label><input type="radio" name="q4"> Porque <code>trixie</code> baixa mais rápido.</label>
+<label><input type="radio" name="q4"> Porque <code>stable</code> muda de versão sozinho quando sai o Debian 14.</label>
+<label><input type="radio" name="q4"> Porque o Debian 13 só aceita codinomes.</label>
+</div>
+
+<div class="mc" data-answer="1">
+<p class="mc-q">5. Um tutorial manda usar um PPA no seu Debian. O que fazer?</p>
+<label><input type="radio" name="q5"> Procurar o pacote no Debian, no backports ou um repositório oficial para Debian; PPAs são para Ubuntu.</label>
+<label><input type="radio" name="q5"> Instalar o <code>add-apt-repository</code> e seguir o tutorial.</label>
+<label><input type="radio" name="q5"> Trocar <code>trixie</code> pelo nome da versão do Ubuntu.</label>
+<label><input type="radio" name="q5"> Desligar a verificação de assinaturas.</label>
+</div>
+
+<hr>
+
+<h2>Resumo</h2>
+<ul>
+  <li>O apt só conhece o que está nos repositórios configurados; <code>apt update</code> baixa os índices.</li>
+  <li>No Debian 13 instalado pelo netinst, tudo está em <code>/etc/apt/sources.list</code>, com <code>trixie</code>, <code>trixie-security</code> e <code>trixie-updates</code>.</li>
+  <li>Componentes: <code>main</code> (livre), <code>non-free-firmware</code> (firmware, ligado por padrão), <code>contrib</code> e <code>non-free</code>.</li>
+  <li><code>apt modernize-sources</code> converte para o formato <code>.sources</code>; responda N para simular.</li>
+  <li>Repositório de terceiros: chave em <code>/etc/apt/keyrings</code> + <code>Signed-By</code>. Nada de <code>apt-key</code>, nada de PPA.</li>
+</ul>
+
+<div class="pager"></div>
+
+</div>
+</main>
+</div>
+<script src="assets/site.js"></script>
+</body>
+</html>
