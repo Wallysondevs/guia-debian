@@ -1,0 +1,800 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Debian Wi-Fi — nmcli, nmtui e /etc/network/interfaces | Guia Debian</title>
+<meta name="description" content="Conecte o Debian 13 no Wi-Fi: no desktop com nmcli e nmtui (procurar redes, senha, senha errada, conexões salvas, rede oculta) e no servidor sem desktop pelo /etc/network/interfaces com wpa-ssid, wpa-psk, wpa_passphrase e ifup.">
+<link rel="stylesheet" href="assets/style.css">
+<script>try{var t=localStorage.getItem("tema");if(t)document.documentElement.setAttribute("data-theme",t)}catch(e){}</script>
+</head>
+<body>
+<div class="layout">
+<nav class="sidebar" id="sidebar" aria-label="Tópicos"></nav>
+<main class="main">
+<div class="content">
+
+<div class="pager"></div>
+
+<h1>Debian <span class="hl">Wi-Fi</span></h1>
+
+<p class="intro">Nem todo computador tem cabo de rede: notebooks, e muitos desktops, vivem no Wi-Fi. No Debian, o jeito de conectar depende de como o sistema foi instalado. Num <strong>desktop</strong>, quem cuida do Wi-Fi é o <strong>NetworkManager</strong>, e você conversa com ele pelo ícone de rede, pelo <code>nmcli</code> ou pelo <code>nmtui</code>. Num <strong>servidor sem desktop</strong>, o NetworkManager nem existe: o Wi-Fi fica escrito no arquivo <code>/etc/network/interfaces</code>. Esta aula ensina os dois caminhos, do primeiro comando até a senha errada.</p>
+
+<div class="note">
+<strong>Você vai aprender</strong>
+<ul>
+  <li>Descobrir quem cuida do Wi-Fi no seu Debian (NetworkManager ou ifupdown).</li>
+  <li>Ver se o Wi-Fi está ligado, procurar redes e conectar com o <code>nmcli</code>, pedindo a senha com <code>--ask</code>.</li>
+  <li>Reconhecer a mensagem de senha errada e sair da armadilha do perfil salvo com a senha errada.</li>
+  <li>Gerenciar conexões salvas (<code>show</code>, <code>up</code>, <code>down</code>, <code>delete</code>), redes ocultas e usar o menu <code>nmtui</code>.</li>
+  <li>Configurar o Wi-Fi de um servidor no <code>/etc/network/interfaces</code> com <code>wpa-ssid</code>, <code>wpa-psk</code> e <code>wpa_passphrase</code>, e ligá-lo com <code>ifup</code>.</li>
+</ul>
+</div>
+
+<div class="note">
+<strong>De onde vêm as saídas desta aula</strong>
+<p>Todas as saídas e telas foram geradas num Debian 13 real, a máquina virtual do guia. Como ela não tem placa Wi-Fi de verdade, o Wi-Fi foi feito com <strong>placas Wi-Fi virtuais</strong> do próprio kernel: uma faz o papel da placa do notebook (<code>wlp2s0</code>) e outra faz o papel do roteador da casa (rede <code>CasaDaAna</code>). Por isso algumas listas mostram placas a mais e endereços MAC começando com <code>02:00:00</code>. Tudo isso está explicado em <a href="#laboratorio">Como o laboratório foi feito</a>. Problemas de placa (Wi-Fi que não aparece, bloqueado, firmware) estão na aula seguinte, <a href="wifi-problemas.html">Wi-Fi que Não Funciona</a>.</p>
+</div>
+
+<hr>
+
+<h2 id="quem">Quem cuida do Wi-Fi no seu Debian?</h2>
+
+<p>Conectar no Wi-Fi envolve três peças. Saber quem é quem ajuda a entender as mensagens de erro:</p>
+
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Peça</th><th>O que faz</th><th>Programa no Debian</th></tr>
+<tr><td>Placa Wi-Fi</td><td>O rádio. Precisa de driver e, quase sempre, de <strong>firmware</strong> (veja <a href="wifi-problemas.html">Wi-Fi que Não Funciona</a>).</td><td>O kernel</td></tr>
+<tr><td>"Entrar" na rede</td><td>Acha a rede pelo nome, prova que sabe a senha (WPA2/WPA3) e mantém a conexão.</td><td><code>wpa_supplicant</code> (pacote <code>wpasupplicant</code>)</td></tr>
+<tr><td>Endereço IP</td><td>Depois de entrar na rede, pede um endereço ao roteador (DHCP).</td><td>NetworkManager (no desktop) ou <code>dhcpcd</code> (no servidor)</td></tr>
+</table>
+</div>
+
+<p>Quem dá as ordens para essas peças é o "gerenciador" de rede, o mesmo da aula <a href="configurar-rede.html">Configurar a Rede</a>:</p>
+
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Tipo de instalação</th><th>Quem cuida do Wi-Fi</th><th>Como você conecta</th><th>Nesta aula</th></tr>
+<tr><td>Desktop (GNOME, KDE, Xfce…)</td><td>NetworkManager</td><td>Ícone de rede, <code>nmcli</code> ou <code>nmtui</code></td><td><a href="#desktop">Parte 1</a></td></tr>
+<tr><td>Servidor ou instalação mínima</td><td>ifupdown + <code>wpa_supplicant</code> + <code>dhcpcd</code></td><td>Editando o <code>/etc/network/interfaces</code></td><td><a href="#servidor">Parte 2</a></td></tr>
+</table>
+</div>
+
+<p>Num Debian instalado sem desktop, o NetworkManager não vem. A máquina de laboratório do guia é assim:</p>
+
+<pre class="term" data-host="servidor">#> systemctl is-active networking NetworkManager
+active                                « o ifupdown cuida da rede
+inactive                              « o NetworkManager não está rodando
+#> nmcli device
+bash: nmcli: comando não encontrado   « nem está instalado</pre>
+
+<p>Na mesma instalação mínima também faltam <code>wpasupplicant</code>, <code>iw</code> e <code>rfkill</code>. Os dois primeiros o instalador só coloca se a instalação foi feita <strong>pelo Wi-Fi</strong> (veja <a href="instalacao.html#internet">Instalação</a>). Se você vai usar Wi-Fi num servidor instalado por cabo, instale-os antes de tirar o cabo: <code>apt install wpasupplicant iw rfkill</code>.</p>
+
+<hr>
+
+<h2 id="desktop">Parte 1: no desktop, com o NetworkManager</h2>
+
+<p>No GNOME, o caminho mais curto é o canto superior direito da tela: clique nos ícones, abra <strong>Wi-Fi</strong>, escolha a rede e digite a senha. O resto desta parte faz o mesmo pelo terminal, o que serve para entender o que o ícone faz, para resolver problemas e para máquinas sem tela gráfica funcionando.</p>
+
+<p>Antes, dois nomes que o <code>nmcli</code> usa o tempo todo:</p>
+
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Termo</th><th>O que é</th><th>Exemplo</th></tr>
+<tr><td><strong>device</strong> (dispositivo)</td><td>A placa de rede, física. É o nome que aparece no <code>ip a</code>.</td><td><code>wlp2s0</code></td></tr>
+<tr><td><strong>connection</strong> (conexão, ou perfil)</td><td>Uma configuração salva: "a rede CasaDaAna, com esta senha, pegando IP automático". Uma placa pode ter várias conexões salvas e usa uma de cada vez.</td><td><code>CasaDaAna</code></td></tr>
+<tr><td><strong>SSID</strong></td><td>O nome da rede Wi-Fi, como aparece na lista. Maiúsculas e minúsculas contam.</td><td><code>CasaDaAna</code></td></tr>
+</table>
+</div>
+
+<h3 id="radio">Passo 1: o Wi-Fi está ligado? nmcli radio</h3>
+
+<dl class="anatomy">
+  <dt>nmcli</dt><dd>(<em>NetworkManager command line interface</em>) A ferramenta de linha de comando do NetworkManager.</dd>
+  <dt>radio</dt><dd>Mostra (ou muda) os "rádios": Wi-Fi e banda larga móvel (WWAN).</dd>
+</dl>
+
+<pre class="term">$ nmcli radio
+WIFI-HW     WIFI        WWAN-HW  WWAN
+habilitado  habilitado  missing  habilitado</pre>
+
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Coluna</th><th>O que quer dizer</th><th>Se não estiver <code>habilitado</code></th></tr>
+<tr><td><code>WIFI-HW</code></td><td>A chave de <strong>hardware</strong> do Wi-Fi (botão, tecla de modo avião).</td><td><code>desabilitado</code>: só a chave física ou a tecla religam. Veja <a href="wifi-problemas.html#rfkill">rfkill</a>.</td></tr>
+<tr><td><code>WIFI</code></td><td>O Wi-Fi ligado pelo <strong>software</strong>.</td><td><code>desabilitado</code>: ligue com <code>nmcli radio wifi on</code>.</td></tr>
+<tr><td><code>WWAN-HW</code> / <code>WWAN</code></td><td>O mesmo para modem 4G (<a href="celular-modem.html">Celular e Modem 4G</a>).</td><td><code>missing</code> ("ausente") = não há modem. Normal.</td></tr>
+</table>
+</div>
+
+<p>Para desligar e ligar só o Wi-Fi (é o "modo avião" do Wi-Fi):</p>
+
+<pre class="term">$ nmcli radio wifi off
+$ nmcli radio
+WIFI-HW     WIFI          WWAN-HW  WWAN
+habilitado  desabilitado  missing  habilitado     « o Wi-Fi foi desligado pelo software
+$ nmcli radio wifi on</pre>
+
+<p>Como quase todo comando que <em>muda</em> algo, <code>nmcli radio wifi off</code> e <code>on</code> não mostram nada quando dão certo (código de saída <code>0</code>).</p>
+
+<h3 id="device">Passo 2: qual é a placa? nmcli device</h3>
+
+<p><code>nmcli device</code> (ou <code>nmcli device status</code>, que é a mesma coisa) lista as placas que o NetworkManager conhece:</p>
+
+<pre class="term">$ nmcli device
+DEVICE          TYPE      STATE                   CONNECTION
+wlp2s0          wifi      desconectado            --       « a placa Wi-Fi do notebook
+lo              loopback  connected (externally)  lo
+p2p-dev-wlp2s0  wifi-p2p  desconectado            --       « parte da mesma placa (Wi-Fi Direct)
+enp1s0          ethernet  não gerenciável         --       « o cabo, configurado no /etc/network/interfaces
+hwsim0          unknown   não gerenciável         --       « só no laboratório
+wlan1           wifi      não gerenciável         --       « só no laboratório: o "roteador"
+wlan1_1         wifi      não gerenciável         --       « só no laboratório
+wlan1_2         wifi      não gerenciável         --       « só no laboratório</pre>
+
+<p>Num notebook comum você veria só as quatro primeiras linhas. As colunas:</p>
+
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Coluna</th><th>O que quer dizer</th></tr>
+<tr><td><code>DEVICE</code></td><td>O nome da placa. Placas Wi-Fi começam com <code>wl</code> (<em>wireless</em>): <code>wlp2s0</code> é uma placa interna; adaptadores USB costumam se chamar <code>wlx</code> + o endereço MAC.</td></tr>
+<tr><td><code>TYPE</code></td><td><code>wifi</code>, <code>ethernet</code> (cabo), <code>gsm</code> (modem), <code>loopback</code>…</td></tr>
+<tr><td><code>STATE</code></td><td>O estado (tabela abaixo).</td></tr>
+<tr><td><code>CONNECTION</code></td><td>A conexão salva que está em uso; <code>--</code> = nenhuma.</td></tr>
+</table>
+</div>
+
+<div class="table-wrap">
+<table class="ref">
+<tr><th><code>STATE</code></th><th>O que quer dizer</th></tr>
+<tr><td><code>conectado</code></td><td>Tudo certo: está na rede e tem endereço.</td></tr>
+<tr><td><code>desconectado</code></td><td>Pronta, mas sem rede. É onde você começa.</td></tr>
+<tr><td><code>conectando (configurando)</code></td><td>Entrando na rede ou esperando o endereço. Espere alguns segundos e repita.</td></tr>
+<tr><td><code>não disponível</code></td><td>A placa existe, mas não pode ser usada: Wi-Fi desligado (<code>nmcli radio wifi off</code> ou modo avião). Veja <a href="wifi-problemas.html#rfkill">rfkill</a>.</td></tr>
+<tr><td><code>não gerenciável</code></td><td>O NetworkManager não toca nessa placa, porque ela está no <code>/etc/network/interfaces</code> (veja <a href="#conflito">o conflito</a>).</td></tr>
+</table>
+</div>
+
+<p>Repare que algumas palavras ficam em inglês, como <code>connected (externally)</code>: é assim mesmo no Debian 13 (falta tradução).</p>
+
+<h3 id="list">Passo 3: procurar redes, nmcli device wifi list</h3>
+
+<dl class="anatomy">
+  <dt>nmcli device wifi</dt><dd>Comandos de Wi-Fi da placa.</dd>
+  <dt>list</dt><dd>Lista as redes que a placa está "ouvindo".</dd>
+</dl>
+
+<pre class="term">$ nmcli device wifi list
+IN-USE  BSSID              SSID        MODE   CHAN  RATE        SIGNAL  BARS  SECURITY
+        02:00:00:00:01:00  CasaDaAna   Infra  6     130 Mbit/s  100     ▂▄▆█  WPA2     « a sua rede
+        02:00:00:00:01:01  Vizinho_2G  Infra  6     130 Mbit/s  100     ▂▄▆█  WPA2
+        02:00:00:00:01:02  --          Infra  6     130 Mbit/s  100     ▂▄▆█  WPA2     « rede oculta
+
+IN-USE  BSSID  SSID  MODE  CHAN  RATE  SIGNAL  BARS  SECURITY     « tabelas vazias: as placas do "roteador",
+
+IN-USE  BSSID  SSID  MODE  CHAN  RATE  SIGNAL  BARS  SECURITY     « que só existem no laboratório
+
+IN-USE  BSSID  SSID  MODE  CHAN  RATE  SIGNAL  BARS  SECURITY</pre>
+
+<p>O <code>nmcli</code> faz uma tabela para cada placa Wi-Fi. No seu notebook, que tem uma placa só, aparece só a primeira. Para pedir a lista de uma placa específica, acrescente <code>ifname wlp2s0</code> (<em>interface name</em>): <code>nmcli device wifi list ifname wlp2s0</code>.</p>
+
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Coluna</th><th>O que quer dizer</th></tr>
+<tr><td><code>IN-USE</code></td><td>Um <code>*</code> marca a rede em que você está conectado.</td></tr>
+<tr><td><code>BSSID</code></td><td>O endereço MAC da antena do roteador. Uma casa com repetidor tem a mesma rede (mesmo SSID) com dois BSSID.</td></tr>
+<tr><td><code>SSID</code></td><td>O nome da rede. <code>--</code> = <strong>rede oculta</strong>: ela existe, mas não divulga o nome (veja <a href="#oculta">Rede oculta</a>).</td></tr>
+<tr><td><code>MODE</code></td><td><code>Infra</code> (infraestrutura) = uma rede com roteador, o caso normal.</td></tr>
+<tr><td><code>CHAN</code></td><td>O canal. De 1 a 13 é a faixa de 2,4 GHz; 36 ou mais é a faixa de 5 GHz.</td></tr>
+<tr><td><code>RATE</code></td><td>A velocidade máxima anunciada.</td></tr>
+<tr><td><code>SIGNAL</code> e <code>BARS</code></td><td>A força do sinal, de 0 a 100, e em "barrinhas". Abaixo de 30, a conexão pode falhar.</td></tr>
+<tr><td><code>SECURITY</code></td><td><code>WPA2</code>, <code>WPA3</code> ou <code>WPA1 WPA2</code> = rede com senha; vazio = rede aberta; <code>802.1X</code> = rede de empresa ou universidade (usuário e senha).</td></tr>
+</table>
+</div>
+
+<p>A lista é guardada por alguns segundos. Se a sua rede não aparece, mande procurar de novo com <code>rescan</code>: ele não mostra nada (código <code>0</code>), e a procura acontece por trás; espere uns 3 segundos e liste outra vez.</p>
+
+<pre class="term">$ nmcli device wifi rescan
+$ nmcli device wifi list ifname wlp2s0</pre>
+
+<figure><img src="img/nmcli-wifi-list-tty.png" alt="Console de texto: ana@notebook:~$ nmcli device wifi rescan; depois nmcli device wifi list ifname wlp2s0 mostra, em verde, as redes Vizinho_2G, uma rede sem nome (--) e CasaDaAna marcada com asterisco, todas WPA2, com as barras desenhadas como quatro asteriscos" loading="lazy"><figcaption>A mesma lista num console de texto (TTY), já conectado na <code>CasaDaAna</code> (o <code>*</code> na coluna <code>IN-USE</code>). Sem interface gráfica, as barras de sinal viram asteriscos.</figcaption></figure>
+
+<h3 id="connect">Passo 4: conectar, pedindo a senha (--ask)</h3>
+
+<dl class="anatomy">
+  <dt>nmcli</dt><dd>O programa.</dd>
+  <dt>--ask</dt><dd>"Pergunte": se faltar alguma informação (a senha), o <code>nmcli</code> pergunta no terminal, sem mostrar o que você digita. Vem antes do resto.</dd>
+  <dt>device wifi connect</dt><dd>Conectar numa rede Wi-Fi.</dd>
+  <dt>CasaDaAna</dt><dd>O SSID, exatamente como na lista. Se tiver espaço, use aspas: <code>"Casa da Ana"</code>.</dd>
+</dl>
+
+<pre class="term">$ nmcli --ask device wifi connect CasaDaAna
+Senhas ou chaves de criptografia são necessárias para acessar a rede sem fio “CasaDaAna”.
+Senha (802-11-wireless-security.psk): *************          « cada letra vira um *
+Dispositivo “wlp2s0” ativado com sucesso com “cb61a77c-0cdf-41f8-a670-a53190f125da”.</pre>
+
+<ul>
+  <li><code>Senha (802-11-wireless-security.psk):</code> é o nome técnico do campo da senha (<em>pre-shared key</em>, "chave pré-compartilhada": a senha que você e o roteador já sabem).</li>
+  <li><code>ativado com sucesso com “cb61…”</code>: conectou. O número comprido é o identificador (UUID) da conexão que o <code>nmcli</code> acabou de criar e salvar com o nome <code>CasaDaAna</code>.</li>
+</ul>
+
+<p>O código de saída é <code>0</code>. Confira com <code>nmcli device</code>: a <code>wlp2s0</code> passa a <code>conectado</code>, na conexão <code>CasaDaAna</code>. A tela real do console, com uma senha errada antes da certa (explicada logo abaixo):</p>
+
+<figure><img src="img/nmcli-ask-conectado.png" alt="Console: nmcli --ask device wifi connect CasaDaAna; a pergunta da senha aparece duas vezes (a primeira senha estava errada); na segunda, Dispositivo wlp2s0 ativado com sucesso; depois nmcli device status mostra wlp2s0 wifi conectado CasaDaAna em verde, enp0s3 e as placas do laboratório como não gerenciável" loading="lazy"><figcaption>Tela real: <code>--ask</code>, uma tentativa com a senha errada, a certa e o <code>nmcli device status</code> mostrando <code>conectado</code>. (No laboratório a placa de cabo se chama <code>enp0s3</code>.)</figcaption></figure>
+
+<h4>A forma com a senha no comando</h4>
+<p>Também dá para escrever a senha no próprio comando, com a palavra <code>password</code>. É a forma que aparece em muitos tutoriais:</p>
+
+<pre class="term">$ nmcli device wifi connect CasaDaAna password 'senhadaana123'
+Dispositivo “wlp2s0” ativado com sucesso com “cfbf2ccf-b5a5-4051-adba-0a2e69b59339”.</pre>
+
+<div class="warning">
+<strong>A senha fica no histórico</strong>
+<p>Com <code>password</code>, a senha fica gravada no histórico do bash (<code>~/.bash_history</code>) e aparece na tela. Prefira <code>--ask</code>. Use aspas simples se a senha tiver símbolos como <code>$</code>, <code>!</code> ou espaço.</p>
+</div>
+
+<h3 id="senha-errada">Passo 5: e se a senha estiver errada?</h3>
+
+<p>Com <code>--ask</code>, o <code>nmcli</code> simplesmente <strong>pergunta de novo</strong>. A pergunta volta com a senha anterior já preenchida (os asteriscos): apague com <kbd>Backspace</kbd> e digite com calma. Para desistir, <kbd>Ctrl</kbd>+<kbd>C</kbd>.</p>
+
+<figure><img src="img/nmcli-ask-senha-errada.png" alt="Console: depois de digitar uma senha de doze caracteres, a mensagem Senhas ou chaves de criptografia são necessárias para acessar a rede sem fio CasaDaAna aparece de novo, com a pergunta Senha já preenchida com doze asteriscos" loading="lazy"><figcaption>Senha errada com <code>--ask</code>: a mesma pergunta volta, já preenchida com a senha anterior.</figcaption></figure>
+
+<p>Com <code>password</code> no comando, não há segunda chance. Saída real, com a senha errada:</p>
+
+<pre class="term">$ nmcli device wifi connect CasaDaAna password 'senhaerrada1'
+Senhas ou chaves de criptografia são necessárias para acessar a rede sem fio “CasaDaAna”.
+Aviso: senha para “802-11-wireless-security.psk” não fornecida em “passwd-file” e nmcli não pode solicitar sem a opção “--ask”.
+Error: Connection activation failed: Segredos foram requisitados, mas não fornecidos.
+$ echo $?
+4</pre>
+
+<p>Linha por linha: o roteador recusou a senha, o NetworkManager pediu outra ("segredos foram requisitados"), e o <code>nmcli</code> não podia perguntar porque você não usou <code>--ask</code>. O código <code>4</code> quer dizer "a ativação da conexão falhou". Nada na mensagem diz "senha errada", mas é isso.</p>
+
+<p>Quer ter certeza? O kernel registra cada tentativa. As últimas linhas do <code>dmesg</code> (as mensagens do kernel; precisa de root) na tentativa acima:</p>
+
+<pre class="term">#> dmesg | grep wlp2s0
+…
+[  725.015927] wlp2s0: authenticate with 02:00:00:00:01:00 (local address=02:00:00:00:00:00)
+[  725.015938] wlp2s0: send auth to 02:00:00:00:01:00 (try 1/3)
+[  725.017446] wlp2s0: authenticated                         « a placa achou o roteador
+[  725.021504] wlp2s0: associate with 02:00:00:00:01:00 (try 1/3)
+[  725.023375] wlp2s0: RX AssocResp from 02:00:00:00:01:00 (capab=0x411 status=0 aid=1)
+[  725.023426] wlp2s0: associated                            « e entrou na fila dele
+[  729.078473] wlp2s0: deauthenticated from 02:00:00:00:01:00 (Reason: 15=4WAY_HANDSHAKE_TIMEOUT)   « a senha não bateu</pre>
+
+<p><code>4WAY_HANDSHAKE_TIMEOUT</code> é o "aperto de mão em 4 etapas" do WPA2, em que os dois lados provam que sabem a mesma senha. Ele não terminou: a senha não confere.</p>
+
+<h4 id="armadilha">A armadilha: a conexão foi salva com a senha errada</h4>
+
+<p>Mesmo falhando, o <code>nmcli</code> <strong>salva</strong> a conexão, com a senha errada dentro. Na tentativa seguinte, com a senha certa, aparece uma mensagem que confunde qualquer um:</p>
+
+<pre class="term">$ nmcli connection show
+NAME       UUID                                  TYPE      DEVICE
+lo         6f86b425-b1c4-4790-a45f-92c6cdc03e70  loopback  lo
+CasaDaAna  1dce7779-cebc-46ac-8d5c-463dfb016e53  wifi      --       « salva, mas sem uso
+$ nmcli device wifi connect CasaDaAna password 'senhadaana123'
+Erro: 802-11-wireless-security.key-mgmt: propriedade está faltando.
+$ echo $?
+1</pre>
+
+<p>A senha estava certa; o que atrapalha é a conexão velha com o mesmo nome. A saída é apagar a conexão salva e conectar de novo:</p>
+
+<pre class="term">$ nmcli connection delete CasaDaAna
+A conexão “CasaDaAna” (1dce7779-cebc-46ac-8d5c-463dfb016e53) foi excluída com sucesso.
+$ nmcli --ask device wifi connect CasaDaAna
+Senhas ou chaves de criptografia são necessárias para acessar a rede sem fio “CasaDaAna”.
+Senha (802-11-wireless-security.psk): *************
+Dispositivo “wlp2s0” ativado com sucesso com “cfbf2ccf-b5a5-4051-adba-0a2e69b59339”.</pre>
+
+<p>Outra forma, sem apagar: trocar só a senha da conexão salva e ativá-la:</p>
+
+<pre class="term">$ nmcli connection modify CasaDaAna wifi-sec.psk 'senhadaana123'
+$ nmcli connection up CasaDaAna</pre>
+
+<h3 id="conferir">Passo 6: conferir a conexão</h3>
+
+<p>Três jeitos de confirmar que deu certo, do mais curto ao mais completo:</p>
+
+<pre class="term">$ nmcli device wifi list ifname wlp2s0
+IN-USE  BSSID              SSID        MODE   CHAN  RATE        SIGNAL  BARS  SECURITY
+        02:00:00:00:01:01  Vizinho_2G  Infra  6     130 Mbit/s  100     ▂▄▆█  WPA2
+        02:00:00:00:01:02  --          Infra  6     130 Mbit/s  100     ▂▄▆█  WPA2
+*       02:00:00:00:01:00  CasaDaAna   Infra  6     130 Mbit/s  90      ▂▄▆█  WPA2     « o * marca a sua
+$ ip -br a show wlp2s0
+wlp2s0           UP             192.168.50.144/24 fe80::1002:690b:ebfc:c37e/64    « tem endereço IPv4
+$ nmcli -f GENERAL.STATE,GENERAL.CONNECTION,IP4.ADDRESS,IP4.GATEWAY,IP4.DNS device show wlp2s0
+GENERAL.STATE:                          100 (conectado)
+GENERAL.CONNECTION:                     CasaDaAna
+IP4.ADDRESS[1]:                         192.168.50.144/24      « o endereço que o roteador emprestou
+IP4.GATEWAY:                            192.168.50.1           « o roteador
+IP4.DNS[1]:                             10.0.2.3               « o DNS que o roteador informou</pre>
+
+<p>(<code>-f</code>, de <em>fields</em>, escolhe quais campos mostrar; sem ele, o <code>device show</code> mostra dezenas de linhas.) Por fim, teste a internet com <code>ping -c 3 debian.org</code> (veja <a href="ip.html">ip, ping, ss</a>). No laboratório o "roteador" não leva à internet (veja <a href="#laboratorio">por quê</a>); no seu computador, o <code>ping</code> responde.</p>
+
+<hr>
+
+<h2 id="conexoes">Conexões salvas: show, up, down e delete</h2>
+
+<p>Cada rede em que você entra vira uma conexão salva, que liga sozinha na próxima vez que a rede estiver por perto (<code>autoconnect</code>). Para listar:</p>
+
+<pre class="term">$ nmcli connection show
+NAME       UUID                                  TYPE      DEVICE
+CasaDaAna  cfbf2ccf-b5a5-4051-adba-0a2e69b59339  wifi      wlp2s0     « salva e em uso
+lo         6f86b425-b1c4-4790-a45f-92c6cdc03e70  loopback  lo</pre>
+
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Coluna</th><th>O que quer dizer</th></tr>
+<tr><td><code>NAME</code></td><td>O nome da conexão. O <code>nmcli</code> usa o SSID como nome; você pode trocar.</td></tr>
+<tr><td><code>UUID</code></td><td>Um identificador único. Serve para diferenciar duas conexões com o mesmo nome.</td></tr>
+<tr><td><code>TYPE</code></td><td><code>wifi</code>, <code>ethernet</code>, <code>gsm</code>…</td></tr>
+<tr><td><code>DEVICE</code></td><td>A placa que está usando a conexão agora; <code>--</code> = salva, mas desligada.</td></tr>
+</table>
+</div>
+
+<p>Desligar e religar uma conexão (útil quando o Wi-Fi "trava"), e apagar uma que você não quer mais:</p>
+
+<pre class="term">$ nmcli connection down CasaDaAna
+Conexão “CasaDaAna” desativada com sucesso (caminho D-Bus ativo: /org/freedesktop/NetworkManager/ActiveConnection/5)
+$ nmcli connection up CasaDaAna
+Conexão ativada com sucesso (caminho D-Bus ativo: /org/freedesktop/NetworkManager/ActiveConnection/6)
+$ nmcli connection delete Escritorio
+Erro: Escritorio – perfil de conexão inexistente.        « uma rede que nunca foi salva</pre>
+
+<p>O "caminho D-Bus" é um endereço interno do NetworkManager; pode ignorar. Depois de um <code>down</code>, a conexão não liga sozinha até o próximo <code>up</code> (ou até reiniciar). Para que uma rede nunca conecte sozinha: <code>nmcli connection modify CasaDaAna connection.autoconnect no</code>.</p>
+
+<h3>Onde a senha fica guardada</h3>
+
+<p>Cada conexão é um arquivo em <code>/etc/NetworkManager/system-connections/</code>, que só o root lê (permissão <code>600</code>):</p>
+
+<pre class="term">#> ls -l /etc/NetworkManager/system-connections/
+total 4
+-rw------- 1 root root 280 out 16 16:38 CasaDaAna.nmconnection</pre>
+
+<pre class="file" data-file="/etc/NetworkManager/system-connections/CasaDaAna.nmconnection">[connection]
+id=CasaDaAna
+uuid=1dce7779-cebc-46ac-8d5c-463dfb016e53
+type=wifi
+interface-name=wlp2s0
+
+[wifi]
+mode=infrastructure
+ssid=CasaDaAna
+
+[wifi-security]
+auth-alg=open
+key-mgmt=wpa-psk
+psk=senhaerrada1
+
+[ipv4]
+method=auto
+
+[ipv6]
+addr-gen-mode=default
+method=auto
+
+[proxy]</pre>
+
+<p>Este é o arquivo da <a href="#armadilha">armadilha</a>: repare na linha <code>psk=senhaerrada1</code>, a senha errada salva. <code>key-mgmt=wpa-psk</code> é o tipo de segurança (WPA com senha) e <code>method=auto</code>, o IP automático (DHCP).</p>
+
+<p>Esqueceu a senha do Wi-Fi de casa e quer passá-la para uma visita? O NetworkManager mostra a senha da rede em uso:</p>
+
+<pre class="term">$ nmcli device wifi show-password
+SSID: CasaDaAna
+Segurança: WPA
+Senha: senhadaana123</pre>
+
+<p>Num terminal de verdade (não num script), o <code>nmcli</code> desenha também um QR code, que o celular da visita lê pela câmera.</p>
+
+<hr>
+
+<h2 id="oculta">Rede oculta</h2>
+
+<p>Uma rede <strong>oculta</strong> não anuncia o nome: na lista ela aparece como <code>--</code> (e no <code>nmtui</code> nem aparece). Para entrar, você precisa saber o nome exato. Use a palavra <code>hidden yes</code> ("oculta: sim"):</p>
+
+<pre class="term">$ nmcli device wifi connect Escritorio password 'escritorio2026' hidden yes
+Dispositivo “wlp2s0” ativado com sucesso com “cab19378-21f8-41b4-9087-fbedcc773c23”.</pre>
+
+<p>(Com <code>--ask</code> no lugar de <code>password</code>, ele pergunta a senha, como antes.)</p>
+
+<p>No laboratório, esse comando às vezes respondeu <code>Erro: nenhuma rede com SSID “Escritorio” foi encontrada.</code> (código <code>10</code>) e funcionou na tentativa seguinte. Quando isso se repetir, crie a conexão "à mão" com <code>connection add</code>, que não depende da lista de redes:</p>
+
+<dl class="anatomy">
+  <dt>nmcli connection add</dt><dd>Criar uma conexão nova.</dd>
+  <dt>type wifi</dt><dd>Do tipo Wi-Fi.</dd>
+  <dt>ifname wlp2s0</dt><dd>Para a placa <code>wlp2s0</code>.</dd>
+  <dt>con-name Escritorio</dt><dd>O nome da conexão (como vai aparecer no <code>connection show</code>).</dd>
+  <dt>ssid Escritorio</dt><dd>O nome da rede.</dd>
+  <dt>802-11-wireless.hidden yes</dt><dd>A rede é oculta: procure por ela pelo nome.</dd>
+  <dt>wifi-sec.key-mgmt wpa-psk</dt><dd>Segurança: WPA com senha (<code>wifi-sec</code> é o apelido de <code>802-11-wireless-security</code>).</dd>
+  <dt>wifi-sec.psk 'senha'</dt><dd>A senha.</dd>
+</dl>
+
+<pre class="term">$ nmcli connection add type wifi ifname wlp2s0 con-name Escritorio ssid Escritorio 802-11-wireless.hidden yes wifi-sec.key-mgmt wpa-psk wifi-sec.psk 'escritorio2026'
+A conexão “Escritorio” (9cdd1584-41a5-4a65-81ef-4a6c3907aff9) foi adicionada com sucesso.
+$ nmcli connection up Escritorio</pre>
+
+<hr>
+
+<h2 id="nmtui">nmtui: o mesmo, com menus</h2>
+
+<p>O <code>nmtui</code> (<em>NetworkManager text user interface</em>) é um programa de menus dentro do terminal. Faz o mesmo que o <code>nmcli</code>, sem decorar comandos. Bom para quem está num console sem interface gráfica. Navegue com as setas, <kbd>Tab</kbd> e <kbd>Enter</kbd>; <kbd>Esc</kbd> volta.</p>
+
+<ol class="passo">
+  <li>Digite <code>nmtui</code> e aperte <kbd>Enter</kbd>. No menu, desça até <strong>Ativar uma conexão</strong> e aperte <kbd>Enter</kbd>.
+<figure><img src="img/nmtui-1-menu.png" alt="Janela NetworkManager TUI: Por favor selecione uma opção; Editar uma conexão (selecionado), Ativar uma conexão, Definir nome de máquina do sistema, Radio, Cancelar e o botão OK" loading="lazy"><figcaption>O menu principal do <code>nmtui</code>. "Radio" liga e desliga o Wi-Fi, como o <code>nmcli radio</code>.</figcaption></figure></li>
+  <li>Aparece a lista <strong>Sem fio (Wi-Fi) (wlp2s0)</strong> com as redes e o sinal em asteriscos. Desça até a sua rede e aperte <kbd>Enter</kbd> (é o mesmo que o botão <code>&lt;Ativar&gt;</code>).
+<figure><img src="img/nmtui-2-redes.png" alt="Lista Sem fio (Wi-Fi) (wlp2s0) com Vizinho_2G e CasaDaAna, cada uma com quatro asteriscos de sinal; à direita, os botões Ativar e Voltar" loading="lazy"><figcaption>As redes encontradas. A rede oculta não aparece aqui.</figcaption></figure></li>
+  <li>Digite a senha na janela <strong>Autenticação requerida pela rede sem fio</strong> e aperte <kbd>Enter</kbd>.
+<figure><img src="img/nmtui-3-senha.png" alt="Janela Autenticação requerida pela rede sem fio: Senhas ou chaves de criptografia são necessárias para acessar a rede sem fio CasaDaAna; campo Senha com treze asteriscos; botões Cancelar e OK" loading="lazy"><figcaption>A senha também aparece como asteriscos.</figcaption></figure></li>
+  <li>Conectado, a rede ganha um <code>*</code> e o botão vira <code>&lt;Desativar&gt;</code>. Saia com <kbd>Esc</kbd> duas vezes.
+<figure><img src="img/nmtui-4-conectado.png" alt="Lista Sem fio (Wi-Fi) (wlp2s0) com * CasaDaAna no topo, selecionada, e Vizinho_2G abaixo; o botão à direita agora diz Desativar" loading="lazy"><figcaption>Conectado: o <code>*</code> na frente de <code>CasaDaAna</code>.</figcaption></figure></li>
+</ol>
+
+<p>Se a senha estiver errada, a janela da senha volta. Em <strong>Editar uma conexão</strong> você muda a senha, o IP fixo e o DNS de uma conexão salva.</p>
+
+<div class="note">
+<strong>Quem pode mexer no Wi-Fi</strong>
+<p>No desktop, a usuária que está <strong>sentada na máquina</strong> (sessão local) pode procurar redes e conectar sem senha de root. Pelo SSH, não: o Debian só libera essas ações para sessões locais ativas. Pelo SSH, a <code>ana</code> recebe:</p>
+<pre class="term">$ nmcli device wifi rescan
+Erro: org.freedesktop.NetworkManager.wifi.scan request failed: not authorized.</pre>
+<p>(<em>not authorized</em> = "não autorizado".) Pelo SSH, faça como root (<code>su -</code>). Para salvar conexões, o Debian libera sem pedir senha quem está numa sessão local <strong>e</strong> nos grupos <code>netdev</code> ou <code>sudo</code> (regra em <code>/usr/share/polkit-1/rules.d/org.freedesktop.NetworkManager.rules</code>); a <code>ana</code> está no <code>netdev</code> (veja <code>id</code>).</p>
+</div>
+
+<hr>
+
+<h2 id="servidor">Parte 2: servidor sem desktop, pelo /etc/network/interfaces</h2>
+
+<p>Num servidor, o Wi-Fi é configurado como o cabo (aula <a href="configurar-rede.html">Configurar a Rede</a>): um bloco no <code>/etc/network/interfaces</code>. A diferença são duas linhas a mais, com o nome da rede e a senha, que o ifupdown entrega ao <code>wpa_supplicant</code>.</p>
+
+<div class="tip">
+<strong>Instalou por Wi-Fi? Já está pronto</strong>
+<p>Se você instalou o Debian sem desktop conectado no Wi-Fi, o instalador já fez tudo isto: instalou <code>wpasupplicant</code>, <code>iw</code> e <code>wireless-tools</code> e escreveu o bloco do Wi-Fi no <code>/etc/network/interfaces</code>, com a permissão <code>600</code> (só o root lê, porque a senha está ali). O Wi-Fi já liga no boot. Veja o arquivo com <code>su -</code> e <code>cat /etc/network/interfaces</code>.</p>
+</div>
+
+<p>O instalador grava o bloco neste formato (linhas com recuo de <kbd>Tab</kbd>, e dois espaços depois de <code>wpa-psk</code>; o formato vem do código do instalador; o nome da rede e a senha são os do exemplo):</p>
+
+<pre class="file" data-file="/etc/network/interfaces (trecho, instalado por Wi-Fi)"># The primary network interface
+allow-hotplug wlp2s0
+iface wlp2s0 inet dhcp
+	wpa-ssid CasaDaAna
+	wpa-psk  senhadaana123</pre>
+
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Linha</th><th>Significado</th></tr>
+<tr><td><code>allow-hotplug wlp2s0</code></td><td>Liga a placa quando o sistema a detectar (no boot ou quando um adaptador USB for conectado).</td></tr>
+<tr><td><code>iface wlp2s0 inet dhcp</code></td><td>A placa pega o IPv4 por DHCP, do roteador. Igual ao cabo.</td></tr>
+<tr><td><code>wpa-ssid CasaDaAna</code></td><td>O nome da rede. Se tiver espaços, escreva sem aspas: <code>wpa-ssid Casa da Ana</code>.</td></tr>
+<tr><td><code>wpa-psk senhadaana123</code></td><td>A senha da rede, em texto puro (ou o "hash" do <code>wpa_passphrase</code>, logo abaixo).</td></tr>
+</table>
+</div>
+
+<p>As linhas <code>wpa-*</code> são lidas pelo script <code>/etc/network/if-pre-up.d/wpasupplicant</code>, do pacote <code>wpasupplicant</code>: antes de ligar a placa, ele inicia um <code>wpa_supplicant</code> só para ela. Sem esse pacote, as linhas são ignoradas.</p>
+
+<h3>Configurar à mão, passo a passo</h3>
+
+<p>Para não mexer no arquivo principal (onde está o cabo), use um arquivo separado em <code>/etc/network/interfaces.d/</code>: o <code>interfaces</code> já o inclui pela linha <code>source /etc/network/interfaces.d/*</code>.</p>
+
+<ol class="passo">
+  <li><strong>Descubra o nome da placa</strong> com <code>ip -br link</code> (veja <a href="wifi-problemas.html#placa">Wi-Fi que Não Funciona</a> se não aparecer nenhuma <code>wl…</code>).</li>
+  <li><strong>Gere a senha protegida</strong> com <code>wpa_passphrase</code> (próxima seção).</li>
+  <li><strong>Crie o arquivo</strong> com <code>nano /etc/network/interfaces.d/wifi</code>:
+<pre class="file" data-file="/etc/network/interfaces.d/wifi"># Wi-Fi da casa
+allow-hotplug wlp2s0
+iface wlp2s0 inet dhcp
+    wpa-ssid CasaDaAna
+    wpa-psk 24834ce1d9223fc80147c6d34ff9db4ba605567e69a87dac8c36c84f2d72eec1</pre></li>
+  <li><strong>Feche o arquivo para os outros usuários</strong>: <code>chmod 600 /etc/network/interfaces.d/wifi</code>. Sem isso, qualquer usuário lê a senha.</li>
+  <li><strong>Confira</strong> o que o ifupdown entendeu, com <code>ifquery</code>, e <strong>ligue</strong> com <code>ifup</code> (próximas seções).</li>
+</ol>
+
+<h3 id="wpa-passphrase">wpa_passphrase: não deixar a senha em texto puro</h3>
+
+<dl class="anatomy">
+  <dt>wpa_passphrase</dt><dd>Calcula a chave WPA de uma rede a partir do nome e da senha (fica em <code>/usr/bin</code>; a usuária comum também pode rodar).</dd>
+  <dt>CasaDaAna</dt><dd>O SSID. A chave depende dele: a mesma senha em outra rede dá outra chave.</dd>
+  <dt>senhadaana123</dt><dd>A senha. Se você omitir, ele lê a senha do teclado (e assim ela não fica no histórico).</dd>
+</dl>
+
+<pre class="term" data-host="servidor">#> wpa_passphrase CasaDaAna senhadaana123
+network={
+	ssid="CasaDaAna"
+	#psk="senhadaana123"                                                    « a senha original, comentada
+	psk=24834ce1d9223fc80147c6d34ff9db4ba605567e69a87dac8c36c84f2d72eec1   « a chave: use esta
+}</pre>
+
+<p>A saída está no formato do arquivo de configuração do <code>wpa_supplicant</code>. Do bloco, você só precisa do número da linha <code>psk=</code> (64 caracteres hexadecimais), que vai depois de <code>wpa-psk</code>. A linha com <code>#psk=</code> mostra a senha original: não a copie para lugar nenhum.</p>
+
+<div class="note">
+<strong>O que o hash protege (e o que não protege)</strong>
+<p>Quem lê o arquivo não descobre a sua senha, então ela continua segura se você a usa em outros lugares (o que não deveria). Mas a chave de 64 caracteres <strong>também entra na rede</strong>: para o roteador, ela vale tanto quanto a senha. Por isso o <code>chmod 600</code> continua obrigatório.</p>
+</div>
+
+<h3 id="ifup">Ligar e desligar: ifquery, ifup e ifdown</h3>
+
+<pre class="term" data-host="servidor">#> ifquery wlp2s0
+wpa-ssid: CasaDaAna
+wpa-psk: 24834ce1d9223fc80147c6d34ff9db4ba605567e69a87dac8c36c84f2d72eec1
+#> ifup wlp2s0
+dhcpcd-10.1.0 starting
+DUID 00:01:00:01:32:64:24:8a:08:00:27:90:fb:de
+wlp2s0: waiting for carrier                              « esperando o wpa_supplicant entrar na rede
+wlp2s0: carrier acquired                                 « entrou
+wlp2s0: connected to Access Point: CasaDaAna
+wlp2s0: IAID 00:00:00:00
+wlp2s0: adding address fe80::be40:317a:8e0a:ae08
+wlp2s0: soliciting a DHCP lease                          « pedindo um endereço ao roteador
+wlp2s0: soliciting an IPv6 router
+wlp2s0: offered 192.168.50.145 from 192.168.50.1         « o roteador ofereceu um
+wlp2s0: probing address 192.168.50.145/24
+wlp2s0: leased 192.168.50.145 for 43200 seconds          « emprestado por 12 horas
+wlp2s0: adding route to 192.168.50.0/24
+wlp2s0: adding default route via 192.168.50.1
+#> echo $?
+0</pre>
+
+<p>As mensagens são do <code>dhcpcd</code>, em inglês. As importantes: <code>carrier acquired</code> ("sinal obtido": a senha foi aceita) e <code>leased</code> ("emprestado": ganhou endereço). Para conferir:</p>
+
+<pre class="term" data-host="servidor">#> ifquery --state
+wlp2s0=wlp2s0                                « o ifupdown ligou a placa
+lo=lo
+enp1s0=enp1s0
+#> iw dev wlp2s0 link
+Connected to 02:00:00:00:01:00 (on wlp2s0)   « conectado ao roteador (o BSSID)
+	SSID: CasaDaAna
+	freq: 2437.0                             « 2437 MHz = canal 6, faixa de 2,4 GHz
+	RX: 25131 bytes (253 packets)
+	TX: 2672 bytes (22 packets)
+	signal: -30 dBm                          « força do sinal (veja abaixo)
+	rx bitrate: 39.0 MBit/s MCS 4
+	tx bitrate: 78.0 MBit/s MCS 12
+	bss flags: short-slot-time
+	dtim period: 2
+	beacon int: 100
+#> ifdown wlp2s0
+sending signal ALRM to pid 3742              « avisa o dhcpcd para devolver o endereço
+waiting for pid 3742 to exit</pre>
+
+<p>O <code>iw</code> (<em>wireless</em>, pacote <code>iw</code>) mostra o estado do rádio. O sinal (<code>signal</code>) é medido em dBm, sempre negativo: <strong>mais perto de zero é melhor</strong>. Como referência: −30 excelente, −50 ótimo, −67 bom, −75 fraco, abaixo de −80 a conexão cai. No laboratório é −30 porque o "roteador" está na mesma máquina.</p>
+
+<div class="tip">
+<strong>Cabo e Wi-Fi ao mesmo tempo</strong>
+<p>Com os dois ligados, quem tem a rota com <strong>menor métrica</strong> leva o tráfego. O <code>dhcpcd</code> soma 2000 à métrica do Wi-Fi, então o cabo ganha. No laboratório, <code>ip r</code> mostrou <code>default via 10.0.2.2 dev enp0s3 … metric 1002</code> para o cabo e <code>default via 192.168.50.1 dev wlp2s0 … metric 3006</code> para o Wi-Fi.</p>
+</div>
+
+<h3 id="conflito">Não misture com o NetworkManager</h3>
+
+<p>Se o NetworkManager estiver instalado e a placa Wi-Fi também estiver no <code>interfaces</code>, os dois brigam pelo <code>wpa_supplicant</code>. Saída real, com o NetworkManager ainda controlando a <code>wlp2s0</code>:</p>
+
+<pre class="term" data-host="servidor">#> ifup wlp2s0
+wpa_supplicant: /usr/sbin/wpa_supplicant daemon failed to start
+run-parts: /etc/network/if-pre-up.d/wpasupplicant exited with return code 1
+ifup: failed to bring up wlp2s0</pre>
+
+<p>("O <code>wpa_supplicant</code> não conseguiu iniciar"; "falhou ao ligar a wlp2s0".) O NetworkManager do Debian larga as placas descritas no <code>interfaces</code>, mas só depois de <strong>reiniciado</strong> (no laboratório, <code>systemctl reload NetworkManager</code> não bastou):</p>
+
+<pre class="term" data-host="servidor">#> systemctl restart NetworkManager
+#> nmcli device status
+DEVICE   TYPE      STATE                   CONNECTION
+enp1s0   ethernet  não gerenciável         --
+wlp2s0   wifi      não gerenciável         --       « agora é do ifupdown</pre>
+
+<p>A regra é a mesma do cabo: <strong>escolha um só</strong>. Com desktop, deixe o Wi-Fi com o NetworkManager e tire a placa do <code>interfaces</code>. Sem desktop, use o <code>interfaces</code>.</p>
+
+<hr>
+
+<h2>Formas diferentes de conectar no Wi-Fi: qual usar?</h2>
+
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Forma</th><th>Onde funciona</th><th>Permanente?</th><th>Quando usar</th></tr>
+<tr><td>Ícone de rede (GNOME, KDE…)</td><td>Desktop</td><td>Sim</td><td>No dia a dia.</td></tr>
+<tr><td><code>nmcli --ask device wifi connect</code></td><td>Desktop (NetworkManager)</td><td>Sim (salva a conexão)</td><td>Pelo terminal, em scripts, para ver as mensagens de erro.</td></tr>
+<tr><td><code>nmtui</code></td><td>Desktop (NetworkManager)</td><td>Sim</td><td>Console sem interface gráfica, sem decorar comandos.</td></tr>
+<tr><td><code>/etc/network/interfaces</code> + <code>ifup</code></td><td>Servidor (ifupdown + <code>wpasupplicant</code>)</td><td>Sim</td><td>Servidor sem desktop, instalação mínima.</td></tr>
+<tr><td>Instalar o NetworkManager no servidor</td><td>Servidor</td><td>Sim</td><td>Notebook usado como servidor que muda de rede com frequência: o <code>nmcli</code> lida melhor com várias redes salvas. Tire antes a placa do <code>interfaces</code>.</td></tr>
+</table>
+</div>
+
+<hr>
+
+<h2 id="problemas">Quando não funciona</h2>
+
+<div class="cenario">
+<strong>"Segredos foram requisitados, mas não fornecidos"</strong>
+<pre class="term">$ nmcli device wifi connect CasaDaAna password 'senhaerrada1'
+…
+Error: Connection activation failed: Segredos foram requisitados, mas não fornecidos.</pre>
+<p><strong>O que aconteceu:</strong> a senha está errada (o roteador pediu outra e o <code>nmcli</code> não podia perguntar).</p>
+<p><strong>Como confirmar:</strong> <code>dmesg | grep wlp2s0</code> mostra <code>4WAY_HANDSHAKE_TIMEOUT</code>.</p>
+<p><strong>Como resolver:</strong> <code>nmcli connection delete CasaDaAna</code> e conecte de novo com <code>--ask</code>. Confira Caps Lock, o layout do teclado e letras parecidas (l/1, O/0).</p>
+</div>
+
+<div class="cenario">
+<strong>"802-11-wireless-security.key-mgmt: propriedade está faltando"</strong>
+<p><strong>O que aconteceu:</strong> já existe uma conexão salva com o mesmo nome (normalmente de uma tentativa com a senha errada).</p>
+<p><strong>Como resolver:</strong> <code>nmcli connection show</code> para ver; <code>nmcli connection delete CasaDaAna</code> e conecte de novo, ou troque a senha com <code>nmcli connection modify CasaDaAna wifi-sec.psk 'senha'</code> e <code>nmcli connection up CasaDaAna</code>.</p>
+</div>
+
+<div class="cenario">
+<strong>"nenhuma rede com SSID … foi encontrada"</strong>
+<pre class="term">$ nmcli device wifi connect Escritorio password 'escritorio2026'
+Erro: nenhuma rede com SSID “Escritorio” foi encontrada.</pre>
+<p><strong>O que aconteceu:</strong> a rede não está na lista: nome digitado diferente (maiúsculas contam), rede longe, rede só de 5 GHz numa placa de 2,4 GHz, ou rede oculta.</p>
+<p><strong>Como resolver:</strong> <code>nmcli device wifi rescan</code>, espere e liste de novo; copie o nome exatamente como aparece. Se for oculta, use <code>hidden yes</code> ou <code>connection add</code> (<a href="#oculta">Rede oculta</a>).</p>
+</div>
+
+<div class="cenario">
+<strong>Entrou no Wi-Fi, mas não pegou endereço</strong>
+<pre class="term">$ nmcli connection up Escritorio
+Erro: Ativação da conexão falhou: A configuração IP não pode estar reservada (nenhum endereço disponível, timeout, etc)
+Dica: use “journalctl -xe NM_CONNECTION=9cdd1584-41a5-4a65-81ef-4a6c3907aff9 + NM_DEVICE=wlp2s0” para obter mais detalhes.</pre>
+<p><strong>O que aconteceu:</strong> a senha foi aceita (o log diz <code>Connected to wireless network "Escritorio"</code>), mas ninguém respondeu ao pedido de endereço (DHCP) em 45 segundos. No laboratório, foi um "roteador" sem DHCP ligado.</p>
+<p><strong>Como resolver:</strong> reinicie o roteador; confira se outros aparelhos conseguem entrar; em redes de empresa, pergunte se há liberação por MAC. Mais em <a href="wifi-problemas.html#sem-ip">Wi-Fi que Não Funciona</a>.</p>
+</div>
+
+<div class="cenario">
+<strong>"No suitable device found … device is not available"</strong>
+<pre class="term">$ nmcli connection up CasaDaAna
+Erro: Ativação da conexão falhou: No suitable device found for this connection (device wlp2s0 not available because device is not available).</pre>
+<p><strong>O que aconteceu:</strong> a placa está <code>não disponível</code>: o Wi-Fi está desligado (<code>nmcli radio wifi off</code>, tecla de modo avião).</p>
+<p><strong>Como resolver:</strong> <code>nmcli radio wifi on</code>; se não voltar, veja <a href="wifi-problemas.html#rfkill">rfkill</a>.</p>
+</div>
+
+<div class="cenario">
+<strong>"not authorized" pelo SSH</strong>
+<p><strong>O que aconteceu:</strong> o Debian só deixa a usuária comum mexer no Wi-Fi numa sessão local.</p>
+<p><strong>Como resolver:</strong> pelo SSH, use <code>su -</code> e rode o <code>nmcli</code> como root.</p>
+</div>
+
+<div class="cenario">
+<strong>ifup diz "timed out" e não conecta</strong>
+<pre class="term" data-host="servidor">#> ifup wlp2s0
+dhcpcd-10.1.0 starting
+DUID 00:01:00:01:32:64:24:8a:08:00:27:90:fb:de
+wlp2s0: waiting for carrier
+wlp2s0: carrier lost
+wlp2s0: carrier lost
+timed out                                   « 30 segundos sem conseguir entrar na rede
+#> echo $?
+0                                           « e mesmo assim devolve 0!</pre>
+<p><strong>O que aconteceu:</strong> o <code>wpa_supplicant</code> não conseguiu entrar na rede. O motivo aparece no log dele:</p>
+<pre class="term" data-host="servidor">#> journalctl -t wpa_supplicant -o cat | tail
+…
+wlp2s0: Associated with 02:00:00:00:01:00
+wlp2s0: CTRL-EVENT-SUBNET-STATUS-UPDATE status=0
+wlp2s0: CTRL-EVENT-DISCONNECTED bssid=02:00:00:00:01:00 reason=15
+wlp2s0: WPA: 4-Way Handshake failed - pre-shared key may be incorrect     « "a senha pode estar errada"
+wlp2s0: CTRL-EVENT-SSID-TEMP-DISABLED id=0 ssid="CasaDaAna" auth_failures=2 duration=25 reason=WRONG_KEY
+BSSID 02:00:00:00:01:00 ignore list count incremented to 2, ignoring for 10 seconds</pre>
+<p>(<code>-o cat</code> mostra só as mensagens, sem data e nome da máquina.)</p>
+<p><strong>Como resolver:</strong> corrija o <code>wpa-psk</code> (gere de novo com <code>wpa_passphrase</code>, com o nome exato da rede). Atenção: mesmo com <code>timed out</code>, o ifupdown considera a placa ligada (ela aparece no <code>ifquery --state</code>). Antes de tentar de novo, rode <code>ifdown wlp2s0</code>; senão o <code>ifup</code> responde que ela já está configurada.</p>
+</div>
+
+<div class="cenario">
+<strong>"daemon failed to start"</strong>
+<p><strong>O que aconteceu:</strong> o NetworkManager está usando a placa (veja <a href="#conflito">Não misture</a>).</p>
+<p><strong>Como resolver:</strong> <code>systemctl restart NetworkManager</code> para ele largar a placa descrita no <code>interfaces</code>, ou tire a placa do <code>interfaces</code> e use o <code>nmcli</code>.</p>
+</div>
+
+<div class="cenario">
+<strong>Nenhuma placa wl… aparece, ou ela está "não disponível" mesmo com o Wi-Fi ligado</strong>
+<p><strong>O que aconteceu:</strong> problema de placa: bloqueio de rádio, driver ou firmware.</p>
+<p><strong>Como resolver:</strong> siga o roteiro de <a href="wifi-problemas.html">Wi-Fi que Não Funciona</a>. Enquanto isso, use cabo ou o <a href="celular-modem.html">celular por USB</a>.</p>
+</div>
+
+<hr>
+
+<h2 id="laboratorio">Como o laboratório foi feito</h2>
+
+<p>Transparência: a VM do guia não tem placa Wi-Fi de verdade. Para mostrar saídas reais (e não inventadas), o Debian 13 do laboratório foi montado assim:</p>
+
+<ul>
+  <li>O kernel tem um módulo de teste, o <code>mac80211_hwsim</code>, que cria <strong>placas Wi-Fi virtuais</strong> que conversam entre si por um "ar" simulado. Foram criadas duas, com <code>modprobe mac80211_hwsim radios=2</code> (o <code>hwsim0</code> é o "monitor" desse ar).</li>
+  <li>A primeira faz o papel da placa do notebook. O kernel a chamou de <code>wlan0</code>; ela foi renomeada para <code>wlp2s0</code> (com um arquivo <code>.link</code> do systemd), para ficar com o nome que você vai ver num notebook de verdade.</li>
+  <li>A segunda, <code>wlan1</code>, é o <strong>roteador</strong>: o programa <code>hostapd</code> (ponto de acesso) anuncia três redes WPA2, a <code>CasaDaAna</code> (senha <code>senhadaana123</code>), a <code>Vizinho_2G</code> e a oculta <code>Escritorio</code> (placas <code>wlan1_1</code> e <code>wlan1_2</code>), e o <code>dnsmasq</code> empresta endereços <code>192.168.50.x</code>. Essas placas foram marcadas como "não gerenciáveis" para o NetworkManager não mexer nelas.</li>
+  <li>O <code>nmcli</code>, o <code>nmtui</code>, o <code>wpa_supplicant</code>, o <code>dhcpcd</code> e o ifupdown são os do Debian 13 (NetworkManager 1.52.1, wpasupplicant 2.10), sem modificação. As telas são capturas do console da VM.</li>
+</ul>
+
+<p>O que isso muda em relação ao seu computador:</p>
+<ol>
+  <li>As listas mostram placas a mais (<code>wlan1</code>, <code>wlan1_1</code>, <code>wlan1_2</code>, <code>hwsim0</code>) e tabelas vazias no <code>nmcli device wifi list</code>. No seu, só a sua placa.</li>
+  <li>Os endereços MAC começam com <code>02:00:00</code> (placas virtuais). E o sinal é sempre ótimo (100, −30 dBm), porque o "roteador" está dentro da mesma máquina.</li>
+  <li>O "roteador" não leva à internet: o Linux não manda pelo "ar" simulado um pacote destinado a ele mesmo. O <code>ping -I wlp2s0</code> no laboratório deu <code>Destination Host Unreachable</code>. No seu computador, depois de <code>conectado</code>, o <code>ping</code> responde.</li>
+  <li>A placa de cabo da VM se chama <code>enp0s3</code>; nos textos do guia ela aparece como <code>enp1s0</code>, como nas outras aulas.</li>
+</ol>
+
+<hr>
+
+<h2>Referência</h2>
+
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Comando</th><th>Faz</th></tr>
+<tr><td><code>nmcli radio</code></td><td>Mostra se o Wi-Fi está ligado (hardware e software).</td></tr>
+<tr><td><code>nmcli radio wifi on</code> / <code>off</code></td><td>Liga / desliga o Wi-Fi.</td></tr>
+<tr><td><code>nmcli device</code></td><td>Placas e estado de cada uma.</td></tr>
+<tr><td><code>nmcli device wifi list [ifname wlp2s0]</code></td><td>Redes ao alcance.</td></tr>
+<tr><td><code>nmcli device wifi rescan</code></td><td>Procura redes de novo.</td></tr>
+<tr><td><code>nmcli --ask device wifi connect REDE</code></td><td>Conecta, perguntando a senha.</td></tr>
+<tr><td><code>nmcli device wifi connect REDE password 'senha'</code></td><td>Conecta com a senha no comando (fica no histórico).</td></tr>
+<tr><td><code>… hidden yes</code></td><td>A rede é oculta.</td></tr>
+<tr><td><code>nmcli device wifi show-password</code></td><td>Mostra a senha da rede em uso (e um QR code).</td></tr>
+<tr><td><code>nmcli connection show</code></td><td>Conexões salvas.</td></tr>
+<tr><td><code>nmcli connection up</code> / <code>down</code> / <code>delete NOME</code></td><td>Liga / desliga / apaga uma conexão salva.</td></tr>
+<tr><td><code>nmcli connection modify NOME wifi-sec.psk 'senha'</code></td><td>Troca a senha salva.</td></tr>
+<tr><td><code>nmtui</code></td><td>Menus para conectar e editar conexões.</td></tr>
+<tr><td><code>wpa_passphrase REDE [senha]</code></td><td>Gera a chave para o <code>wpa-psk</code>.</td></tr>
+<tr><td><code>ifquery wlp2s0</code> / <code>ifup wlp2s0</code> / <code>ifdown wlp2s0</code></td><td>Servidor: mostra a configuração / liga / desliga.</td></tr>
+<tr><td><code>iw dev wlp2s0 link</code></td><td>Em que rede a placa está e a força do sinal.</td></tr>
+</table>
+</div>
+
+<hr>
+
+<h2>Exercícios</h2>
+
+<div class="exercise">
+<h3>1. Conectar sem a senha no histórico</h3>
+<p>Complete para o <code>nmcli</code> perguntar a senha da rede <code>CasaDaAna</code>:</p>
+<div class="ex-code">nmcli <input data-answer="--ask|-a" aria-label="opção"> device wifi connect CasaDaAna</div>
+</div>
+
+<div class="mc" data-answer="2">
+<p class="mc-q">2. Depois de uma tentativa com a senha errada, você roda o comando com a senha certa e recebe <code>key-mgmt: propriedade está faltando</code>. O que fazer?</p>
+<label><input type="radio" name="q2"> Reinstalar o NetworkManager.</label>
+<label><input type="radio" name="q2"> Apagar a conexão salva com <code>nmcli connection delete CasaDaAna</code> e conectar de novo.</label>
+<label><input type="radio" name="q2"> Trocar a senha do roteador.</label>
+<label><input type="radio" name="q2"> Desligar o Wi-Fi com <code>nmcli radio wifi off</code>.</label>
+</div>
+
+<div class="exercise">
+<h3>3. Wi-Fi no servidor</h3>
+<p>Complete a linha do <code>/etc/network/interfaces</code> que diz o nome da rede:</p>
+<div class="ex-code">    <input data-answer="wpa-ssid" aria-label="opção"> CasaDaAna</div>
+</div>
+
+<div class="exercise">
+<h3>4. Senha protegida</h3>
+<p>Qual comando gera a chave de 64 caracteres para colocar no <code>wpa-psk</code>?</p>
+<div class="ex-code"><input data-answer="wpa_passphrase" aria-label="comando"> CasaDaAna</div>
+</div>
+
+<div class="mc" data-answer="3">
+<p class="mc-q">5. No <code>nmcli device</code>, a placa Wi-Fi aparece como <code>não disponível</code>. O que é mais provável?</p>
+<label><input type="radio" name="q5"> A senha está errada.</label>
+<label><input type="radio" name="q5"> A placa está no <code>/etc/network/interfaces</code>.</label>
+<label><input type="radio" name="q5"> O Wi-Fi está desligado (rádio ou modo avião).</label>
+<label><input type="radio" name="q5"> O roteador não tem DHCP.</label>
+</div>
+
+<div class="mc" data-answer="1">
+<p class="mc-q">6. Num servidor sem desktop, onde fica a configuração do Wi-Fi?</p>
+<label><input type="radio" name="q6"> No <code>/etc/network/interfaces</code> (ou num arquivo em <code>/etc/network/interfaces.d/</code>).</label>
+<label><input type="radio" name="q6"> Em <code>/etc/NetworkManager/system-connections/</code>.</label>
+<label><input type="radio" name="q6"> No Netplan.</label>
+<label><input type="radio" name="q6"> No <code>/etc/resolv.conf</code>.</label>
+</div>
+
+<hr>
+
+<h2>Resumo</h2>
+<ul>
+  <li>Desktop: NetworkManager (<code>nmcli</code>, <code>nmtui</code>, ícone). Servidor: <code>/etc/network/interfaces</code> com <code>wpa-ssid</code> e <code>wpa-psk</code>, mais o pacote <code>wpasupplicant</code>.</li>
+  <li>Roteiro no desktop: <code>nmcli radio</code> → <code>nmcli device</code> → <code>nmcli device wifi list</code> → <code>nmcli --ask device wifi connect REDE</code>.</li>
+  <li>Senha errada: "Segredos foram requisitados…". A conexão fica salva com a senha errada; apague-a (<code>nmcli connection delete</code>) antes de tentar de novo.</li>
+  <li>Conexões salvas ligam sozinhas; <code>nmcli connection show/up/down/delete</code> as controlam.</li>
+  <li>No servidor, use <code>wpa_passphrase</code> e <code>chmod 600</code>; ligue com <code>ifup wlp2s0</code>; depois de um <code>timed out</code>, rode <code>ifdown</code> antes do próximo <code>ifup</code>.</li>
+  <li>Não configure a mesma placa no <code>interfaces</code> e no NetworkManager.</li>
+</ul>
+
+<div class="pager"></div>
+
+</div>
+</main>
+</div>
+<script src="assets/site.js"></script>
+</body>
+</html>

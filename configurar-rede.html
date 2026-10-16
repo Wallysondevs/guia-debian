@@ -37,6 +37,11 @@
 <p>Mudar a rede de uma máquina que você acessa por SSH pode derrubar a sua conexão, e você fica do lado de fora. Faça essas mudanças <strong>pelo console</strong> (tela e teclado na máquina, ou a janela da VM). Se não tiver jeito, use o "plano B" com tempo de volta, mostrado mais abaixo.</p>
 </div>
 
+<div class="note">
+<strong>Usa Wi-Fi, celular ou modem?</strong>
+<p>Esta aula trata da rede com cabo e do que vale para todas as placas (IP fixo, DNS, nome da máquina). O Wi-Fi tem aulas próprias: <a href="wifi.html">Wi-Fi (nmcli, nmtui e interfaces)</a>, com o Wi-Fi no desktop e no servidor, e <a href="wifi-problemas.html">Wi-Fi que Não Funciona</a>, para placa que não aparece, rfkill e firmware. Sem cabo e sem Wi-Fi, veja <a href="celular-modem.html">Celular por USB e Modem 4G</a>.</p>
+</div>
+
 <hr>
 
 <h2>Quem cuida da rede neste Debian?</h2>
@@ -216,7 +221,7 @@ nameserver 192.168.0.1                                 « o DNS que o roteador i
 <tr><th>Comando</th><th>Faz</th></tr>
 <tr><td><code>nmcli device status</code></td><td>Lista as placas e o estado de cada uma</td></tr>
 <tr><td><code>nmcli device wifi list</code></td><td>Redes Wi-Fi ao alcance</td></tr>
-<tr><td><code>nmcli device wifi connect "MinhaRede" password "senha"</code></td><td>Conecta num Wi-Fi</td></tr>
+<tr><td><code>nmcli --ask device wifi connect "MinhaRede"</code></td><td>Conecta num Wi-Fi, perguntando a senha (aula <a href="wifi.html">Wi-Fi</a>)</td></tr>
 <tr><td><code>nmcli connection show</code></td><td>Conexões salvas</td></tr>
 <tr><td><code>nmcli connection modify "Conexão" ipv4.method manual ipv4.addresses 192.168.0.50/24 ipv4.gateway 192.168.0.1 ipv4.dns "1.1.1.1"</code></td><td>IP fixo numa conexão</td></tr>
 <tr><td><code>nmcli connection up "Conexão"</code></td><td>Aplica as mudanças</td></tr>
@@ -234,7 +239,7 @@ lo      loopback  conectado (externamente)  lo</pre>
 <div class="warning">
 <strong>O conflito clássico do Debian: placa "não gerenciada"</strong>
 <p>O NetworkManager do Debian <strong>ignora</strong> toda placa que estiver descrita no <code>/etc/network/interfaces</code> (opção <code>managed=false</code> em <code>/etc/NetworkManager/NetworkManager.conf</code>). Se você instalou o desktop depois de um servidor, a placa aparece como <code>não gerenciado</code> (<em>unmanaged</em>) e o ícone de rede não a controla.</p>
-<p><strong>Solução:</strong> deixe no <code>/etc/network/interfaces</code> só o bloco do <code>lo</code>, comente o da placa e reinicie: <code>systemctl restart networking NetworkManager</code>. A partir daí, o NetworkManager assume.</p>
+<p><strong>Solução:</strong> deixe no <code>/etc/network/interfaces</code> só o bloco do <code>lo</code>, comente o da placa e reinicie: <code>systemctl restart networking NetworkManager</code>. A partir daí, o NetworkManager assume. Use <code>restart</code>: no laboratório, um <code>systemctl reload NetworkManager</code> não bastou para ele mudar de ideia sobre uma placa. O mesmo vale para o Wi-Fi (veja <a href="wifi.html#conflito">Wi-Fi: não misture</a>).</p>
 </div>
 
 <div class="tip">
@@ -266,7 +271,7 @@ notebook</pre>
 <div class="table-wrap">
 <table class="ref">
 <tr><th>Forma</th><th>Permanente?</th><th>Quando usar</th></tr>
-<tr><td>Editar <code>/etc/network/interfaces</code> + <code>ifdown/ifup</code></td><td>Sim</td><td>Servidor Debian.</td></tr>
+<tr><td>Editar <code>/etc/network/interfaces</code> + <code>ifdown/ifup</code></td><td>Sim</td><td>Servidor Debian (com Wi-Fi: linhas <code>wpa-ssid</code> e <code>wpa-psk</code>, veja <a href="wifi.html#servidor">Wi-Fi no servidor</a>).</td></tr>
 <tr><td>Configurações → Rede (GNOME)</td><td>Sim</td><td>Desktop.</td></tr>
 <tr><td><code>nmcli connection modify</code></td><td>Sim</td><td>Desktop, pelo terminal ou em scripts.</td></tr>
 <tr><td><code>ip addr add 192.168.0.60/24 dev enp1s0</code></td><td><strong>Não</strong>: some no próximo boot</td><td>Testes rápidos.</td></tr>

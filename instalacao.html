@@ -27,6 +27,7 @@
   <li>Como conferir se a ISO baixada não está corrompida.</li>
   <li>Como instalar numa máquina virtual (o jeito mais seguro de aprender) ou num pendrive.</li>
   <li>O que significa cada tela do instalador, com os textos exatos em português.</li>
+  <li>Como dar internet ao instalador (cabo, Wi-Fi ou celular) e o que acontece se instalar sem internet.</li>
   <li>A consequência de definir ou não a senha do root.</li>
   <li>O que fazer no primeiro boot.</li>
 </ul>
@@ -50,7 +51,7 @@
 
 <div class="tip">
 <strong>E os drivers de Wi-Fi e vídeo?</strong>
-<p>Desde o Debian 12, as imagens oficiais já incluem o <strong>firmware não livre</strong> (<code>non-free-firmware</code>). Antes era preciso baixar uma imagem "com firmware" separada. Hoje a netinst comum já reconhece a maioria das placas de Wi-Fi.</p>
+<p>Desde o Debian 12, as imagens oficiais já incluem o <strong>firmware não livre</strong> (<code>non-free-firmware</code>). Antes era preciso baixar uma imagem "com firmware" separada. Hoje a netinst comum já reconhece a maioria das placas de Wi-Fi. Veja <a href="#internet">Internet durante a instalação</a>.</p>
 </div>
 
 <p>O nome do arquivo diz tudo:</p>
@@ -133,6 +134,7 @@ sdb   14,6G SanDisk Ultra                 « o pendrive
 
 <ol class="passo">
   <li><strong>Idioma, localização e teclado.</strong> Escolha "Portuguese (Brazil) - Português do Brasil", depois Brasil, e no teclado "Português Brasileiro" (ABNT2). O idioma define as mensagens do sistema; o teclado precisa bater com o seu de verdade, senão o <kbd>ç</kbd> e os acentos saem errados.</li>
+  <li><strong>Rede.</strong> O instalador detecta as placas de rede e configura a internet. Com cabo, sozinho; com Wi-Fi, ele pergunta a rede e a senha. Veja <a href="#internet">Internet durante a instalação</a>, logo abaixo.</li>
   <li><strong>"Nome de máquina:"</strong> um nome para o computador na rede, como <code>notebook</code>. Uma palavra, sem espaços nem acentos.</li>
   <li><strong>"Nome de domínio:"</strong> numa rede de casa, pode deixar em branco. Em empresas, pergunte ao administrador da rede.</li>
   <li><strong>"Senha do root:"</strong> a pergunta mais importante. Veja a seção logo abaixo.</li>
@@ -143,12 +145,89 @@ sdb   14,6G SanDisk Ultra                 « o pendrive
   <li><strong>"Método de particionamento:"</strong> para um disco só seu, escolha <strong>"Assistido - usar o disco inteiro"</strong>. Também existem "…e configurar LVM", "…usar disco todo e LVM criptografado" (pede uma senha a cada boot; boa ideia para notebooks) e "Manual" (para dual boot com Windows).</li>
   <li><strong>"Esquema de particionamento:"</strong> para começar, <strong>"Todos os arquivos em uma partição (para iniciantes)"</strong>. As outras opções são "Partição /home separada" e "Partições /home, /var e /tmp separadas".</li>
   <li><strong>"Escrever as mudanças nos discos?"</strong> É o ponto sem volta: o disco escolhido será apagado. Confira e responda "Sim".</li>
-  <li><strong>Gerenciador de pacotes.</strong> Escolha o país "Brasil" e o espelho <code>deb.debian.org</code>. Proxy em branco, a não ser que sua rede exija.</li>
+  <li><strong>Gerenciador de pacotes.</strong> Escolha o país "Brasil" e o espelho <code>deb.debian.org</code>. Proxy em branco, a não ser que sua rede exija. (Sem internet, aqui aparece "Continuar sem um espelho de rede?": veja <a href="#sem-internet">Instalar sem internet</a>.)</li>
   <li><strong>Pesquisa de popularidade de pacotes.</strong> Opcional: envia anonimamente quais pacotes você usa, para ajudar o Debian a priorizar.</li>
   <li><strong>Seleção de software.</strong> Veja a seção "Escolhendo o que instalar".</li>
   <li><strong>"Instalar o carregador de inicialização GRUB no seu disco primário?"</strong> Sim, e escolha o disco onde o Debian foi instalado (normalmente <code>/dev/sda</code> ou <code>/dev/nvme0n1</code>).</li>
   <li><strong>Fim.</strong> Remova o pendrive (ou a ISO da VM) e reinicie.</li>
 </ol>
+
+<hr>
+
+<h2 id="internet">Internet durante a instalação</h2>
+
+<p>A imagem <strong>netinst</strong> traz só o básico e baixa o resto da internet durante a instalação: a área de trabalho, os programas e as correções de segurança (foi assim que a máquina do guia, instalada com a ISO 13.5, saiu do instalador já na 13.7). Por isso o instalador configura a rede logo no começo, depois do teclado. Qualquer internet serve: <strong>cabo</strong>, <strong>Wi-Fi</strong> ou o <strong>celular pelo cabo USB</strong>. Sem nenhuma, também dá para instalar, mas o resultado é um sistema mínimo.</p>
+
+<div class="note">
+<strong>De onde vêm os textos desta seção</strong>
+<p>O VirtualBox não simula placa Wi-Fi, então as telas de Wi-Fi do instalador não foram reproduzidas na VM do guia. As frases entre aspas são os textos <strong>reais</strong> do instalador do Debian 13 em português do Brasil, copiados dos próprios pacotes do instalador (<code>netcfg</code> 1.197, <code>hw-detect</code> 1.171 e <code>apt-mirror-setup</code> 0.198); a ordem das telas segue o manual oficial de instalação. Os nomes de placas e redes nas listas são <strong>ilustrativos</strong>.</p>
+</div>
+
+<h3>Com cabo: nada a fazer</h3>
+<p>Com o cabo encaixado no roteador, o instalador pede um endereço por DHCP e segue sozinho, sem perguntar nada. Se o computador tiver mais de uma placa de rede (cabo e Wi-Fi, por exemplo), ele pergunta qual usar:</p>
+
+<blockquote class="note"><p><strong>"Interface primária de rede:"</strong> "Seu sistema possui múltiplas interfaces de rede. Escolha aquela que será usada como a interface primária de rede durante a instalação. Se possível, a primeira interface de rede conectada que foi encontrada estará selecionada."</p></blockquote>
+
+<p>Escolha a que começa com <code>en</code> (cabo). Os nomes seguem a mesma regra do sistema instalado: <code>en…</code> = cabo, <code>wl…</code> = Wi-Fi (veja <a href="redes.html">Conceitos de Rede</a>).</p>
+
+<h3 id="wifi-instalador">Wi-Fi no instalador, passo a passo</h3>
+
+<ol class="passo">
+  <li><strong>Firmware.</strong> Muitas placas Wi-Fi precisam de um firmware fechado. Desde o Debian 12 ele vem na ISO oficial, e o instalador o carrega sozinho, sem perguntar. Só se o arquivo não estiver na ISO aparece a pergunta:
+  <blockquote class="note"><p><strong>"Carregar o firmware que está faltando a partir de uma mídia removível?"</strong> "Parte do seu hardware precisa de arquivos de firmware não-livre para funcionar. O firmware pode ser carregado a partir de mídia removível, como um pendrive USB ou um disquete. Os arquivos de firmware que estão faltando são: …"</p></blockquote>
+  Anote os nomes dos arquivos e responda <strong>Não</strong> (a não ser que você tenha os arquivos num pendrive). Instale pelo cabo ou pelo celular e resolva o firmware depois, com a aula <a href="wifi-problemas.html#firmware">Wi-Fi que Não Funciona</a>.</li>
+  <li><strong>"Interface primária de rede:"</strong> se houver cabo e Wi-Fi, a lista mostra as duas, com o nome e o modelo, por exemplo <code>enp1s0: Realtek … Ethernet</code> e <code>wlp2s0: Intel … Wi-Fi 6 AX201</code>. Escolha a <code>wl…</code>. Se a sua placa Wi-Fi não aparece, o instalador não a reconheceu: use cabo ou celular.</li>
+  <li><strong>"Procurando por pontos de acesso a redes sem fio…"</strong> e depois <strong>"Rede sem fio:"</strong> ("Selecione a rede sem fio a ser usada durante o processo de instalação."). Escolha o nome da sua rede. Para uma rede oculta, use a última opção, <strong>"Informar o ESSID manualmente"</strong>, e digite o nome na tela <strong>"ESSID da rede sem fio para wlp2s0:"</strong> (ESSID é o nome da rede; maiúsculas e minúsculas contam).</li>
+  <li><strong>"Tipo da rede sem fio para wlp2s0:"</strong> com as opções <strong>"Rede Aberta/WEP"</strong> e <strong>"WPA/WPA2 PSK"</strong>. A rede de casa, com senha, é WPA/WPA2 PSK (já vem marcada). Rede Aberta é a sem senha. Se o roteador estiver em "somente WPA3" e a conexão falhar, mude-o para o modo misto WPA2/WPA3 durante a instalação.</li>
+  <li><strong>"Frase secreta WPA/WPA2 para o dispositivo de rede sem fio wlp2s0:"</strong> é a senha do Wi-Fi. Atenção: <strong>a senha aparece na tela enquanto você digita</strong>, o que ajuda a conferir. Se tiver menos de 8 ou mais de 64 caracteres, o instalador recusa com <strong>"Frase secreta inválida"</strong>.</li>
+  <li><strong>Endereço.</strong> Com a senha certa, o instalador pede o endereço por DHCP e segue para a tela do nome da máquina. Se a senha estiver errada (ou o sinal fraco), aparece <strong>"Configuração automática de rede falhou"</strong> e depois <strong>"Método de configuração de rede:"</strong>, com as opções "Tentar novamente a configuração automática de rede", "Tentar configuração automática de rede com um "hostname" DHCP", "Configurar a rede manualmente", <strong>"Configurar novamente a rede sem fio"</strong> (para escolher a rede e digitar a senha de novo) e "Não configurar a rede agora".</li>
+</ol>
+
+<div class="tip">
+<strong>Redes que o instalador não sabe usar</strong>
+<p>O instalador só conhece redes abertas, WEP e WPA/WPA2 com senha. Redes de empresa e universidade com usuário e senha (<em>WPA2-Enterprise</em>, 802.1X, como a eduroam) e redes de hotel com página de login não funcionam nele: instale pelo cabo ou pelo celular e configure essa rede depois, no sistema instalado.</p>
+</div>
+
+<h3>O que o instalador grava no sistema</h3>
+<p>Instalou pelo Wi-Fi? O instalador leva a rede para o sistema instalado, e o Wi-Fi já funciona no primeiro boot. Como, depende do que você escolheu na seleção de software (comportamento conferido no código do <code>netcfg</code>):</p>
+
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Você instalou</th><th>O instalador grava</th><th>Para mudar de rede depois</th></tr>
+<tr><td>Uma área de trabalho (o NetworkManager vem junto)</td><td>Uma conexão do NetworkManager em <code>/etc/NetworkManager/system-connections/</code>, com o nome da rede; o <code>/etc/network/interfaces</code> fica só com o <code>lo</code></td><td>Ícone de rede, <code>nmcli</code> ou <code>nmtui</code> (<a href="wifi.html">Wi-Fi</a>)</td></tr>
+<tr><td>Sem área de trabalho (servidor)</td><td>Instala <code>wpasupplicant</code>, <code>iw</code> e <code>wireless-tools</code> e escreve o Wi-Fi no <code>/etc/network/interfaces</code> (linhas <code>wpa-ssid</code> e <code>wpa-psk</code>), com permissão <code>600</code> por causa da senha</td><td>Editar o <code>interfaces</code> (<a href="wifi.html#servidor">Wi-Fi no servidor</a>)</td></tr>
+</table>
+</div>
+
+<h3>Plano B: o celular pelo cabo USB</h3>
+<p>Sem cabo de rede e com o Wi-Fi sem funcionar no instalador, ligue o celular no computador pelo cabo USB e ative a <strong>ancoragem USB</strong> (Android) ou o <strong>Acesso Pessoal</strong> (iPhone). Para o instalador, o celular é uma placa de cabo: ele aparece como mais uma opção na tela "Interface primária de rede" (com um nome como <code>enx…</code> ou <code>usb0</code>). Escolha-o, e a instalação segue como se fosse cabo. O passo a passo no celular está em <a href="celular-modem.html">Celular por USB e Modem 4G</a>.</p>
+
+<p>Depois do primeiro boot, lembre que o sistema ficou configurado para o celular. Configure o Wi-Fi com a aula <a href="wifi.html">Wi-Fi</a>, de preferência ainda com o celular ligado (num servidor, para instalar o <code>wpasupplicant</code>).</p>
+
+<h3 id="sem-internet">Instalar sem internet</h3>
+<p>Dá para instalar a netinst sem nenhuma rede. O instalador avisa duas vezes. Na rede: <strong>"Nenhuma interface de rede foi detectada"</strong> (se não achou placa nenhuma) ou a opção "Não configurar a rede agora". E no gerenciador de pacotes:</p>
+
+<blockquote class="note"><p><strong>"Continuar sem um espelho de rede?"</strong> "Nenhum espelho de rede foi selecionado. Se você está instalando a partir de uma imagem de CD do tipo 'netinst' e optar por não usar um espelho de rede, você terminará com um sistema básico mínimo."</p></blockquote>
+
+<p>Respondendo "Sim", a instalação termina com o que está na ISO. O que fica faltando (segundo o manual de instalação; ilustrativo, não reproduzido na VM do guia):</p>
+<ul>
+  <li><strong>A área de trabalho e os programas</strong>: as tarefas do tasksel (GNOME, KDE…) precisam baixar pacotes. Você fica com um sistema em modo texto.</li>
+  <li><strong>As correções</strong>: os pacotes ficam na versão da ISO, sem as atualizações de segurança.</li>
+  <li><strong>Os repositórios</strong>: o <code>/etc/apt/sources.list</code> fica sem os endereços da internet, então o <code>apt</code> não tem de onde baixar.</li>
+  <li><strong>O programa de Wi-Fi</strong>: sem rede no instalador, o <code>wpasupplicant</code> não é instalado. Num sistema sem desktop, o Wi-Fi só vai funcionar depois que você conseguir internet por cabo ou celular.</li>
+</ul>
+
+<p>Para completar depois, com internet por cabo ou celular: coloque as linhas do <code>deb.debian.org</code> e do <code>security.debian.org</code> no <code>sources.list</code> (veja <a href="repositorios.html">Repositórios</a>), rode <code>apt update</code> e <code>apt upgrade</code> como root, e <code>tasksel</code> para escolher a área de trabalho. Se o computador nunca vai ter internet, use a imagem de <strong>DVD</strong>, que já traz os pacotes de uma área de trabalho.</p>
+
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Sua situação na hora de instalar</th><th>O que fazer</th></tr>
+<tr><td>Tenho cabo de rede</td><td>Use o cabo, mesmo que depois vá usar Wi-Fi. É o caminho sem surpresas.</td></tr>
+<tr><td>Só Wi-Fi, e a placa aparece no instalador</td><td>Siga o <a href="#wifi-instalador">passo a passo do Wi-Fi</a>.</td></tr>
+<tr><td>Só Wi-Fi, e a placa não aparece (ou pede firmware)</td><td>Celular por USB; depois resolva com <a href="wifi-problemas.html">Wi-Fi que Não Funciona</a>.</td></tr>
+<tr><td>Nenhuma internet</td><td>Instale sem espelho de rede (sistema mínimo) ou use a imagem de DVD.</td></tr>
+</table>
+</div>
 
 <hr>
 
@@ -271,7 +350,7 @@ Todos os pacotes estão atualizados.                « o instalador já tinha ba
 <ol class="passo">
   <li>Atualize: <code>apt update</code> e <code>apt upgrade</code> como root.</li>
   <li>Decida como vai administrar: <code>su -</code> ou <code>sudo</code> (<a href="root-su-sudo.html">root, su e sudo</a>).</li>
-  <li>Confira se Wi-Fi, som e vídeo funcionam.</li>
+  <li>Confira se Wi-Fi, som e vídeo funcionam (Wi-Fi: <a href="wifi.html">Wi-Fi</a> e <a href="wifi-problemas.html">Wi-Fi que Não Funciona</a>).</li>
   <li>Instale seus programas: <a href="apt.html">apt</a> e <a href="flatpak.html">Flatpak</a>.</li>
   <li>Configure o backup (<a href="backup.html">Backup</a>).</li>
 </ol>
@@ -284,6 +363,12 @@ Todos os pacotes estão atualizados.                « o instalador já tinha ba
 <strong>O computador não liga pelo pendrive</strong>
 <p><strong>O que aconteceu:</strong> o computador está configurado para ligar pelo disco interno, ou o pendrive foi gravado como um arquivo comum (copiar e colar a ISO não funciona).</p>
 <p><strong>Como resolver:</strong> use o menu de boot (<kbd>F12</kbd>, <kbd>F11</kbd> ou <kbd>Esc</kbd>) e grave o pendrive com uma das ferramentas da tabela do Passo 3.</p>
+</div>
+
+<div class="cenario">
+<strong>O instalador não acha a rede ou pede firmware</strong>
+<p><strong>O que aconteceu:</strong> a placa Wi-Fi não foi reconhecida (sem driver ou sem firmware), ou o cabo não está pegando endereço.</p>
+<p><strong>Como resolver:</strong> responda "Não" à pergunta do firmware e use cabo ou o celular por USB (<a href="#internet">Internet durante a instalação</a>). Depois, no sistema instalado, siga <a href="wifi-problemas.html">Wi-Fi que Não Funciona</a>.</p>
 </div>
 
 <div class="cenario">
@@ -343,6 +428,14 @@ bash: sudo: comando não encontrado</pre>
 <label><input type="radio" name="q4"> Esquema para disco pequeno</label>
 </div>
 
+<div class="mc" data-answer="3">
+<p class="mc-q">5. Você instalou a netinst sem nenhuma internet e respondeu "Sim" a "Continuar sem um espelho de rede?". O que você tem no fim?</p>
+<label><input type="radio" name="q5"> O GNOME completo, sem as atualizações.</label>
+<label><input type="radio" name="q5"> Nada: a instalação é cancelada.</label>
+<label><input type="radio" name="q5"> Um sistema básico mínimo, em modo texto, que precisa de internet depois para receber programas e correções.</label>
+<label><input type="radio" name="q5"> O mesmo sistema que com internet.</label>
+</div>
+
 <hr>
 
 <h2>Resumo</h2>
@@ -350,6 +443,7 @@ bash: sudo: comando não encontrado</pre>
   <li>Baixe a netinst <code>amd64</code> e confira com <code>sha256sum -c SHA256SUMS --ignore-missing</code>.</li>
   <li>Para aprender, instale numa máquina virtual; para um computador real, grave a ISO num pendrive.</li>
   <li>Com senha de root: sem <code>sudo</code>, administração com <code>su -</code>. Sem senha de root: <code>sudo</code> com a sua senha.</li>
+  <li>A netinst precisa de internet: cabo (automático), Wi-Fi (rede e senha no instalador) ou celular por USB. Sem internet, sai um sistema mínimo.</li>
   <li>Na seleção de software, escolha uma área de trabalho para uso pessoal, ou só "servidor SSH" para servidores.</li>
   <li>No primeiro boot: atualize com <code>apt update</code> e <code>apt upgrade</code> como root.</li>
 </ul>

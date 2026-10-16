@@ -1,0 +1,490 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Debian Wi-Fi que não funciona — rfkill, firmware e adaptadores USB | Guia Debian</title>
+<meta name="description" content="Roteiro para o Wi-Fi do Debian 13 que não aparece ou não liga: rfkill (bloqueio soft e hard), ip link, lspci -k, lsusb, dmesg com firmware faltando, pacotes firmware-iwlwifi, firmware-realtek, firmware-atheros, firmware-brcm80211, firmware-misc-nonfree, o componente non-free-firmware e adaptadores Realtek USB.">
+<link rel="stylesheet" href="assets/style.css">
+<script>try{var t=localStorage.getItem("tema");if(t)document.documentElement.setAttribute("data-theme",t)}catch(e){}</script>
+</head>
+<body>
+<div class="layout">
+<nav class="sidebar" id="sidebar" aria-label="Tópicos"></nav>
+<main class="main">
+<div class="content">
+
+<div class="pager"></div>
+
+<h1>Debian <span class="hl">Wi-Fi que Não Funciona</span></h1>
+
+<p class="intro">Às vezes o Wi-Fi nem chega a pedir senha: a lista de redes vem vazia, o ícone some ou a placa aparece como "não disponível". Quase sempre a causa é uma de três: o rádio está <strong>bloqueado</strong> (modo avião), falta o <strong>firmware</strong> da placa, ou o kernel não tem <strong>driver</strong> para ela (comum em adaptadores USB). Esta aula é um roteiro para descobrir qual é, e o que fazer em cada caso.</p>
+
+<div class="note">
+<strong>Você vai aprender</strong>
+<ul>
+  <li>Verificar se o Linux enxerga a placa Wi-Fi (<code>ip link</code>, <code>nmcli device</code>).</li>
+  <li>Destravar o Wi-Fi bloqueado com <code>rfkill</code> e entender a diferença entre bloqueio <em>soft</em> e <em>hard</em>.</li>
+  <li>Identificar a placa e o driver com <code>lspci -k</code> e <code>lsusb</code>.</li>
+  <li>Achar no <code>dmesg</code> o firmware que falta e instalar o pacote <code>firmware-*</code> certo, do componente <code>non-free-firmware</code>.</li>
+  <li>Saber quais adaptadores Realtek USB o Debian 13 reconhece, e qual é o plano B.</li>
+</ul>
+</div>
+
+<div class="note">
+<strong>De onde vêm as saídas desta aula</strong>
+<p>Os comandos de bloqueio (<code>rfkill</code>, <code>nmcli radio</code>, <code>ifup</code>), as listas de pacotes e de drivers foram conferidos no Debian 13 da máquina de laboratório, com placas Wi-Fi virtuais (veja <a href="wifi.html#laboratorio">Como o laboratório foi feito</a>). Uma placa virtual nunca precisa de firmware e a VM não tem USB, então as mensagens de firmware faltando e as linhas de adaptadores reais estão marcadas como <strong>ilustrativas</strong>.</p>
+</div>
+
+<hr>
+
+<h2 id="roteiro">O roteiro, em uma tabela</h2>
+
+<p>Siga na ordem. O primeiro passo que falhar mostra onde está o problema:</p>
+
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Passo</th><th>Pergunta</th><th>Comando</th><th>Se falhar</th></tr>
+<tr><td>1</td><td>O Linux enxerga uma placa Wi-Fi?</td><td><code>ip link</code></td><td>Passo 3 (placa, driver, firmware)</td></tr>
+<tr><td>2</td><td>O rádio está ligado?</td><td><code>rfkill</code> ou <code>nmcli radio</code></td><td><a href="#rfkill">rfkill</a></td></tr>
+<tr><td>3</td><td>Qual é a placa e qual driver ela usa?</td><td><code>lspci -k</code> / <code>lsusb</code></td><td><a href="#hardware">Identificar a placa</a></td></tr>
+<tr><td>4</td><td>Falta firmware?</td><td><code>dmesg | grep -i firmware</code></td><td><a href="#firmware">Instalar o firmware</a></td></tr>
+<tr><td>5</td><td>A placa funciona, mas não conecta?</td><td><code>nmcli</code> / <code>ifup</code></td><td><a href="wifi.html#problemas">Wi-Fi: quando não funciona</a> e <a href="#sem-ip">sem endereço</a></td></tr>
+</table>
+</div>
+
+<hr>
+
+<h2 id="placa">Passo 1: o Linux enxerga a placa? ip link</h2>
+
+<p>O <code>ip link</code> lista toda placa de rede que o kernel reconheceu (veja <a href="ip.html">ip, ping, ss</a>). Saída real na máquina de laboratório:</p>
+
+<pre class="term">$ ip link
+1: lo: &lt;LOOPBACK,UP,LOWER_UP&gt; mtu 65536 qdisc noqueue state UNKNOWN mode DEFAULT group default qlen 1000
+    link/loopback 00:00:00:00:00:00 brd 00:00:00:00:00:00
+2: enp1s0: &lt;BROADCAST,MULTICAST,UP,LOWER_UP&gt; mtu 1500 qdisc fq_codel state UP mode DEFAULT group default qlen 1000   « o cabo
+    link/ether 08:00:27:90:fb:de brd ff:ff:ff:ff:ff:ff
+6: wlp2s0: &lt;NO-CARRIER,BROADCAST,MULTICAST,UP&gt; mtu 1500 qdisc noqueue state DOWN mode DORMANT group default qlen 1000   « o Wi-Fi, ligado e sem rede
+    link/ether 52:d5:3e:0e:5a:a2 brd ff:ff:ff:ff:ff:ff permaddr 02:00:00:00:00:00
+7: wlan1: &lt;BROADCAST,MULTICAST,UP,LOWER_UP&gt; mtu 1500 qdisc noqueue state UP mode DEFAULT group default qlen 1000   « só no laboratório (o "roteador")
+    link/ether 02:00:00:00:01:00 brd ff:ff:ff:ff:ff:ff
+    altname wlx020000000100
+8: hwsim0: &lt;BROADCAST,MULTICAST&gt; mtu 1500 qdisc noop state DOWN mode DEFAULT group default qlen 1000                   « só no laboratório
+    link/ieee802.11/radiotap 12:00:00:00:00:00 brd ff:ff:ff:ff:ff:ff</pre>
+
+<p>(As placas <code>wlan1_1</code> e <code>wlan1_2</code> do laboratório foram cortadas.) O que procurar:</p>
+
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Você vê</th><th>O que quer dizer</th></tr>
+<tr><td>Uma placa <code>wl…</code></td><td>O kernel reconheceu a placa Wi-Fi: driver e firmware carregaram. Siga para o <a href="#rfkill">Passo 2</a>.</td></tr>
+<tr><td><code>NO-CARRIER</code>, <code>state DOWN</code>, <code>mode DORMANT</code></td><td>Ligada, mas sem rede. Normal antes de conectar.</td></tr>
+<tr><td>A placa <code>wl…</code> sem <code>UP</code> entre os <code>&lt; &gt;</code></td><td>Desligada: muitas vezes, bloqueio de rádio (<a href="#rfkill">rfkill</a>).</td></tr>
+<tr><td>Nenhuma placa <code>wl…</code></td><td>O kernel não conseguiu usar a placa: falta driver ou firmware. Vá para o <a href="#hardware">Passo 3</a>.</td></tr>
+<tr><td><code>permaddr 02:00:…</code> e um MAC diferente em <code>link/ether</code></td><td>O NetworkManager troca o MAC por um aleatório enquanto procura redes, por privacidade. O <code>permaddr</code> é o MAC de fábrica.</td></tr>
+</table>
+</div>
+
+<h3>O nome conta a história da placa</h3>
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Nome</th><th>Tipo</th></tr>
+<tr><td><code>wlp2s0</code>, <code>wlp0s20f3</code></td><td>Placa Wi-Fi interna, no barramento PCI (<code>p2s0</code> = barramento 2, encaixe 0).</td></tr>
+<tr><td><code>wlx</code> + 12 letras e números</td><td>Adaptador Wi-Fi <strong>USB</strong>: <code>x</code> + o endereço MAC. No laboratório, a placa do "roteador" ganhou o apelido <code>wlx020000000100</code> (linha <code>altname</code>).</td></tr>
+<tr><td><code>wlan0</code></td><td>O nome "antigo", dado pelo kernel. Aparece em algumas máquinas e no instalador.</td></tr>
+</table>
+</div>
+
+<hr>
+
+<h2 id="rfkill">Passo 2: o rádio está bloqueado? rfkill</h2>
+
+<p>Notebooks têm um "modo avião": uma tecla (<kbd>Fn</kbd>+<kbd>F2</kbd>, <kbd>Fn</kbd>+<kbd>F12</kbd>, uma tecla com desenho de antena ou avião) ou, nos mais antigos, uma chavinha na lateral. Ela desliga o rádio. O Linux chama isso de <strong>rfkill</strong> (<em>radio frequency kill</em>, "desligar o rádio").</p>
+
+<p>O <code>rfkill</code> vem no pacote de mesmo nome, que um servidor mínimo <strong>não tem</strong>:</p>
+
+<pre class="term" data-host="servidor">#> rfkill
+bash: rfkill: comando não encontrado
+#> apt install rfkill</pre>
+
+<p>Com ele instalado (os desktops costumam tê-lo), rode como root:</p>
+
+<pre class="term">#> rfkill
+ID TYPE DEVICE         SOFT         HARD
+ 2 wlan phy2   desbloqueado desbloqueado     « a placa do notebook (wlp2s0)
+ 3 wlan phy3   desbloqueado desbloqueado     « só no laboratório: o "roteador"</pre>
+
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Coluna</th><th>O que quer dizer</th></tr>
+<tr><td><code>ID</code></td><td>O número do rádio. Serve para bloquear ou desbloquear só ele.</td></tr>
+<tr><td><code>TYPE</code></td><td><code>wlan</code> (Wi-Fi), <code>bluetooth</code>, <code>wwan</code> (modem 4G).</td></tr>
+<tr><td><code>DEVICE</code></td><td>O rádio físico (<code>phy2</code>). Para saber de qual placa é: <code>iw dev wlp2s0 info</code> mostra <code>wiphy 2</code>.</td></tr>
+<tr><td><code>SOFT</code></td><td>Bloqueio por <strong>software</strong>: um programa ou uma tecla que avisa o sistema. <strong>Destrava com <code>rfkill unblock</code>.</strong></td></tr>
+<tr><td><code>HARD</code></td><td>Bloqueio por <strong>hardware</strong>: chave física, tecla ligada direto à placa ou opção da BIOS. <strong>Nenhum comando destrava.</strong></td></tr>
+</table>
+</div>
+
+<p>No seu notebook aparece um rádio <code>wlan</code> (e talvez um <code>bluetooth</code>). A forma longa, <code>rfkill list</code>, diz o mesmo em outro formato.</p>
+
+<h3>O que acontece com o Wi-Fi bloqueado</h3>
+
+<p>Sequência real: o bloqueio foi feito de propósito, com <code>rfkill block</code>, para simular a tecla de modo avião.</p>
+
+<dl class="anatomy">
+  <dt>rfkill block</dt><dd>Bloqueia (desliga) o rádio.</dd>
+  <dt>wifi</dt><dd>Todos os rádios Wi-Fi. Também aceita o <code>ID</code> de um só (<code>rfkill block 2</code>), <code>bluetooth</code> ou <code>all</code>.</dd>
+</dl>
+
+<pre class="term">#> rfkill block wifi
+#> rfkill list
+2: phy2: Wireless LAN
+	Soft blocked: yes             « bloqueado por software
+	Hard blocked: no
+3: phy3: Wireless LAN
+	Soft blocked: yes
+	Hard blocked: no
+#> nmcli radio
+WIFI-HW     WIFI          WWAN-HW  WWAN
+habilitado  desabilitado  missing  habilitado     « o NetworkManager percebe
+#> nmcli device status | grep wlp2s0
+wlp2s0          wifi      não disponível          --
+#> nmcli device wifi list ifname wlp2s0
+IN-USE  BSSID  SSID  MODE  CHAN  RATE  SIGNAL  BARS  SECURITY     « lista vazia
+#> nmcli connection up CasaDaAna
+Erro: Ativação da conexão falhou: No suitable device found for this connection (device wlp2s0 not available because device is not available).</pre>
+
+<p>No servidor, com o Wi-Fi no <code>/etc/network/interfaces</code>, o <code>ifup</code> avisa com todas as letras (aqui só a placa do notebook foi bloqueada, com <code>rfkill block 2</code>):</p>
+
+<pre class="term" data-host="servidor">#> ifup wlp2s0
+…
+dhcpcd_prestartinterface: Operation not possible due to RF-kill     « "operação impossível por causa do RF-kill"
+wlp2s0: waiting for carrier
+timed out</pre>
+
+<p>Para destravar:</p>
+
+<pre class="term">#> rfkill unblock wifi
+#> rfkill
+ID TYPE DEVICE         SOFT         HARD
+ 2 wlan phy2   desbloqueado desbloqueado
+ 3 wlan phy3   desbloqueado desbloqueado</pre>
+
+<p>Como de costume, <code>block</code> e <code>unblock</code> não mostram nada quando dão certo (código <code>0</code>). No desktop, a conexão salva voltou <strong>sozinha</strong> alguns segundos depois do desbloqueio (o <code>autoconnect</code> do NetworkManager). No servidor, rode <code>ifdown wlp2s0</code> e <code>ifup wlp2s0</code>.</p>
+
+<div class="note">
+<strong>nmcli radio wifi off é um rfkill</strong>
+<p>No laboratório, depois de <code>nmcli radio wifi off</code>, o <code>rfkill</code> mostrou os rádios como <code>bloqueado</code> na coluna <code>SOFT</code>. São dois jeitos de fazer a mesma coisa: <code>nmcli radio wifi on</code> também destrava.</p>
+</div>
+
+<h3>Bloqueio por hardware (ilustrativo)</h3>
+<p>Uma placa virtual não tem chave física, então este caso não foi reproduzido. Num notebook com a chave do Wi-Fi desligada, o <code>rfkill</code> mostra algo assim:</p>
+
+<pre class="term">#> rfkill list
+0: phy0: Wireless LAN
+	Soft blocked: no
+	Hard blocked: yes             « chave física, tecla ou BIOS</pre>
+
+<p>E o <code>nmcli radio</code> mostra <code>WIFI-HW</code> como <code>desabilitado</code>. O <code>rfkill unblock</code> não muda nada. Procure a chave na lateral ou na frente do notebook, a tecla de modo avião (às vezes com um LED), ou a opção "Wireless"/"WLAN" no setup da BIOS/UEFI.</p>
+
+<hr>
+
+<h2 id="hardware">Passo 3: qual é a placa? lspci -k e lsusb</h2>
+
+<p>Se nenhuma placa <code>wl…</code> aparece, descubra se o <strong>computador</strong> enxerga o aparelho e qual <strong>driver</strong> o kernel tentou usar. Placas internas ficam no barramento PCI; adaptadores "pen drive" ficam no USB.</p>
+
+<h3>Placa interna: lspci -k</h3>
+
+<dl class="anatomy">
+  <dt>lspci</dt><dd>(<em>list PCI</em>) Lista os aparelhos ligados à placa-mãe (pacote <code>pciutils</code>, já instalado no Debian).</dd>
+  <dt>-k</dt><dd>(<em>kernel</em>) Mostra o driver (módulo do kernel) de cada aparelho.</dd>
+</dl>
+
+<p>Saída real da máquina de laboratório, só com a placa de cabo (uma VM não tem placa Wi-Fi PCI):</p>
+
+<pre class="term">$ lspci -k | grep -A3 -i -E 'ethernet|network'
+00:03.0 Ethernet controller: Intel Corporation 82540EM Gigabit Ethernet Controller (rev 02)
+	Subsystem: Intel Corporation PRO/1000 MT Desktop Adapter
+	Kernel driver in use: e1000          « o driver que está cuidando dela
+	Kernel modules: e1000                « os drivers que servem para ela</pre>
+
+<p>(O <code>grep -A3</code> mostra a linha encontrada e as 3 seguintes; veja <a href="grep.html">grep</a>.) Placas Wi-Fi aparecem como <code>Network controller</code>. Num notebook com Wi-Fi Intel, a saída seria assim (<strong>ilustrativa</strong>):</p>
+
+<pre class="term">$ lspci -k | grep -A3 -i network
+02:00.0 Network controller: Intel Corporation Wi-Fi 6 AX201 (rev 20)
+	Subsystem: Intel Corporation Device 0070
+	Kernel driver in use: iwlwifi        « se esta linha falta, o driver não conseguiu assumir a placa
+	Kernel modules: iwlwifi</pre>
+
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Você vê</th><th>O que quer dizer</th></tr>
+<tr><td><code>Kernel driver in use</code> e uma placa <code>wl…</code> no <code>ip link</code></td><td>Tudo certo com o hardware. Volte ao <a href="#rfkill">rfkill</a> ou a <a href="wifi.html">Wi-Fi</a>.</td></tr>
+<tr><td><code>Kernel modules</code>, mas sem <code>Kernel driver in use</code></td><td>Existe driver, mas ele falhou ao ligar a placa. Quase sempre: <strong>firmware faltando</strong> (<a href="#firmware">Passo 4</a>).</td></tr>
+<tr><td>Nem <code>Kernel modules</code></td><td>O kernel não tem driver para essa placa. Veja <a href="#realtek">placas sem driver</a>.</td></tr>
+<tr><td>A placa nem aparece no <code>lspci</code></td><td>Desligada na BIOS, mal encaixada, ou é USB (use o <code>lsusb</code>).</td></tr>
+</table>
+</div>
+
+<h3>Adaptador USB: lsusb</h3>
+
+<p>O <code>lsusb</code> (<em>list USB</em>) vem no pacote <code>usbutils</code>, que um servidor mínimo também não tem (<code>apt install usbutils</code>). Na VM do laboratório, que não tem USB, ele não mostrou nada e devolveu o código <code>1</code>. Num computador com um adaptador Wi-Fi Realtek, a saída seria assim (<strong>ilustrativa</strong>):</p>
+
+<pre class="term">$ lsusb
+Bus 001 Device 001: ID 1d6b:0002 Linux Foundation 2.0 root hub
+Bus 001 Device 003: ID 0bda:b812 Realtek Semiconductor Corp. RTL88x2bu [AC1200 Techkey]   « o adaptador Wi-Fi
+Bus 002 Device 001: ID 1d6b:0003 Linux Foundation 3.0 root hub</pre>
+
+<p>O que importa é o <code>ID 0bda:b812</code>: <code>0bda</code> é o fabricante (Realtek) e <code>b812</code>, o produto. Com esse número, pesquise "<code>0bda:b812 linux</code>" para descobrir o <strong>chip</strong> (aqui, RTL8822BU) e o driver. Se o adaptador nem aparece no <code>lsusb</code>, troque de porta (de preferência direto no computador, sem hub) ou teste-o em outro computador.</p>
+
+<hr>
+
+<h2 id="firmware">Passo 4: falta firmware? dmesg</h2>
+
+<p>Uma placa Wi-Fi precisa de duas coisas: o <strong>driver</strong>, código do kernel que fala com a placa, e o <strong>firmware</strong>, um programinha que roda <em>dentro</em> da própria placa e que o driver envia para ela ao ligar. Quase todo firmware de Wi-Fi é fechado (não livre), então o Debian o coloca num componente separado do repositório, o <code>non-free-firmware</code> (veja <a href="repositorios.html">Repositórios</a>).</p>
+
+<div class="note">
+<strong>O instalador já cuida disso, na maioria das vezes</strong>
+<p>Desde o Debian 12, a ISO oficial traz os pacotes de firmware e o instalador instala sozinho os que o seu hardware pede. Num Debian que não precisou de nenhum (como a VM do guia), a pasta de firmware fica quase vazia. Saída real:</p>
+<pre class="term">$ ls /lib/firmware
+intel-ucode  regulatory.db  regulatory.db-debian  regulatory.db.p7s  regulatory.db.p7s-debian  regulatory.db.p7s-upstream  regulatory.db-upstream</pre>
+<p>O problema aparece quando você troca a placa, conecta um adaptador USB novo, ou instalou com uma imagem sem firmware.</p>
+</div>
+
+<h3>Achar a mensagem do kernel</h3>
+
+<dl class="anatomy">
+  <dt>dmesg</dt><dd>(<em>display message</em>) As mensagens do kernel desde o boot. No Debian, só o root pode ler.</dd>
+  <dt>| grep -i firmware</dt><dd>Só as linhas com "firmware", sem diferenciar maiúsculas (<code>-i</code>).</dd>
+</dl>
+
+<p>Na máquina de laboratório, onde nada falta, a única linha é de outro assunto (real):</p>
+
+<pre class="term">#> dmesg | grep -i firmware
+[   24.283349] systemd[1]: systemd-hibernate-clear.service - Clear Stale Hibernate Storage Info skipped, unmet condition check ConditionPathExists=/sys/firmware/efi/efivars/HibernateLocation-8cf2644b-4b0b-428f-9387-6d876050dc67</pre>
+
+<p>Num computador com o problema, aparece uma linha com <code>Direct firmware load … failed with error -2</code> ("a carga do firmware falhou, erro −2", isto é, arquivo não encontrado). Dois exemplos <strong>ilustrativos</strong>:</p>
+
+<pre class="term">#> dmesg | grep -i firmware
+[    7.412345] iwlwifi 0000:02:00.0: Direct firmware load for iwlwifi-QuZ-a0-hr-b0-77.ucode failed with error -2   « Wi-Fi Intel
+[    7.412360] iwlwifi 0000:02:00.0: no suitable firmware found!
+[    9.118201] rtw_8822bu 1-3:1.0: Direct firmware load for rtw88/rtw8822b_fw.bin failed with error -2           « adaptador Realtek USB</pre>
+
+<p>Leia a linha assim: o começo (<code>iwlwifi</code>, <code>rtw_8822bu</code>) é o <strong>driver</strong>; depois de <code>for</code> vem o <strong>arquivo</strong> que faltou, procurado dentro de <code>/lib/firmware</code>. O driver e o arquivo dizem qual pacote instalar (tabela abaixo).</p>
+
+<div class="tip">
+<strong>Outro lugar onde o Debian avisa</strong>
+<p>Toda vez que o kernel ou o initramfs é atualizado (no <code>apt upgrade</code>), o Debian confere os firmwares e avisa com linhas que começam com <code>W: Possible missing firmware /lib/firmware/…</code>. Se o arquivo citado é do seu Wi-Fi, é o mesmo problema.</p>
+</div>
+
+<h3>O pacote certo para cada placa</h3>
+
+<p>Os pacotes de firmware de Wi-Fi do Debian 13 (versão <code>20250410-2</code>, conferida na VM), todos da seção <code>non-free-firmware/kernel</code>:</p>
+
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Pacote</th><th>Para</th><th>Driver no <code>dmesg</code></th></tr>
+<tr><td><code>firmware-iwlwifi</code></td><td>Placas Wi-Fi <strong>Intel</strong> (a maioria dos notebooks)</td><td><code>iwlwifi</code></td></tr>
+<tr><td><code>firmware-realtek</code></td><td>Chips <strong>Realtek</strong> de rede (Wi-Fi e cabo) e áudio</td><td><code>rtw88_…</code>, <code>rtw89_…</code>, <code>rtl8xxxu</code>, <code>rtl8192…</code>, <code>r8169</code></td></tr>
+<tr><td><code>firmware-atheros</code></td><td><strong>Qualcomm Atheros</strong></td><td><code>ath9k</code>, <code>ath10k</code>, <code>ath11k</code>, <code>ath12k</code></td></tr>
+<tr><td><code>firmware-brcm80211</code></td><td><strong>Broadcom</strong>/Cypress 802.11</td><td><code>brcmfmac</code>, <code>brcmsmac</code></td></tr>
+<tr><td><code>firmware-mediatek</code></td><td><strong>MediaTek</strong> e Ralink (no Debian 13 saíram do <code>firmware-misc-nonfree</code> para este pacote)</td><td><code>mt76…</code>, <code>mt79…</code>, <code>rt2800…</code></td></tr>
+<tr><td><code>firmware-misc-nonfree</code></td><td>Vários outros drivers do kernel</td><td>diversos</td></tr>
+<tr><td><code>firmware-ath9k-htc</code>, <code>firmware-carl9170</code>, <code>firmware-zd1211</code>, <code>firmware-libertas</code>, <code>firmware-ti-connectivity</code></td><td>Adaptadores USB antigos (Atheros AR9271, AR9170, ZyDAS) e chips Marvell e TI</td><td>conforme o nome</td></tr>
+</table>
+</div>
+
+<p>A lista completa sai de <code>apt-cache search --names-only '^firmware-'</code>. Para ter certeza de que um arquivo está num pacote, olhe o conteúdo do <code>.deb</code> sem instalá-lo. Real, na VM:</p>
+
+<pre class="term">$ cd /tmp
+$ apt download firmware-realtek                     « baixa o .deb, sem instalar
+$ dpkg-deb -c firmware-realtek_20250410-2_all.deb | grep rtw8822b
+-rw-r--r-- root/root    150984 2025-04-24 13:35 ./usr/lib/firmware/rtw88/rtw8822b_fw.bin   « o arquivo da mensagem</pre>
+
+<p>Sem um computador Debian à mão, use a busca de conteúdo de <a href="https://packages.debian.org/">packages.debian.org</a> ("Search the contents of packages"), com a distribuição <code>trixie</code> e o nome do arquivo.</p>
+
+<h3>Instalar o firmware</h3>
+
+<ol class="passo">
+  <li><strong>Confira o componente <code>non-free-firmware</code></strong> no <code>/etc/apt/sources.list</code> (o instalador já o coloca). Linha real da VM:
+<pre class="file" data-file="/etc/apt/sources.list (trecho)">deb http://deb.debian.org/debian trixie main non-free-firmware</pre>
+  Se a linha só tem <code>main</code>, acrescente <code>non-free-firmware</code> no fim das linhas e rode <code>apt update</code>.</li>
+  <li><strong>Instale o pacote</strong> (como root, com internet por cabo ou pelo <a href="celular-modem.html">celular</a>):
+<pre class="term">#> apt install firmware-iwlwifi</pre></li>
+  <li><strong>Recarregue o driver</strong> para ele pedir o firmware de novo, ou simplesmente reinicie:
+<pre class="term">#> modprobe -r iwlwifi &amp;&amp; modprobe iwlwifi</pre>
+  (<code>modprobe -r</code> tira o driver da memória; <code>modprobe</code> carrega de novo.)</li>
+  <li><strong>Confira</strong>: <code>ip link</code> deve mostrar a placa <code>wl…</code>, e <code>nmcli device wifi list</code>, as redes.</li>
+</ol>
+
+<div class="tip">
+<strong>E se o computador não tem nenhuma internet?</strong>
+<p>Em outro computador, baixe o <code>.deb</code> do pacote em <a href="https://packages.debian.org/">packages.debian.org</a> (distribuição <code>trixie</code>, arquitetura <code>all</code>), copie para um pendrive e instale com <code>dpkg -i firmware-…_all.deb</code> (veja <a href="dpkg.html">dpkg e .deb</a>). Existe também o pacote <code>isenkram-cli</code> (versão <code>0.69+deb13u1</code> no Debian 13), cujo comando <code>isenkram-autoinstall-firmware</code> procura e instala o firmware que o seu hardware pede; ele também precisa de internet.</p>
+</div>
+
+<hr>
+
+<h2 id="realtek">Adaptadores Wi-Fi USB (Realtek e outros)</h2>
+
+<p>Adaptadores Wi-Fi USB baratos são a maior fonte de "meu Wi-Fi não aparece". O motivo: muitos usam chips Realtek cujo driver só entrou no kernel recentemente, ou nunca entrou. O Debian 13 usa o kernel 6.12. Lista real dos drivers Realtek para USB que ele traz (os nomes terminados em <code>u</code>, de USB):</p>
+
+<pre class="term">$ ls /usr/lib/modules/$(uname -r)/kernel/drivers/net/wireless/realtek/rtw88/ | grep 'u\.ko'
+rtw88_8723du.ko.xz
+rtw88_8821cu.ko.xz
+rtw88_8822bu.ko.xz
+rtw88_8822cu.ko.xz
+$ ls /usr/lib/modules/$(uname -r)/kernel/drivers/net/wireless/realtek/
+rtl818x  rtl8xxxu  rtlwifi  rtw88  rtw89</pre>
+
+<p>(O <code>$(uname -r)</code> vira a versão do kernel em uso, <code>6.12.111+deb13-amd64</code>.) Em português:</p>
+
+<ul>
+  <li><strong>Funcionam</strong> com o kernel do Debian 13: RTL8723DU, RTL8821CU, RTL8822BU e RTL8822CU (driver <code>rtw88</code>), vários chips antigos pelo <code>rtl8xxxu</code> (como o RTL8188EU e o RTL8192EU), e adaptadores MediaTek (há <code>mt76-usb</code>, <code>mt76x02-usb</code> e <code>mt792x-usb</code> em <code>drivers/net/wireless/mediatek/mt76</code>). Todos precisam do firmware: <code>firmware-realtek</code> ou <code>firmware-mediatek</code>.</li>
+  <li><strong>Não funcionam</strong> com o kernel 6.12: a pasta <code>rtw89</code> (chips Wi-Fi 6 da Realtek) não tem nenhum driver USB, e chips como RTL8812AU e RTL8821AU não estão no <code>rtw88</code> dele. Kernels mais novos já trazem esses drivers (no Guia Arch, o kernel 7.0 lista <code>rtw88_8812au</code>, <code>rtw88_8821au</code> e <code>rtw89_8852bu</code>, entre outros).</li>
+</ul>
+
+<p>Se o seu chip está do lado "não funcionam":</p>
+
+<ol class="passo">
+  <li><strong>Instale usando outra conexão</strong>: cabo ou o <a href="celular-modem.html">celular por USB</a>.</li>
+  <li><strong>Tente um kernel mais novo</strong>, do repositório <code>trixie-backports</code> (aula <a href="backports.html">Backports e Pinning</a>), junto com o firmware também do backports. Confira antes se o driver do seu chip já está no kernel de lá.</li>
+  <li>Evite drivers "do fabricante" baixados de sites: precisam ser recompilados a cada kernel novo (DKMS) e costumam quebrar nas atualizações. Prefira trocar o adaptador por um com chip suportado.</li>
+</ol>
+
+<div class="tip">
+<strong>Vai comprar um adaptador Wi-Fi USB?</strong>
+<p>Pesquise o <strong>chip</strong> (não a marca da caixa) e confira se ele funciona "sem driver extra" (<em>in-kernel</em>) no kernel do Debian que você usa. E tenha sempre um plano B no dia da instalação: um cabo de rede ou o celular por USB.</p>
+</div>
+
+<hr>
+
+<h2 id="sem-ip">A placa funciona, mas não navega</h2>
+
+<p>Se a placa aparece, a rede aparece na lista e a senha é aceita, o problema é depois: o endereço IP. Saída real, numa rede cujo "roteador" estava sem DHCP:</p>
+
+<pre class="term">$ nmcli connection up Escritorio
+Erro: Ativação da conexão falhou: A configuração IP não pode estar reservada (nenhum endereço disponível, timeout, etc)
+Dica: use “journalctl -xe NM_CONNECTION=9cdd1584-41a5-4a65-81ef-4a6c3907aff9 + NM_DEVICE=wlp2s0” para obter mais detalhes.</pre>
+
+<p>O log do NetworkManager conta a história (trecho real; como root, <code>journalctl -u NetworkManager</code>):</p>
+
+<pre class="term">#> journalctl -u NetworkManager -o cat | grep wlp2s0
+…
+&lt;info&gt;  [1792179591.2803] device (wlp2s0): Activation: (wifi) Stage 2 of 5 (Device Configure) successful. Connected to wireless network "Escritorio"   « a senha foi aceita
+&lt;info&gt;  [1792179591.2830] dhcp4 (wlp2s0): activation: beginning transaction (timeout in 45 seconds)   « pediu um endereço
+&lt;info&gt;  [1792179636.3270] device (wlp2s0): state change: ip-config -&gt; failed (reason 'ip-config-unavailable', managed-type: 'full')   « 45 s depois, desistiu
+…</pre>
+
+<p>A parte do Wi-Fi está certa; quem falhou foi o roteador, que não emprestou um endereço. Reinicie o roteador, teste com outro aparelho e, em redes de empresa ou hotel, pergunte se é preciso liberar o seu aparelho. Redes de hotel e aeroporto que abrem uma página de login (<em>captive portal</em>) dão endereço, mas só liberam a internet depois do login no navegador.</p>
+
+<p>Outras causas comuns quando a placa funciona:</p>
+<ul>
+  <li><strong>Sinal fraco</strong>: <code>iw dev wlp2s0 link</code> mostra o <code>signal</code> em dBm; abaixo de −75, chegue mais perto do roteador (tabela em <a href="wifi.html#ifup">Wi-Fi</a>).</li>
+  <li><strong>Rede só de 5 GHz</strong> numa placa antiga, que só tem 2,4 GHz: a rede nunca aparece na lista. Ative a faixa de 2,4 GHz no roteador.</li>
+  <li><strong>DNS</strong>: o <code>ping 1.1.1.1</code> funciona, mas <code>ping debian.org</code> não. Veja o <a href="redes.html">roteiro "a internet não funciona"</a>.</li>
+</ul>
+
+<hr>
+
+<h2 id="tabela">Meu Wi-Fi não funciona: o que fazer</h2>
+
+<div class="table-wrap">
+<table class="ref">
+<tr><th>O que você vê</th><th>Provável causa</th><th>O que fazer</th></tr>
+<tr><td>Placa <code>wl…</code> existe, mas <code>não disponível</code> no <code>nmcli device</code></td><td>Bloqueio de rádio (software)</td><td><code>rfkill unblock wifi</code> ou <code>nmcli radio wifi on</code></td></tr>
+<tr><td><code>Hard blocked: yes</code> / <code>WIFI-HW desabilitado</code></td><td>Chave física, tecla ou BIOS</td><td>Ligue na chave, na tecla (<kbd>Fn</kbd>+…) ou no setup da BIOS/UEFI</td></tr>
+<tr><td><code>dhcpcd_prestartinterface: Operation not possible due to RF-kill</code></td><td>Bloqueio de rádio, no servidor</td><td><code>rfkill unblock wifi</code>, <code>ifdown</code> e <code>ifup</code></td></tr>
+<tr><td>Nenhuma <code>wl…</code>; <code>dmesg</code> mostra <code>Direct firmware load … failed</code></td><td>Falta o firmware</td><td>Instale o <code>firmware-*</code> certo e recarregue o driver</td></tr>
+<tr><td>Nenhuma <code>wl…</code>; aparece no <code>lsusb</code>/<code>lspci</code>, sem <code>Kernel modules</code></td><td>Sem driver no kernel 6.12</td><td>Kernel do backports, ou outro adaptador; instale por cabo ou celular</td></tr>
+<tr><td>O adaptador nem aparece no <code>lsusb</code></td><td>Porta, hub ou o próprio adaptador</td><td>Outra porta USB; teste em outro computador</td></tr>
+<tr><td>A rede não aparece na lista</td><td>Longe, 5 GHz em placa de 2,4 GHz, rede oculta</td><td><code>nmcli device wifi rescan</code>; chegue perto; <a href="wifi.html#oculta">rede oculta</a></td></tr>
+<tr><td>Senha aceita, mas "A configuração IP não pode estar reservada"</td><td>Sem DHCP</td><td>Reinicie o roteador; veja <a href="#sem-ip">acima</a></td></tr>
+<tr><td>Erros de senha</td><td>Senha ou conexão salva errada</td><td><a href="wifi.html#problemas">Wi-Fi: quando não funciona</a></td></tr>
+</table>
+</div>
+
+<div class="tip">
+<strong>Plano B: internet sem Wi-Fi</strong>
+<p>Para baixar firmware ou um kernel novo, você precisa de internet. Sem Wi-Fi, use o <strong>cabo de rede</strong> (funciona sozinho, veja <a href="configurar-rede.html">Configurar a Rede</a>) ou o <strong>celular pelo cabo USB</strong>, que para o Linux vira uma placa de cabo (veja <a href="celular-modem.html">Celular por USB e Modem 4G</a>).</p>
+</div>
+
+<hr>
+
+<h2>Referência</h2>
+
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Comando</th><th>Faz</th></tr>
+<tr><td><code>ip link</code> / <code>ip -br link</code></td><td>Placas que o kernel reconheceu.</td></tr>
+<tr><td><code>rfkill</code> / <code>rfkill list</code></td><td>Estado dos rádios (soft e hard).</td></tr>
+<tr><td><code>rfkill unblock wifi</code> / <code>rfkill block ID</code></td><td>Destrava todos os Wi-Fi / bloqueia um rádio.</td></tr>
+<tr><td><code>iw dev wlp2s0 info</code></td><td>O <code>wiphy</code> (rádio) e o modo da placa.</td></tr>
+<tr><td><code>iw dev wlp2s0 link</code></td><td>Rede conectada e força do sinal.</td></tr>
+<tr><td><code>lspci -k</code></td><td>Placas internas e seus drivers.</td></tr>
+<tr><td><code>lsusb</code></td><td>Aparelhos USB, com o ID fabricante:produto (pacote <code>usbutils</code>).</td></tr>
+<tr><td><code>dmesg | grep -i firmware</code></td><td>Firmware que faltou (root).</td></tr>
+<tr><td><code>apt-cache search --names-only '^firmware-'</code></td><td>Pacotes de firmware disponíveis.</td></tr>
+<tr><td><code>dpkg-deb -c pacote.deb</code></td><td>Arquivos dentro de um <code>.deb</code>.</td></tr>
+<tr><td><code>modprobe -r DRIVER &amp;&amp; modprobe DRIVER</code></td><td>Recarrega um driver.</td></tr>
+</table>
+</div>
+
+<hr>
+
+<h2>Exercícios</h2>
+
+<div class="exercise">
+<h3>1. Destravar o Wi-Fi</h3>
+<p>O <code>rfkill</code> mostra <code>Soft blocked: yes</code>. Complete o comando para destravar todos os rádios Wi-Fi:</p>
+<div class="ex-code">rfkill <input data-answer="unblock" aria-label="ação"> wifi</div>
+</div>
+
+<div class="mc" data-answer="4">
+<p class="mc-q">2. O <code>rfkill</code> mostra <code>Hard blocked: yes</code>. O que resolve?</p>
+<label><input type="radio" name="q2"> <code>rfkill unblock all</code></label>
+<label><input type="radio" name="q2"> <code>nmcli radio wifi on</code></label>
+<label><input type="radio" name="q2"> Instalar o <code>firmware-iwlwifi</code></label>
+<label><input type="radio" name="q2"> A chave física, a tecla de modo avião ou a opção da BIOS</label>
+</div>
+
+<div class="mc" data-answer="2">
+<p class="mc-q">3. O <code>dmesg</code> mostra <code>rtw_8822bu …: Direct firmware load for rtw88/rtw8822b_fw.bin failed with error -2</code>. Qual pacote instalar?</p>
+<label><input type="radio" name="q3"> <code>firmware-iwlwifi</code></label>
+<label><input type="radio" name="q3"> <code>firmware-realtek</code></label>
+<label><input type="radio" name="q3"> <code>firmware-brcm80211</code></label>
+<label><input type="radio" name="q3"> <code>wpasupplicant</code></label>
+</div>
+
+<div class="exercise">
+<h3>4. Ver o driver</h3>
+<p>Complete para listar as placas internas com o driver de cada uma:</p>
+<div class="ex-code">lspci <input data-answer="-k|-nnk|-nk|-kn|-knn" aria-label="opção"></div>
+</div>
+
+<div class="mc" data-answer="1">
+<p class="mc-q">5. Em qual componente do repositório ficam os pacotes <code>firmware-*</code>?</p>
+<label><input type="radio" name="q5"> <code>non-free-firmware</code></label>
+<label><input type="radio" name="q5"> <code>main</code></label>
+<label><input type="radio" name="q5"> <code>contrib</code></label>
+<label><input type="radio" name="q5"> <code>backports</code></label>
+</div>
+
+<hr>
+
+<h2>Resumo</h2>
+<ul>
+  <li>Roteiro: <code>ip link</code> → <code>rfkill</code> → <code>lspci -k</code>/<code>lsusb</code> → <code>dmesg | grep -i firmware</code>.</li>
+  <li>Bloqueio <em>soft</em>: <code>rfkill unblock wifi</code> ou <code>nmcli radio wifi on</code>. Bloqueio <em>hard</em>: só a chave, a tecla ou a BIOS.</li>
+  <li><code>Direct firmware load … failed with error -2</code> = falta firmware: instale o <code>firmware-*</code> do fabricante (componente <code>non-free-firmware</code>) e recarregue o driver.</li>
+  <li>O kernel 6.12 do Debian 13 reconhece alguns adaptadores Realtek USB (8723DU, 8821CU, 8822BU, 8822CU); para os outros, kernel do backports ou outro adaptador.</li>
+  <li>Sempre tenha um plano B: cabo ou celular por USB.</li>
+</ul>
+
+<div class="pager"></div>
+
+</div>
+</main>
+</div>
+<script src="assets/site.js"></script>
+</body>
+</html>

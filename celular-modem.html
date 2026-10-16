@@ -1,0 +1,406 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Debian celular por USB e modem 4G — ancoragem, ModemManager, mmcli e APN | Guia Debian</title>
+<meta name="description" content="Internet sem cabo e sem Wi-Fi no Debian 13: ancoragem USB do Android e do iPhone (com e sem NetworkManager), modem 4G com ModemManager, mmcli e nmcli connection add type gsm, e onde achar o APN da sua operadora.">
+<link rel="stylesheet" href="assets/style.css">
+<script>try{var t=localStorage.getItem("tema");if(t)document.documentElement.setAttribute("data-theme",t)}catch(e){}</script>
+</head>
+<body>
+<div class="layout">
+<nav class="sidebar" id="sidebar" aria-label="Tópicos"></nav>
+<main class="main">
+<div class="content">
+
+<div class="pager"></div>
+
+<h1>Debian <span class="hl">Celular por USB e Modem 4G</span></h1>
+
+<p class="intro">Sem cabo de rede e com o Wi-Fi sem funcionar, ainda há duas saídas. A primeira está no seu bolso: o <strong>celular</strong>, ligado no computador pelo cabo USB, empresta a internet dele (é a <strong>ancoragem USB</strong>). A segunda é um <strong>modem 4G</strong>, USB ou interno do notebook, com um chip de dados. Esta aula mostra as duas, no desktop e no servidor, e ensina a achar o <strong>APN</strong>, a informação que o modem precisa da operadora.</p>
+
+<div class="note">
+<strong>Você vai aprender</strong>
+<ul>
+  <li>Ligar a ancoragem USB no Android e no iPhone e reconhecer a "placa de rede" que aparece no Debian.</li>
+  <li>Usar o celular no desktop (sozinho, pelo NetworkManager) e no servidor (pelo <code>/etc/network/interfaces</code>).</li>
+  <li>Ver o modem 4G com <code>mmcli -L</code> e <code>mmcli -m 0</code>, e destravar o PIN do chip.</li>
+  <li>Criar a conexão do modem com <code>nmcli connection add type gsm … apn …</code>.</li>
+  <li>Descobrir o APN da sua operadora (sem decorar listas).</li>
+</ul>
+</div>
+
+<div class="note">
+<strong>De onde vêm as saídas desta aula</strong>
+<p>A máquina de laboratório do guia é uma VM sem USB e sem modem, então nenhum celular ou modem de verdade foi ligado nela. Foram conferidos no Debian 13 real: os drivers que transformam o celular em placa de rede, o <code>ModemManager</code> e o <code>mmcli</code> sem modem, a criação da conexão <code>gsm</code> pelo <code>nmcli</code> e o banco de dados de operadoras. As telas com celular ou modem conectado estão marcadas como <strong>ilustrativas</strong>.</p>
+</div>
+
+<hr>
+
+<h2 id="ancoragem">Parte 1: a internet do celular pelo cabo USB</h2>
+
+<p>Na <strong>ancoragem USB</strong> (<em>USB tethering</em>), o celular faz papel de roteador: ele recebe a internet pelos dados móveis (ou pelo Wi-Fi em que ele está, no Android) e entrega ao computador pelo cabo. Para o Debian, o celular vira uma <strong>placa de rede com cabo</strong>: aparece uma placa nova, que pede um endereço por DHCP, como se você tivesse encaixado um cabo de rede. Não precisa de senha nem de configurar o Wi-Fi.</p>
+
+<p>Os drivers para isso já vêm no kernel do Debian 13. Lista real, na pasta de drivers de rede USB:</p>
+
+<pre class="term">$ ls /usr/lib/modules/$(uname -r)/kernel/drivers/net/usb/ | grep -E 'rndis|cdc_ether|cdc_ncm|ipheth'
+cdc_ether.ko.xz          « celulares Android e adaptadores de rede USB
+cdc_ncm.ko.xz            « Android mais novos
+huawei_cdc_ncm.ko.xz     « (entrou no filtro: modems Huawei)
+ipheth.ko.xz             « iPhone
+rndis_host.ko.xz         « Android mais antigos (RNDIS)</pre>
+
+<h3>Ligar no celular</h3>
+
+<ol class="passo">
+  <li>Ligue o celular no computador com um cabo USB <strong>de dados</strong> (alguns cabos baratos só carregam).</li>
+  <li><strong>Android:</strong> abra <em>Configurações → Rede e internet → Ponto de acesso e tethering</em> e ligue <strong>Tethering USB</strong> (ou <strong>Ancoragem USB</strong>). O caminho muda conforme a marca: "Conexões → Roteador Wi-Fi e ancoragem", "Hotspot móvel e tethering"… A opção só fica disponível com o cabo já conectado.</li>
+  <li><strong>iPhone:</strong> ligue <em>Ajustes → Acesso Pessoal → Permitir Outras Conexões</em>, conecte o cabo e, se o iPhone perguntar "Confiar neste computador?", toque em <strong>Confiar</strong>. O iPhone precisa do programa <code>usbmuxd</code>, que um Debian mínimo não tem (<code>apt install usbmuxd</code>; versão <code>1.1.1-6+deb13u1</code> no Debian 13). Instale-o antes, enquanto ainda tem outra internet, ou leve o <code>.deb</code> num pendrive.</li>
+  <li>Espere uns 5 segundos e confira a placa nova com <code>ip -br link</code>.</li>
+</ol>
+
+<p>O que aparece (<strong>ilustrativo</strong>):</p>
+
+<pre class="term">$ ip -br link
+lo               UNKNOWN        00:00:00:00:00:00 &lt;LOOPBACK,UP,LOWER_UP&gt;
+wlp2s0           DOWN           3c:a9:f4:12:34:56 &lt;NO-CARRIER,BROADCAST,MULTICAST,UP&gt;
+enp0s20f0u2      UP             9a:3f:21:c4:5e:07 &lt;BROADCAST,MULTICAST,UP,LOWER_UP&gt;   « o celular</pre>
+
+<p>O nome depende da porta USB e do celular: <code>enp0s20f0u2</code> (o <code>u2</code> é a porta USB 2), <code>enx</code> + o MAC, ou às vezes <code>usb0</code>. Use sempre a mesma porta, para o nome não mudar.</p>
+
+<h3>No desktop: funciona sozinho</h3>
+
+<p>O NetworkManager trata o celular como um cabo novo: cria sozinho uma conexão "Conexão cabeada" e pede o endereço. Em segundos, o ícone de rede mostra a conexão com cabo. Pelo terminal (<strong>ilustrativo</strong>):</p>
+
+<pre class="term">$ nmcli device
+DEVICE        TYPE      STATE                   CONNECTION
+enp0s20f0u2   ethernet  conectado               Conexão cabeada 1   « o celular
+wlp2s0        wifi      desconectado            --
+lo            loopback  connected (externally)  lo</pre>
+
+<p>Quando o Wi-Fi também estiver ligado, quem leva o tráfego é a conexão com cabo (o celular), porque o NetworkManager dá prioridade às placas de cabo (veja <a href="#ordem">qual conexão ganha</a>).</p>
+
+<h3>No servidor: um bloco no /etc/network/interfaces</h3>
+
+<p>Sem NetworkManager, o ifupdown só liga placas que estão no arquivo. Crie um arquivo para o celular, com o nome que o <code>ip -br link</code> mostrou:</p>
+
+<pre class="file" data-file="/etc/network/interfaces.d/celular">allow-hotplug enp0s20f0u2
+iface enp0s20f0u2 inet dhcp</pre>
+
+<p>Com <code>allow-hotplug</code>, a placa liga sozinha toda vez que o celular for conectado (com a ancoragem ligada), como o cabo da aula <a href="configurar-rede.html">Configurar a Rede</a>. Na primeira vez, ligue à mão:</p>
+
+<pre class="term" data-host="servidor">#> ifup enp0s20f0u2
+dhcpcd-10.1.0 starting
+…
+enp0s20f0u2: offered 10.84.12.97 from 10.84.12.149        « o celular emprestou um endereço
+enp0s20f0u2: leased 10.84.12.97 for 3600 seconds
+enp0s20f0u2: adding default route via 10.84.12.149</pre>
+
+<p>(Saída <strong>ilustrativa</strong>, no formato real do <code>dhcpcd</code> que você viu em <a href="wifi.html#ifup">Wi-Fi</a>; os números mudam de celular para celular.) Teste com <code>ping -c 3 debian.org</code>. Se o celular aparece como <code>usb0</code> no seu computador, troque o nome nas duas linhas.</p>
+
+<div class="note">
+<strong>E o celular como roteador Wi-Fi?</strong>
+<p>Também dá: ligue o "Ponto de acesso Wi-Fi" (hotspot) do celular e conecte como em qualquer rede (aula <a href="wifi.html">Wi-Fi</a>). Mas, se o problema é justamente o Wi-Fi do computador, só o cabo resolve. E pelo cabo o celular ainda carrega a bateria.</p>
+</div>
+
+<div class="tip">
+<strong>Na instalação</strong>
+<p>O instalador do Debian também reconhece o celular com ancoragem: ele aparece como mais uma placa na tela "Interface primária de rede". Veja <a href="instalacao.html#internet">Internet durante a instalação</a>.</p>
+</div>
+
+<hr>
+
+<h2 id="modem">Parte 2: modem 4G</h2>
+
+<p>Um <strong>modem 4G</strong> (ou 5G) é um aparelho que se conecta à rede de celular com um chip (SIM) de dados. Pode ser um "pen drive" USB ou uma placa dentro do notebook (comum em notebooks corporativos, com uma gaveta para o chip). O Linux chama isso de <strong>WWAN</strong> (<em>wireless wide area network</em>). Antes de conectar, três conceitos:</p>
+
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Termo</th><th>O que é</th></tr>
+<tr><td><strong>PIN</strong></td><td>A senha do chip (4 a 8 números). Se estiver ativo, o modem fica "travado" até você informá-lo. Três erros bloqueiam o chip (aí só com o PUK, da embalagem).</td></tr>
+<tr><td><strong>APN</strong></td><td>(<em>Access Point Name</em>, "nome do ponto de acesso") O "endereço" da internet da operadora, um nome como <code>algo.operadora.com.br</code>. Algumas operadoras pedem também um usuário e uma senha. Veja <a href="#apn">Onde achar o APN</a>.</td></tr>
+<tr><td><strong>ModemManager</strong></td><td>O serviço do Linux que conversa com os modems (liga, destrava o PIN, registra na operadora). Você fala com ele pelo <code>mmcli</code>; o NetworkManager também fala com ele.</td></tr>
+</table>
+</div>
+
+<h3>O ModemManager está rodando?</h3>
+
+<p>Num desktop, o ModemManager costuma vir junto com o NetworkManager. Num servidor mínimo, não: instale com <code>apt install modemmanager</code>. Saída real, na máquina de laboratório (que não tem modem):</p>
+
+<pre class="term">#> systemctl is-active ModemManager
+active
+#> mmcli --version | head -1
+mmcli 1.24.0
+#> mmcli -L
+No modems were found          « "nenhum modem foi encontrado"
+#> echo $?
+0                             « não é erro: só a lista vazia
+#> mmcli -m 0
+error: couldn't find modem    « pedir um modem que não existe, sim, é erro
+#> echo $?
+1</pre>
+
+<p>O <code>nmcli radio</code> confirma do lado do NetworkManager: a coluna <code>WWAN-HW</code> mostra <code>missing</code> (ausente) quando não há modem.</p>
+
+<h3>Ver o modem: mmcli -L e mmcli -m 0</h3>
+
+<dl class="anatomy">
+  <dt>mmcli</dt><dd>(<em>ModemManager command line interface</em>) O programa que conversa com o ModemManager. Fica em <code>/usr/bin</code>, mas várias ações pedem root.</dd>
+  <dt>-L</dt><dd>(<em>list</em>) Lista os modems, cada um com um número.</dd>
+  <dt>-m 0</dt><dd>(<em>modem</em>) Mostra os detalhes do modem número 0.</dd>
+</dl>
+
+<p>Com um modem conectado, a saída é parecida com esta (<strong>ilustrativa</strong>; modelo e operadora variam):</p>
+
+<pre class="term">#> mmcli -L
+    /org/freedesktop/ModemManager1/Modem/0 [Quectel] EM05-G     « o modem número 0 (o último número do caminho)
+#> mmcli -m 0
+  …
+  --------------------------------
+  Status   |                 state: registered      « registrado na operadora: pronto para conectar
+           |   signal quality: 71% (recent)
+  --------------------------------
+  3GPP     |          operator name: OPERADORA
+  --------------------------------
+  SIM      |       primary sim path: /org/freedesktop/ModemManager1/SIM/0
+  …</pre>
+
+<p>A linha que importa é o <code>state</code>:</p>
+
+<div class="table-wrap">
+<table class="ref">
+<tr><th><code>state</code></th><th>O que quer dizer</th><th>O que fazer</th></tr>
+<tr><td><code>locked</code></td><td>O chip pede o PIN.</td><td><code>mmcli -i 0 --pin=1234</code> (<code>-i 0</code> = o chip número 0, o do <code>primary sim path</code>).</td></tr>
+<tr><td><code>disabled</code></td><td>Modem desligado.</td><td><code>mmcli -m 0 -e</code> (<em>enable</em>, ligar). O NetworkManager liga sozinho ao conectar.</td></tr>
+<tr><td><code>searching</code></td><td>Procurando a rede da operadora.</td><td>Espere; confira se há sinal no local.</td></tr>
+<tr><td><code>registered</code></td><td>Registrado na operadora.</td><td>Pronto: crie a conexão (abaixo).</td></tr>
+<tr><td><code>connected</code></td><td>Com internet.</td><td>Nada.</td></tr>
+<tr><td><code>failed</code></td><td>Falhou; o motivo aparece em <code>failed reason</code> (por exemplo, <code>sim-missing</code>, sem chip).</td><td>Confira o chip e a gaveta.</td></tr>
+</table>
+</div>
+
+<div class="tip">
+<strong>O modem aparece como CD-ROM?</strong>
+<p>Muitos modems USB antigos se apresentam primeiro como um "CD" com o programa do fabricante para Windows, e só viram modem depois de um comando especial. No Linux, quem faz essa troca é o pacote <code>usb-modeswitch</code>. Se o <code>lsusb</code> mostra o modem, mas o <code>mmcli -L</code> não, instale-o e reconecte o modem.</p>
+</div>
+
+<h3 id="gsm">Criar a conexão: nmcli connection add type gsm</h3>
+
+<p>O jeito mais simples, no desktop e também no servidor, é deixar o NetworkManager cuidar do modem: ele liga o modem, conecta com o APN, pede o endereço e reconecta se cair. No GNOME, use <strong>Configurações → Rede Móvel</strong> (ou <em>Banda larga móvel</em>), que abre um assistente. Pelo terminal:</p>
+
+<dl class="anatomy">
+  <dt>nmcli connection add</dt><dd>Criar uma conexão nova.</dd>
+  <dt>type gsm</dt><dd>Do tipo modem de celular (<code>gsm</code> vale para 2G, 3G, 4G e 5G).</dd>
+  <dt>ifname '*'</dt><dd>Em qualquer modem que aparecer. As aspas impedem o bash de trocar o <code>*</code> por nomes de arquivos (veja <a href="curingas.html">Curingas</a>).</dd>
+  <dt>con-name Celular</dt><dd>O nome da conexão.</dd>
+  <dt>apn SEU_APN</dt><dd>O APN da sua operadora (troque <code>SEU_APN</code> pelo de verdade).</dd>
+</dl>
+
+<p>Saída real, na máquina de laboratório:</p>
+
+<pre class="term">#> nmcli connection add type gsm ifname '*' con-name Celular apn SEU_APN
+A conexão “Celular” (4f6a7174-b667-43c9-a3b8-b6f14f5d156a) foi adicionada com sucesso.
+#> nmcli connection show
+NAME     UUID                                  TYPE      DEVICE
+lo       6f86b425-b1c4-4790-a45f-92c6cdc03e70  loopback  lo
+Celular  4f6a7174-b667-43c9-a3b8-b6f14f5d156a  gsm       --        « salva, esperando um modem
+#> nmcli -f connection.id,connection.type,connection.autoconnect,gsm.apn,gsm.username,gsm.password,gsm.pin connection show Celular
+connection.id:                          Celular
+connection.type:                        gsm
+connection.autoconnect:                 sim
+gsm.apn:                                "SEU_APN"
+gsm.username:                           --
+gsm.password:                           &lt;hidden&gt;
+gsm.pin:                                &lt;hidden&gt;</pre>
+
+<p>O arquivo salvo em <code>/etc/NetworkManager/system-connections/Celular.nmconnection</code> (real):</p>
+
+<pre class="file" data-file="/etc/NetworkManager/system-connections/Celular.nmconnection">[connection]
+id=Celular
+uuid=4f6a7174-b667-43c9-a3b8-b6f14f5d156a
+type=gsm
+
+[gsm]
+apn=SEU_APN
+
+[ipv4]
+method=auto
+
+[ipv6]
+addr-gen-mode=default
+method=auto
+
+[proxy]</pre>
+
+<p>Se a operadora pede usuário, senha ou o chip tem PIN, acrescente ao <code>add</code> (ou depois, com <code>nmcli connection modify Celular …</code>): <code>gsm.username USUARIO gsm.password SENHA gsm.pin 1234</code>.</p>
+
+<p>Para conectar: <code>nmcli connection up Celular</code>. Sem modem, a VM do laboratório respondeu com um erro (real):</p>
+
+<pre class="term">#> nmcli connection up Celular
+Erro: Ativação da conexão falhou: No suitable device found for this connection (device lo not available because profile is not compatible with device (connection type is not "loopback")).</pre>
+
+<p>Em português: "nenhum dispositivo adequado para esta conexão". O NetworkManager procurou um modem, só achou a placa <code>lo</code>, e ela não serve. Com um modem conectado e registrado, a conexão sobe e o <code>nmcli device</code> mostra o modem como tipo <code>gsm</code>, <code>conectado</code>, na conexão <code>Celular</code>. Como o <code>autoconnect</code> está em <code>sim</code>, ela liga sozinha nas próximas vezes.</p>
+
+<h4>Só com o mmcli (sem NetworkManager)</h4>
+<p>Dá para conectar só com o ModemManager: <code>mmcli -m 0 --simple-connect="apn=SEU_APN"</code>. Mas aí o endereço IP tem de ser configurado à mão, com os dados que o <code>mmcli</code> mostra na parte <em>bearer</em> da conexão. Para quem está começando, mesmo num servidor, é bem mais simples instalar o <code>network-manager</code> e usar o <code>nmcli</code> só para o modem (as placas do <code>/etc/network/interfaces</code> continuam com o ifupdown, como você viu em <a href="wifi.html#conflito">Wi-Fi</a>).</p>
+
+<hr>
+
+<h2 id="apn">Onde achar o APN da sua operadora</h2>
+
+<p>O APN muda de operadora para operadora, às vezes de plano para plano, e muda com o tempo. Por isso este guia não traz uma lista: copie de uma fonte atual. Em ordem de confiança:</p>
+
+<ol class="passo">
+  <li><strong>No celular, com o mesmo chip.</strong> O celular já está usando o APN certo. No Android: <em>Configurações → Rede e internet → Chips (ou Rede móvel) → [o chip] → Nomes dos pontos de acesso</em> (ou "APN"); o marcado é o que está em uso. No iPhone: <em>Ajustes → Celular → Rede de Dados Celular</em> (só aparece em algumas operadoras). Anote os campos <strong>APN</strong>, <strong>Nome de usuário</strong> e <strong>Senha</strong> (muitas vezes vazios).</li>
+  <li><strong>No site, no aplicativo ou no atendimento da operadora.</strong> Procure por "configurar APN" ou "configuração de internet manual".</li>
+  <li><strong>No banco de dados do Debian</strong>, o pacote <code>mobile-broadband-provider-info</code>. É ele que o assistente do GNOME usa quando pergunta o país e a operadora. Serve como ponto de partida, mas pode estar desatualizado.</li>
+</ol>
+
+<p>Para olhar o banco de dados (real, na VM, versão <code>20250613-2</code>):</p>
+
+<pre class="term">#> apt install mobile-broadband-provider-info
+$ F=/usr/share/mobile-broadband-provider-info/serviceproviders.xml
+$ grep -c '&lt;provider' $F
+700                                       « operadoras do mundo todo
+$ awk '/&lt;country code="br"&gt;/,/&lt;\/country&gt;/' $F | grep -E '&lt;name&gt;|apn value' | head -4
+	&lt;name&gt;Brazil&lt;/name&gt;
+		&lt;name&gt;Brasil Telecom&lt;/name&gt;                « uma operadora que já não existe com esse nome
+			&lt;apn value="brt.br"&gt;
+			&lt;apn value="mms.brt.br"&gt;</pre>
+
+<p>O <code>awk</code> pega o trecho entre <code>&lt;country code="br"&gt;</code> e <code>&lt;/country&gt;</code> (o Brasil; veja <a href="awk.html">awk</a>); o <code>grep</code> deixa só os nomes e os APNs; tire o <code>head -4</code> para ver todas. Repare que a primeira operadora da lista já não existe com esse nome: confirme sempre no celular ou com a operadora. APNs com <code>mms</code> no nome são de mensagens com foto, não de internet.</p>
+
+<hr>
+
+<h2 id="ordem">Cabo, Wi-Fi, celular e modem juntos: qual ganha?</h2>
+
+<p>Com várias conexões ligadas, o tráfego vai pela rota padrão (<code>default</code>) de <strong>menor métrica</strong>, como você viu em <a href="ip.html">ip, ping, ss</a>. As métricas padrão:</p>
+
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Conexão</th><th>NetworkManager</th><th>dhcpcd (servidor)</th></tr>
+<tr><td>Cabo, e o celular por USB (que é "cabo")</td><td>100</td><td>1000 + número da placa</td></tr>
+<tr><td>Wi-Fi</td><td>600 (visto no laboratório)</td><td>3000 + número da placa (visto no laboratório: 3006)</td></tr>
+<tr><td>Modem 4G</td><td>700</td><td>— (use o NetworkManager)</td></tr>
+</table>
+</div>
+
+<p>Ou seja: cabo (ou celular por USB) ganha do Wi-Fi, que ganha do modem. Confira a sua com <code>ip r</code>: a primeira linha <code>default</code> é a que está valendo.</p>
+
+<hr>
+
+<h2>Quando não funciona</h2>
+
+<div class="cenario">
+<strong>Liguei o celular e nenhuma placa nova apareceu</strong>
+<p><strong>O que aconteceu:</strong> o cabo só carrega, a ancoragem não foi ligada no celular, ou (iPhone) falta o <code>usbmuxd</code> ou você não tocou em "Confiar".</p>
+<p><strong>Como confirmar:</strong> <code>lsusb</code> (pacote <code>usbutils</code>) deve mostrar o celular. Se nem ele aparece, troque o cabo.</p>
+<p><strong>Como resolver:</strong> troque o cabo; ligue a ancoragem com o cabo já conectado; no iPhone, instale o <code>usbmuxd</code> e desconecte e reconecte.</p>
+</div>
+
+<div class="cenario">
+<strong>A placa do celular aparece, mas sem endereço (servidor)</strong>
+<p><strong>O que aconteceu:</strong> o ifupdown não sabe da placa: ela não está no <code>interfaces</code>, ou o nome mudou (outra porta USB).</p>
+<p><strong>Como resolver:</strong> confira o nome com <code>ip -br link</code>, corrija o arquivo e rode <code>ifup NOME</code>. A mensagem <code>ifup: unknown interface …</code> quer dizer exatamente isso (veja <a href="configurar-rede.html">Configurar a Rede</a>).</p>
+</div>
+
+<div class="cenario">
+<strong>"No modems were found"</strong>
+<p><strong>O que aconteceu:</strong> o ModemManager não achou modem: não conectado, sem driver, ou modem USB em "modo CD".</p>
+<p><strong>Como resolver:</strong> <code>lsusb</code> para ver se o computador enxerga o aparelho; instale <code>usb-modeswitch</code>; reconecte e rode <code>mmcli -L</code> de novo. Modem interno: confira na BIOS se a WWAN está habilitada e veja o <a href="wifi-problemas.html#rfkill">rfkill</a> (tipo <code>wwan</code>).</p>
+</div>
+
+<div class="cenario">
+<strong>"No suitable device found for this connection"</strong>
+<p><strong>O que aconteceu:</strong> não há modem pronto para a conexão <code>gsm</code> (veja a saída real acima).</p>
+<p><strong>Como resolver:</strong> <code>mmcli -L</code> e <code>mmcli -m 0</code>: o <code>state</code> deve ser <code>registered</code>. Se for <code>locked</code>, informe o PIN.</p>
+</div>
+
+<div class="cenario">
+<strong>O modem registra, mas a conexão falha ou não navega</strong>
+<p><strong>O que aconteceu:</strong> APN errado, usuário e senha faltando, ou plano sem dados.</p>
+<p><strong>Como resolver:</strong> copie o APN do celular com o mesmo chip; teste o chip no celular; corrija com <code>nmcli connection modify Celular gsm.apn APN_CERTO</code> e <code>nmcli connection up Celular</code>.</p>
+</div>
+
+<hr>
+
+<h2>Referência</h2>
+
+<div class="table-wrap">
+<table class="ref">
+<tr><th>Comando</th><th>Faz</th></tr>
+<tr><td><code>ip -br link</code></td><td>Mostra a placa nova do celular.</td></tr>
+<tr><td><code>allow-hotplug NOME</code> + <code>iface NOME inet dhcp</code></td><td>Servidor: celular por USB no <code>interfaces</code>.</td></tr>
+<tr><td><code>apt install usbmuxd</code></td><td>Necessário para a ancoragem do iPhone.</td></tr>
+<tr><td><code>systemctl is-active ModemManager</code></td><td>O serviço dos modems está rodando?</td></tr>
+<tr><td><code>mmcli -L</code></td><td>Lista os modems.</td></tr>
+<tr><td><code>mmcli -m 0</code></td><td>Detalhes do modem 0 (estado, sinal, operadora).</td></tr>
+<tr><td><code>mmcli -i 0 --pin=1234</code></td><td>Destrava o chip com o PIN.</td></tr>
+<tr><td><code>mmcli -m 0 -e</code></td><td>Liga o modem.</td></tr>
+<tr><td><code>nmcli connection add type gsm ifname '*' con-name Celular apn SEU_APN</code></td><td>Cria a conexão do modem.</td></tr>
+<tr><td><code>nmcli connection up Celular</code></td><td>Conecta.</td></tr>
+<tr><td><code>nmcli connection modify Celular gsm.apn APN</code></td><td>Corrige o APN.</td></tr>
+</table>
+</div>
+
+<hr>
+
+<h2>Exercícios</h2>
+
+<div class="mc" data-answer="2">
+<p class="mc-q">1. Para o Debian, um celular com ancoragem USB ligada é…</p>
+<label><input type="radio" name="q1"> Uma placa Wi-Fi nova.</label>
+<label><input type="radio" name="q1"> Uma placa de rede com cabo, que pega endereço por DHCP.</label>
+<label><input type="radio" name="q1"> Um modem 4G que precisa de APN.</label>
+<label><input type="radio" name="q1"> Um pendrive.</label>
+</div>
+
+<div class="exercise">
+<h3>2. Listar os modems</h3>
+<p>Complete o comando que lista os modems que o ModemManager encontrou:</p>
+<div class="ex-code">mmcli <input data-answer="-L|--list-modems" aria-label="opção"></div>
+</div>
+
+<div class="exercise">
+<h3>3. Conexão do modem</h3>
+<p>Complete o tipo de conexão do NetworkManager para um modem 4G:</p>
+<div class="ex-code">nmcli connection add type <input data-answer="gsm" aria-label="tipo"> ifname '*' con-name Celular apn SEU_APN</div>
+</div>
+
+<div class="mc" data-answer="1">
+<p class="mc-q">4. Qual é a fonte mais confiável para o APN do seu chip?</p>
+<label><input type="radio" name="q4"> As configurações de APN do celular que usa o mesmo chip, ou a operadora.</label>
+<label><input type="radio" name="q4"> Uma lista antiga num fórum.</label>
+<label><input type="radio" name="q4"> O nome da rede Wi-Fi de casa.</label>
+<label><input type="radio" name="q4"> O <code>mmcli -L</code>.</label>
+</div>
+
+<div class="mc" data-answer="3">
+<p class="mc-q">5. O <code>mmcli -m 0</code> mostra <code>state: locked</code>. O que fazer?</p>
+<label><input type="radio" name="q5"> Trocar o APN.</label>
+<label><input type="radio" name="q5"> Instalar o <code>usbmuxd</code>.</label>
+<label><input type="radio" name="q5"> Informar o PIN do chip com <code>mmcli -i 0 --pin=…</code>.</label>
+<label><input type="radio" name="q5"> Rodar <code>rfkill unblock wifi</code>.</label>
+</div>
+
+<hr>
+
+<h2>Resumo</h2>
+<ul>
+  <li>Celular por USB: ligue a ancoragem USB; o Debian vê uma placa de cabo nova (<code>enp…u…</code>, <code>enx…</code> ou <code>usb0</code>). No desktop, funciona sozinho; no servidor, <code>allow-hotplug</code> + <code>iface … inet dhcp</code>.</li>
+  <li>iPhone precisa do <code>usbmuxd</code>.</li>
+  <li>Modem 4G: <code>ModemManager</code>, <code>mmcli -L</code> e <code>mmcli -m 0</code> (o <code>state</code> deve chegar a <code>registered</code>).</li>
+  <li>Conexão: <code>nmcli connection add type gsm ifname '*' con-name Celular apn SEU_APN</code> e <code>nmcli connection up Celular</code>.</li>
+  <li>O APN vem do celular com o mesmo chip ou da operadora; o <code>mobile-broadband-provider-info</code> é só um ponto de partida.</li>
+  <li>Prioridade: cabo (e celular por USB) &gt; Wi-Fi &gt; modem.</li>
+</ul>
+
+<div class="pager"></div>
+
+</div>
+</main>
+</div>
+<script src="assets/site.js"></script>
+</body>
+</html>

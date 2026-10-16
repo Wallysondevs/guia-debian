@@ -51,6 +51,7 @@
 <li><a href="#tmp-sumiu">Meus arquivos de /tmp sumiram</a></li>
 <li><a href="#sem-rede">Sem rede depois de mexer na configuração</a></li>
 <li><a href="#nm-ignora">O NetworkManager diz que a placa é &quot;não gerenciada&quot;</a></li>
+<li><a href="#wifi">O Wi-Fi não conecta ou não aparece</a></li>
 <li><a href="#firmware">Wi-Fi ou vídeo não funcionam (firmware)</a></li>
 <li><a href="#nao-assinado">O repositório não está assinado</a></li>
 <li><a href="#franken">Dependências quebradas depois de misturar versões</a></li>
@@ -253,11 +254,20 @@ tmpfs on /tmp type tmpfs (rw,nosuid,nodev,nr_inodes=1048576,inode64)</pre>
 <p>Aula: <a href="configurar-rede.html">Configurar a Rede</a>.</p>
 </div>
 
+<div class="cenario" id="wifi">
+<strong>O Wi-Fi não conecta ou não aparece</strong>
+<pre class="term">$ nmcli device wifi connect CasaDaAna password 'senhaerrada1'
+…
+Error: Connection activation failed: Segredos foram requisitados, mas não fornecidos.</pre>
+<p><strong>O que aconteceu:</strong> senha errada (a mensagem acima), conexão salva com a senha errada (<code>key-mgmt: propriedade está faltando</code>), Wi-Fi bloqueado (placa <code>não disponível</code>) ou a placa nem aparece (driver ou firmware).</p>
+<p><strong>Como resolver:</strong> senha e conexões salvas: <a href="wifi.html#problemas">Wi-Fi: quando não funciona</a>. Placa bloqueada ou ausente: <a href="wifi-problemas.html">Wi-Fi que Não Funciona</a>. Sem Wi-Fi nenhum: <a href="celular-modem.html">celular por USB</a>.</p>
+</div>
+
 <div class="cenario" id="firmware">
 <strong>Wi-Fi ou vídeo não funcionam (firmware)</strong>
 <p><strong>O que aconteceu:</strong> Muitas placas precisam de um firmware fechado, que fica no componente <code>non-free-firmware</code>.</p>
-<p><strong>Como resolver:</strong> Confira se o <code>sources.list</code> tem <code>non-free-firmware</code>. Veja no <code>dmesg</code> qual firmware falhou e instale o pacote (por exemplo, <code>firmware-iwlwifi</code> para Wi-Fi Intel).</p>
-<p>Aula: <a href="repositorios.html">Repositórios (sources)</a>.</p>
+<p><strong>Como resolver:</strong> Confira se o <code>sources.list</code> tem <code>non-free-firmware</code>. Veja no <code>dmesg</code> qual firmware falhou (<code>Direct firmware load … failed with error -2</code>) e instale o pacote (por exemplo, <code>firmware-iwlwifi</code> para Wi-Fi Intel, <code>firmware-realtek</code> para Realtek).</p>
+<p>Aulas: <a href="wifi-problemas.html#firmware">Wi-Fi que Não Funciona</a> e <a href="repositorios.html">Repositórios (sources)</a>.</p>
 </div>
 
 <div class="cenario" id="nao-assinado">

@@ -99,6 +99,7 @@ $ ls
 | --- | --- |
 | `div.note` / `div.tip` / `div.warning` | Nota / dica / perigo (todo comando destrutivo leva `warning`) |
 | `div.cenario` | Problema real: `<strong>título</strong>` + sessão + o que aconteceu + como resolver |
+| `figure > img + figcaption` | Captura de tela real (PNG em `img/`, recortada; `alt` descrevendo o que a tela mostra). Ex.: `VBoxManage controlvm debian-guia screenshotpng` num TTY |
 | `ol.passo` | Passo a passo numerado (projetos, procedimentos) |
 | `div.table-wrap > table.ref` | Tabelas |
 | `.exercise > .ex-code > input[data-answer="a\|b"]` | Exercício de completar |
