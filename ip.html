@@ -68,7 +68,7 @@
 
 <pre class="term">$ ip -br a
 lo               UNKNOWN        127.0.0.1/8 ::1/128
-enp1s0           UP             192.168.0.15/24 fd17:625c:f037:2:a00:27ff:fe90:fbde/64 fe80::ae13:e729:e153:39c/64</pre>
+enp1s0           UP             192.168.0.15/24 fd17:625c:f037:2:0:ff:fe00:11/64 fe80::ae13:e729:e153:39c/64</pre>
 
 <p>Cada linha tem três colunas: o <strong>nome da placa</strong>, o <strong>estado</strong> e os <strong>endereços</strong>.</p>
 
@@ -99,8 +99,8 @@ enp1s0           UP             192.168.0.15/24 fd17:625c:f037:2:a00:27ff:fe90:f
 
 <pre class="term">$ ip a show enp1s0
 2: enp1s0: &lt;BROADCAST,MULTICAST,UP,LOWER_UP&gt; mtu 1500 qdisc fq_codel state UP group default qlen 1000   « número, nome e situação da placa
-    link/ether 08:00:27:90:fb:de brd ff:ff:ff:ff:ff:ff                                                      « endereço físico (MAC)
-    altname enx08002790fbde                                                                                 « nome alternativo
+    link/ether 02:00:00:00:00:11 brd ff:ff:ff:ff:ff:ff                                                      « endereço físico (MAC)
+    altname enx020000000011                                                                                 « nome alternativo
     inet 192.168.0.15/24 brd 192.168.0.255 scope global dynamic noprefixroute enp1s0                       « o IPv4
        valid_lft 85782sec preferred_lft 74982sec                                                           « tempo até renovar
     inet6 fe80::ae13:e729:e153:39c/64 scope link                                                            « IPv6 local
@@ -112,7 +112,7 @@ enp1s0           UP             192.168.0.15/24 fd17:625c:f037:2:a00:27ff:fe90:f
 <tr><td><code>2: enp1s0:</code></td><td>Número interno da placa e o nome dela.</td></tr>
 <tr><td><code>&lt;…UP,LOWER_UP&gt;</code></td><td><code>UP</code>: a placa foi ligada. <code>LOWER_UP</code>: há sinal físico (o cabo está conectado). Sem o <code>LOWER_UP</code>, o cabo está solto.</td></tr>
 <tr><td><code>mtu 1500</code></td><td>Tamanho máximo de cada pacote, em bytes. 1500 é o padrão.</td></tr>
-<tr><td><code>link/ether 08:00:27:…</code></td><td>O endereço físico (MAC) da placa, gravado de fábrica.</td></tr>
+<tr><td><code>link/ether 02:00:00:…</code></td><td>O endereço físico (MAC) da placa. O prefixo <code>02:</code> é de um endereço de exemplo, administrado localmente.</td></tr>
 <tr><td><code>inet 192.168.0.15/24</code></td><td>O endereço IPv4 e a máscara em notação CIDR (<code>/24</code> = 255.255.255.0).</td></tr>
 <tr><td><code>brd 192.168.0.255</code></td><td>Endereço de <em>broadcast</em>: falar com todos da rede local de uma vez.</td></tr>
 <tr><td><code>dynamic</code></td><td>O endereço veio por DHCP (do roteador). Um IP fixo não tem essa palavra.</td></tr>
@@ -165,12 +165,12 @@ default via 192.168.0.1 dev enp1s0 proto dhcp src 192.168.0.15 metric 1002    «
 
 <pre class="term">$ ip -s link show enp1s0
 2: enp1s0: &lt;BROADCAST,MULTICAST,UP,LOWER_UP&gt; mtu 1500 qdisc fq_codel state UP mode DEFAULT group default qlen 1000
-    link/ether 08:00:27:90:fb:de brd ff:ff:ff:ff:ff:ff
+    link/ether 02:00:00:00:00:11 brd ff:ff:ff:ff:ff:ff
     RX:  bytes packets errors dropped  missed   mcast
       17075134   15955      0       0       0       4    « recebidos
     TX:  bytes packets errors dropped carrier collsns
        1260981    9207      0       0       0       0    « enviados
-    altname enx08002790fbde</pre>
+    altname enx020000000011</pre>
 
 <p>RX (de <em>receive</em>) é o que chegou e TX (de <em>transmit</em>), o que saiu. Números crescendo em <code>errors</code> ou <code>dropped</code> indicam cabo ruim ou placa com problema.</p>
 
@@ -304,7 +304,7 @@ ESTAB 0      0       192.168.0.15:22    192.168.0.20:58430    « alguém do 192.
 </div>
 
 <pre class="term">$ hostname -I
-192.168.0.15 fd17:625c:f037:2:a00:27ff:fe90:fbde</pre>
+192.168.0.15 fd17:625c:f037:2:0:ff:fe00:11</pre>
 
 <p>Repare: esse é o IP <strong>da rede local</strong>. O IP com que você aparece na internet (o do roteador) só se descobre perguntando a um site, por exemplo <code>wget -qO- https://ifconfig.me/ip</code>. Veja <a href="curl-wget.html">curl, wget, dig</a>.</p>
 

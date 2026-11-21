@@ -65,7 +65,7 @@
 </dl>
 
 <pre class="term">$ hostname -I
-192.168.0.15 2804:14c:5b80:8a1f:a00:27ff:fe90:fbde       « o primeiro é o IPv4; o segundo, IPv6</pre>
+192.168.0.15 2001:db8:5b80:8a1f:0:ff:fe00:11       « o primeiro é o IPv4; o segundo, IPv6</pre>
 
 <h3>IP privado e IP público</h3>
 <p>O <code>192.168.0.15</code> é um <strong>IP privado</strong>: só vale dentro da sua casa, como "apartamento 15" só faz sentido dentro do prédio. Para a internet, toda a sua casa aparece com um único <strong>IP público</strong>, o do roteador. Para descobri-lo, é preciso perguntar a um site de fora. O <code>wget</code> já vem no Debian (o <code>curl</code>, não):</p>
@@ -221,7 +221,7 @@ LISTEN 0      128             [::]:22           [::]:*      « e em todos os IPv
 <hr>
 
 <h2>IPv4 e IPv6</h2>
-<p>Os endereços IPv4 (4 números) estão acabando: são só cerca de 4 bilhões. O <strong>IPv6</strong> resolve isso com endereços enormes, em hexadecimal e separados por dois-pontos, como <code>2804:14c:5b80:8a1f:a00:27ff:fe90:fbde</code>. Os dois convivem, e o Debian configura os dois automaticamente.</p>
+<p>Os endereços IPv4 (4 números) estão acabando: são só cerca de 4 bilhões. O <strong>IPv6</strong> resolve isso com endereços enormes, em hexadecimal e separados por dois-pontos, como <code>2001:db8:5b80:8a1f:0:ff:fe00:11</code>. Os dois convivem, e o Debian configura os dois automaticamente.</p>
 <ul>
   <li><code>::</code> é uma abreviação para "um monte de zeros".</li>
   <li>Endereços que começam com <code>fe80:</code> são locais e só valem dentro da rede.</li>
@@ -264,7 +264,7 @@ ff02::2 ip6-allrouters</pre>
     <p><strong>A placa de rede está ligada e tem IP?</strong> Use <code>ip -br a</code> (<code>-br</code> = <em>brief</em>, "resumido"):</p>
     <pre class="term">$ ip -br a
 lo               UNKNOWN        127.0.0.1/8 ::1/128
-enp1s0           UP             192.168.0.15/24 2804:14c:5b80:8a1f:a00:27ff:fe90:fbde/64 fe80::ae13:e729:e153:39c/64   « ligada, com IP</pre>
+enp1s0           UP             192.168.0.15/24 2001:db8:5b80:8a1f:0:ff:fe00:11/64 fe80::ae13:e729:e153:39c/64   « ligada, com IP</pre>
     <p>Se a placa está <code>DOWN</code>, ou <code>UP</code> mas sem endereço IPv4, o problema é a conexão física (cabo solto, Wi-Fi desligado) ou o DHCP. Veja <a href="configurar-rede.html">Configurar a Rede</a>; no Wi-Fi, <a href="wifi.html">Wi-Fi</a> e <a href="wifi-problemas.html">Wi-Fi que Não Funciona</a>.</p>
   </li>
   <li>
