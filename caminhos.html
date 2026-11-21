@@ -130,7 +130,7 @@ $ cd -
 
 <p>Repare que o <code>~</code> virou <code>/home/ana</code> antes de chegar ao <code>ls</code>. Quem faz essa troca é o shell.</p>
 
-<div class="try" data-setup="cd Documentos/projetos/site" data-goal="cwd:~/Documentos">
+<div class="try" data-setup="cd Documentos/projetos/site" data-goal="cwd:~/Documentos" data-solucao="cd ../..;;pwd">
 <p class="try-task"><strong>Missão:</strong> você está em <code>~/Documentos/projetos/site</code>. Suba até <code>~/Documentos</code> usando um caminho <strong>relativo</strong>, com <code>..</code>. Confira com <code>pwd</code>.</p>
 </div>
 
@@ -156,7 +156,7 @@ bash: cd: número excessivo de argumentos</pre>
 $ pwd
 /home/ana/Área de trabalho</pre>
 
-<div class="try" data-goal="cwd:~/Área de trabalho">
+<div class="try" data-goal="cwd:~/Área de trabalho" data-solucao="cd &quot;Área de trabalho&quot;">
 <p class="try-task"><strong>Missão:</strong> entre na pasta <code>Área de trabalho</code>. Tente primeiro sem aspas para ver o erro, depois do jeito certo.</p>
 </div>
 

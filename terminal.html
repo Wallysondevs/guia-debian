@@ -125,7 +125,7 @@ $ cd Documentos/</pre>
 
 <p>Além de economizar digitação, o <kbd>Tab</kbd> evita erros: se ele não completa, é porque o nome não existe do jeito que você digitou. O Debian ainda vem com o <code>bash-completion</code>, que completa também as opções de muitos comandos (<code>apt ins</code> + <kbd>Tab</kbd> vira <code>apt install</code>).</p>
 
-<div class="try" data-goal="cwd:~/Documentos/projetos/site">
+<div class="try" data-goal="cwd:~/Documentos/projetos/site" data-solucao="cd Documentos/projetos/site;;pwd">
 <p class="try-task"><strong>Missão:</strong> entre na pasta <code>Documentos/projetos/site</code> com um único <code>cd</code>, digitando só as primeiras letras de cada pasta e completando com <kbd>Tab</kbd>. Confira com <code>pwd</code>.</p>
 </div>
 
@@ -162,7 +162,7 @@ $ history | tail -3
 <p>Esqueceu que precisava ser root? No Debian sem <code>sudo</code>, o jeito é <code>su -c '…'</code> com o comando entre aspas. Ex.: <code>su -c 'apt update'</code> pede a senha do root e roda só aquele comando. Veja <a href="root-su-sudo.html">root, su e sudo</a>.</p>
 </div>
 
-<div class="try" data-goal="ran:^\s*history">
+<div class="try" data-goal="ran:^\s*history" data-solucao="date;;whoami;;ls;;date;;history">
 <p class="try-task"><strong>Missão:</strong> rode três comandos quaisquer (<code>date</code>, <code>whoami</code>, <code>ls</code>). Depois use <kbd>↑</kbd> para trazer o <code>date</code> de volta e, por fim, veja a lista com <code>history</code>.</p>
 </div>
 

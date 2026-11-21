@@ -134,7 +134,7 @@ foi removido o diretório: 'velho'</pre>
 
 <p>Com <code>-r</code> e <code>-i</code> juntos, o <code>rm</code> pergunta até antes de entrar na pasta: <code>rm: entrar no diretório 'velho'?</code>.</p>
 
-<div class="try" data-setup="mkdir lixo;;cd lixo;;touch a.txt b.txt c.log d.log foto.jpg;;mkdir velho vazia;;touch velho/x.txt velho/y.txt" data-goal="absent:~/lixo/velho,absent:~/lixo/vazia,absent:~/lixo/c.log,absent:~/lixo/d.log,file:~/lixo/foto.jpg">
+<div class="try" data-setup="mkdir lixo;;cd lixo;;touch a.txt b.txt c.log d.log foto.jpg;;mkdir velho vazia;;touch velho/x.txt velho/y.txt" data-goal="absent:~/lixo/velho,absent:~/lixo/vazia,absent:~/lixo/c.log,absent:~/lixo/d.log,file:~/lixo/foto.jpg" data-solucao="rmdir vazia;;rm -r velho;;echo *.log;;rm *.log">
 <p class="try-task"><strong>Missão:</strong> na pasta <code>lixo</code>, apague a pasta <code>vazia</code> com <code>rmdir</code>, a pasta <code>velho</code> com tudo dentro e os dois arquivos <code>.log</code>. A <code>foto.jpg</code> tem de ficar.</p>
 </div>
 

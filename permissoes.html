@@ -71,7 +71,7 @@ cat: /etc/shadow: Permissão negada</pre>
 
 <p>Já o <code>/etc/passwd</code> (<code>-rw-r--r--</code>) pode ser lido por todos: ele guarda a lista de usuários, mas não as senhas.</p>
 
-<div class="try" data-goal="ran:cat +/etc/shadow,ran:ls +-l">
+<div class="try" data-goal="ran:cat +/etc/shadow,ran:ls +-l" data-solucao="ls -l /etc/passwd /etc/shadow;;cat /etc/passwd;;cat /etc/shadow">
 <p class="try-task"><strong>Missão:</strong> rode <code>ls -l /etc/passwd /etc/shadow</code> e depois tente <code>cat /etc/passwd</code> e <code>cat /etc/shadow</code>. Explique, olhando as letras, por que um funciona e o outro não.</p>
 </div>
 

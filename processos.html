@@ -75,7 +75,7 @@
 </table>
 </div>
 
-<div class="try" data-goal="ran:^\s*ps\s*$,ran:ps +aux">
+<div class="try" data-goal="ran:^\s*ps\s*$,ran:ps +aux" data-solucao="ps;;ps aux">
 <p class="try-task"><strong>Missão:</strong> rode <code>ps</code> e confira que só aparecem o <code>bash</code> e o próprio <code>ps</code>. Depois rode <code>ps aux</code> e compare.</p>
 </div>
 
@@ -193,7 +193,7 @@ $ echo $?
 
 <p>Esse código é útil em scripts: <code>pgrep firefox-esr &gt; /dev/null || echo "O Firefox está fechado"</code>.</p>
 
-<div class="try" data-goal="ran:pgrep +-[a-z]*f,ran:echo +\$\?">
+<div class="try" data-goal="ran:pgrep +-[a-z]*f,ran:echo +\$\?" data-solucao="pgrep -l firefox;;pgrep -af firefox;;pgrep chromium;;echo $?">
 <p class="try-task"><strong>Missão:</strong> descubra o PID das abas do Firefox. Tente primeiro <code>pgrep -l firefox</code>, depois <code>pgrep -af firefox</code>, e compare. Confira o código de saída com <code>echo $?</code> depois de um <code>pgrep</code> que não acha nada.</p>
 </div>
 

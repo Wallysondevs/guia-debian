@@ -202,7 +202,7 @@ Sist. Arq.      Tam. Usado Disp. Uso% Montado em
 /dev/sda1        24G  1,2G   21G   6% /
 total            24G  1,2G   21G   6% -</pre>
 
-<div class="try" data-goal="ran:^\s*df,ran:^\s*free">
+<div class="try" data-goal="ran:^\s*df,ran:^\s*free" data-solucao="df -h;;free -h">
 <p class="try-task"><strong>Missão:</strong> rode <code>df -h</code> e descubra quanto espaço livre a partição <code>/</code> da máquina fictícia tem. Depois rode <code>free -h</code> e compare: o <code>free</code> fala da memória RAM, não do disco.</p>
 </div>
 

@@ -81,7 +81,7 @@ dev   initrd.img  lib64           mnt         root  srv   usr  vmlinuz.old</pre>
 </table>
 </div>
 
-<div class="try" data-goal="cwd:/etc/apt,ran:cat .*sources\.list">
+<div class="try" data-goal="cwd:/etc/apt,ran:cat .*sources\.list" data-solucao="cd /etc/apt;;ls;;cat sources.list">
 <p class="try-task"><strong>Missão:</strong> vá até a pasta onde o Debian guarda a lista de repositórios (<code>/etc/apt</code>) e mostre o arquivo <code>sources.list</code> com <code>cat</code>. Use <code>cd</code> para entrar e <code>ls</code> para olhar em volta.</p>
 </div>
 
@@ -133,7 +133,7 @@ drwx------ 10 ana ana 4096 out 15 08:47 /home/ana</pre>
 <pre class="term">$ ls /root
 ls: não foi possível abrir o diretório '/root': Permissão negada</pre>
 
-<div class="try" data-goal="ran:ls -l?d.*(~|/home/ana)">
+<div class="try" data-goal="ran:ls -l?d.*(~|/home/ana)" data-solucao="ls -ld ~;;cd /root">
 <p class="try-task"><strong>Missão:</strong> confira as permissões da sua própria pasta pessoal com <code>ls -ld ~</code> e depois tente entrar em <code>/root</code> com <code>cd /root</code> para ver a resposta.</p>
 </div>
 
@@ -195,7 +195,7 @@ notebook
 $ grep PRETTY /etc/os-release
 PRETTY_NAME="Debian GNU/Linux 13 (trixie)"</pre>
 
-<div class="try" data-goal="ran:cat .*(debian_version|os-release)">
+<div class="try" data-goal="ran:cat .*(debian_version|os-release)" data-solucao="cat /etc/debian_version">
 <p class="try-task"><strong>Missão:</strong> descubra a versão do Debian desta máquina lendo um arquivo de <code>/etc</code>. Dica: um deles tem "debian" no nome.</p>
 </div>
 

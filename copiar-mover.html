@@ -73,7 +73,7 @@ $ ls
 
 <p>Com curingas fica ainda mais curto: <code>cp Documentos/*.txt Downloads/</code> copia todos os <code>.txt</code> (veja <a href="curingas.html">Curingas</a>).</p>
 
-<div class="try" data-goal="file:~/Documentos/frutas.txt,file:~/Imagens/frutas.txt">
+<div class="try" data-goal="file:~/Documentos/frutas.txt,file:~/Imagens/frutas.txt" data-solucao="cp -v frutas.txt Documentos/;;cp -v frutas.txt Imagens/">
 <p class="try-task"><strong>Missão:</strong> copie <code>frutas.txt</code> para a pasta <code>Documentos</code> e também para <code>Imagens</code>. Use <code>-v</code> para ver cada cópia.</p>
 </div>
 
@@ -104,7 +104,7 @@ cp: -r não especificado; omitindo o diretório 'Documentos/projetos'</pre>
 <h3>-a: copiar preservando tudo</h3>
 <p>O <code>-r</code> faz a cópia com a data de agora e com você como dono. O <code>-a</code> (de <em>archive</em>, "arquivar") é o <code>-r</code> que <strong>preserva</strong> datas, permissões e links. É o mais indicado para backups.</p>
 
-<div class="try" data-goal="file:~/backup/projetos/site/index.html">
+<div class="try" data-goal="file:~/backup/projetos/site/index.html" data-solucao="mkdir backup;;cp -r Documentos/projetos backup/">
 <p class="try-task"><strong>Missão:</strong> crie a pasta <code>backup</code> e copie para dentro dela a pasta <code>Documentos/projetos</code> inteira.</p>
 </div>
 
@@ -130,7 +130,7 @@ renomeado 'frutas-velho.txt' -> 'Documentos/frutas-velho.txt'</pre>
 <p>Ao contrário do <code>cp</code>, o <code>mv</code> move pastas inteiras sem opção nenhuma: <code>mv projetos arquivo-morto/</code>. Mover na mesma partição é instantâneo, porque nada é copiado.</p>
 </div>
 
-<div class="try" data-goal="file:~/Documentos/lista-frutas.txt,absent:~/frutas.txt">
+<div class="try" data-goal="file:~/Documentos/lista-frutas.txt,absent:~/frutas.txt" data-solucao="mv frutas.txt Documentos/lista-frutas.txt">
 <p class="try-task"><strong>Missão:</strong> mova <code>frutas.txt</code> para a pasta <code>Documentos</code>, já com o nome novo <code>lista-frutas.txt</code>, num único comando.</p>
 </div>
 

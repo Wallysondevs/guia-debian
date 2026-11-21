@@ -109,7 +109,7 @@ $ kill -9 %1
 
 <p>O <code>%1</code> é o número do trabalho (<em>job</em>) no terminal, em vez do PID. Veja <a href="jobs.html">Jobs, nohup, tmux</a>.</p>
 
-<div class="try" data-goal="noproc:firefox-esr">
+<div class="try" data-goal="noproc:firefox-esr" data-solucao="pgrep -l firefox;;kill $(pgrep -x firefox-esr);;pgrep -l firefox">
 <p class="try-task"><strong>Missão:</strong> o Firefox (<code>firefox-esr</code>) travou. Ache o PID dele e encerre-o com <code>kill</code>. Depois confirme com <code>pgrep -l firefox</code>.</p>
 </div>
 

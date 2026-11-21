@@ -85,7 +85,7 @@ uid=1000(ana) gid=1000(ana) grupos=1000(ana),24(cdrom),25(floppy),29(audio),30(d
 <p>Na instalação, o Debian pergunta a senha do root. Se você a define, o instalador entende que a administração será feita como root: o <code>sudo</code> nem é instalado e a primeira conta fica fora do grupo. Se você deixa a senha do root em branco, acontece o contrário: o <code>sudo</code> é instalado e o primeiro usuário entra no grupo <code>sudo</code>. Veja <a href="root-su-sudo.html">root, su e sudo</a>.</p>
 </div>
 
-<div class="try" data-goal="ran:^id,ran:^groups">
+<div class="try" data-goal="ran:^id,ran:^groups" data-solucao="whoami;;id;;groups">
 <p class="try-task"><strong>Missão:</strong> descubra quem você é nesta máquina fictícia com <code>whoami</code>, <code>id</code> e <code>groups</code>. A Ana está no grupo <code>sudo</code>? Qual é o UID dela?</p>
 </div>
 
@@ -128,7 +128,7 @@ cat: /etc/shadow: Permissão negada</pre>
 <p>Um caractere errado em <code>/etc/passwd</code>, <code>/etc/group</code> ou <code>/etc/shadow</code> pode impedir todo mundo de entrar no sistema. Use os comandos desta página. Se precisar mesmo editar, use <code>vipw</code> e <code>vigr</code>, que travam o arquivo e conferem o formato.</p>
 </div>
 
-<div class="try" data-goal="ran:passwd">
+<div class="try" data-goal="ran:passwd" data-solucao="grep ana /etc/passwd;;grep www-data /etc/passwd;;cat /etc/shadow">
 <p class="try-task"><strong>Missão:</strong> use <code>grep</code> para ver a linha da <code>ana</code> e a do <code>www-data</code> em <code>/etc/passwd</code>. Qual shell o <code>www-data</code> usa? Depois tente ler o <code>/etc/shadow</code> e veja o que acontece.</p>
 </div>
 

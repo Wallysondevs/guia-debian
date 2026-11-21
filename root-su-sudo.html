@@ -76,7 +76,7 @@ ana</pre>
 
 <p>O prompt muda de <code>$</code> para <code>#</code>: é o sinal de que você está como root. Faça o que precisa e saia com <code>exit</code> (ou <kbd>Ctrl</kbd>+<kbd>D</kbd>) assim que terminar.</p>
 
-<div class="try" data-goal="file:/etc/teste-root,ran:^\s*exit">
+<div class="try" data-goal="file:/etc/teste-root,ran:^\s*exit" data-solucao="su -;;whoami;;pwd;;touch /etc/teste-root;;exit">
 <p class="try-task"><strong>Missão:</strong> vire root com <code>su -</code>, confira com <code>whoami</code> e <code>pwd</code>, crie o arquivo <code>/etc/teste-root</code> com <code>touch</code> e volte para a ana com <code>exit</code>. Depois tente criar <code>/etc/teste-ana</code> como ana e veja o erro.</p>
 </div>
 

@@ -104,7 +104,7 @@ total 32K                                       « idêntico ao anterior
 <p><code>--all--human-readable</code> não funciona. Cada opção longa vai separada: <code>ls --all --human-readable</code>.</p>
 </div>
 
-<div class="try" data-setup="cd Documentos" data-goal="ran:ls\s+-[a-zA-Z]*l[a-zA-Z]*h|ls\s+-[a-zA-Z]*h[a-zA-Z]*l">
+<div class="try" data-setup="cd Documentos" data-goal="ran:ls\s+-[a-zA-Z]*l[a-zA-Z]*h|ls\s+-[a-zA-Z]*h[a-zA-Z]*l" data-solucao="ls -lh">
 <p class="try-task"><strong>Missão:</strong> você está em <code>Documentos</code>. Liste os arquivos com detalhes e tamanhos legíveis (em K e M), juntando as opções num único hífen.</p>
 </div>
 
@@ -271,7 +271,7 @@ Hoje é quinta</pre>
 <p>No Debian sem <code>sudo</code>, você vai escrever muito <code>su -c 'comando'</code>. As aspas simples entregam o comando inteiro para o root, como um só argumento: <code>su -c 'apt install tree'</code>.</p>
 </div>
 
-<div class="try" data-goal="ran:^\s*echo\s+'[^']*\$USER">
+<div class="try" data-goal="ran:^\s*echo\s+'[^']*\$USER" data-solucao="echo 'Meu usuário é $USER';;echo &quot;Meu usuário é $USER&quot;">
 <p class="try-task"><strong>Missão:</strong> faça o <code>echo</code> mostrar literalmente o texto <code>Meu usuário é $USER</code>, sem trocar a variável. Depois compare com a versão em aspas duplas.</p>
 </div>
 
@@ -303,7 +303,7 @@ rodou mesmo assim</pre>
 <p>Um uso clássico no Debian, como root: atualizar e, só se a lista baixou direito, instalar as atualizações:</p>
 <pre class="term" data-user="root" data-cwd="~">#> apt update &amp;&amp; apt upgrade</pre>
 
-<div class="try" data-goal="dir:~/backup,ran:mkdir.*&amp;&amp;">
+<div class="try" data-goal="dir:~/backup,ran:mkdir.*&amp;&amp;" data-solucao="mkdir backup &amp;&amp; cd backup">
 <p class="try-task"><strong>Missão:</strong> numa só linha, crie a pasta <code>backup</code> e, <strong>só se deu certo</strong>, entre nela.</p>
 </div>
 

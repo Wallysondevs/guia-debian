@@ -71,7 +71,7 @@ notebook
 <p>Em arquivos grandes, o <code>cat</code> despeja milhares de linhas e você só vê o fim. Para esses, use o <code>less</code>.</p>
 </div>
 
-<div class="try" data-goal="ran:cat\s+-n">
+<div class="try" data-goal="ran:cat\s+-n" data-solucao="cat -n Documentos/notas.txt">
 <p class="try-task"><strong>Missão:</strong> mostre o arquivo <code>Documentos/notas.txt</code> com as linhas numeradas.</p>
 </div>
 
@@ -166,7 +166,7 @@ copiando Imagens        « a linha apareceu enquanto você olhava
 <p>No Debian 13 não existe <code>/var/log/syslog</code>; os registros ficam no journal. O equivalente do <code>tail -f</code> para eles é <code>journalctl -f</code> (veja <a href="journalctl.html">Logs (journalctl)</a>).</p>
 </div>
 
-<div class="try" data-goal="ran:tail\s+(-n\s*)?-?2\s">
+<div class="try" data-goal="ran:tail\s+(-n\s*)?-?2\s" data-solucao="tail -n 2 Documentos/acesso.log">
 <p class="try-task"><strong>Missão:</strong> mostre só as 2 últimas linhas do arquivo <code>Documentos/acesso.log</code>.</p>
 </div>
 

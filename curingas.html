@@ -74,7 +74,7 @@ notas.txt                          « 5 caracteres antes de .txt</pre>
 <pre class="term" data-cwd="~/Documentos">$ echo [an]*
 acesso.log notas.txt</pre>
 
-<div class="try" data-setup="cd Downloads" data-goal="ran:ls .*\*">
+<div class="try" data-setup="cd Downloads" data-goal="ran:ls .*\*" data-solucao="ls f*;;ls *.jpg">
 <p class="try-task"><strong>Missão:</strong> na pasta <code>Downloads</code>, liste só os arquivos que começam com <code>f</code>. Depois tente listar só as imagens <code>.jpg</code>.</p>
 </div>
 
@@ -157,7 +157,7 @@ $ rm *.zip</pre>
 <p><code>rm * .bak</code> (com espaço) apaga <strong>tudo</strong> da pasta e depois reclama que <code>.bak</code> não existe. O certo é <code>rm *.bak</code>, sem espaço. Conferir com <code>echo</code> mostra o erro antes do estrago.</p>
 </div>
 
-<div class="try" data-setup="mkdir limpeza;;cd limpeza;;touch a.tmp b.tmp c.txt d.tmp foto.jpg" data-goal="absent:~/limpeza/a.tmp,absent:~/limpeza/b.tmp,absent:~/limpeza/d.tmp,file:~/limpeza/c.txt,file:~/limpeza/foto.jpg">
+<div class="try" data-setup="mkdir limpeza;;cd limpeza;;touch a.tmp b.tmp c.txt d.tmp foto.jpg" data-goal="absent:~/limpeza/a.tmp,absent:~/limpeza/b.tmp,absent:~/limpeza/d.tmp,file:~/limpeza/c.txt,file:~/limpeza/foto.jpg" data-solucao="echo *.tmp;;rm *.tmp;;ls">
 <p class="try-task"><strong>Missão:</strong> na pasta <code>limpeza</code>, apague todos os arquivos <code>.tmp</code> e nada mais. Confira antes com <code>echo *.tmp</code>.</p>
 </div>
 

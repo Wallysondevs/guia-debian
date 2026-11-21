@@ -49,7 +49,7 @@
 
 <p>Cada trio é sempre na mesma ordem: <code>r</code> (<em>read</em>, ler), <code>w</code> (<em>write</em>, escrever), <code>x</code> (<em>execute</em>, executar). Um <code>-</code> no lugar da letra significa "não pode".</p>
 
-<div class="try" data-goal="ran:backup\.sh">
+<div class="try" data-goal="ran:backup\.sh" data-solucao="ls -l Documentos/projetos;;Documentos/projetos/backup.sh">
 <p class="try-task"><strong>Missão:</strong> rode <code>ls -l Documentos/projetos</code>. Qual arquivo é executável pelo dono? E qual é uma pasta? Depois execute o script digitando o caminho dele: <code>Documentos/projetos/backup.sh</code>.</p>
 </div>
 
@@ -169,7 +169,7 @@ $ stat -c "%a %A %n" backup.sh
 </table>
 </div>
 
-<div class="try" data-goal="ran:chmod.*(700|go-rwx|go=)">
+<div class="try" data-goal="ran:chmod.*(700|go-rwx|go=)" data-solucao="chmod 700 Documentos/projetos/backup.sh;;ls -l Documentos/projetos">
 <p class="try-task"><strong>Missão:</strong> deixe o <code>Documentos/projetos/backup.sh</code> com <code>rwx------</code>: só a dona lê, escreve e executa. Use o modo octal ou o simbólico e confira com <code>ls -l Documentos/projetos</code>.</p>
 </div>
 

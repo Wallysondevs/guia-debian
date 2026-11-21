@@ -106,7 +106,7 @@ $ date -d "+30 days" +%F
 <p>Arquivos chamados <code>backup-2026-10-15.tar.gz</code> ficam em ordem cronológica quando o <code>ls</code> os ordena por nome. Com <code>15-10-2026</code>, não.</p>
 </div>
 
-<div class="try" data-goal="contains:~/hoje.txt=2026-10-15">
+<div class="try" data-goal="contains:~/hoje.txt=2026-10-15" data-solucao="date +%F &gt; hoje.txt;;cat hoje.txt">
 <p class="try-task"><strong>Missão:</strong> crie o arquivo <code>hoje.txt</code> com a data de hoje no formato ano-mês-dia. Use <code>date</code> com o formato certo e um <code>&gt;</code>. Confira com <code>cat hoje.txt</code>.</p>
 </div>
 
@@ -181,7 +181,7 @@ $ cat /etc/debian_version
   <dt>GNU/Linux</dt><dd>O sistema operacional.</dd>
 </dl>
 
-<div class="try" data-goal="ran:whoami,ran:hostname,ran:uname">
+<div class="try" data-goal="ran:whoami,ran:hostname,ran:uname" data-solucao="whoami;;hostname;;uname -r">
 <p class="try-task"><strong>Missão:</strong> faça um "raio-X" da máquina simulada: descubra o usuário, o nome da máquina e a versão do kernel.</p>
 </div>
 

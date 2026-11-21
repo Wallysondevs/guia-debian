@@ -135,7 +135,7 @@ ls é /bin/ls</pre>
 
 <p>O <code>ls</code> aparece duas vezes porque, no Debian 13, <code>/bin</code> é só um atalho para <code>/usr/bin</code>. Se o programa não está em nenhuma pasta do PATH, o bash responde "comando não encontrado", mesmo que o arquivo exista em outro lugar.</p>
 
-<div class="try" data-goal="ran:echo.*HOME,ran:echo.*USER,ran:PATH.*tr">
+<div class="try" data-goal="ran:echo.*HOME,ran:echo.*USER,ran:PATH.*tr" data-solucao="echo $HOME;;echo $USER;;echo $PATH | tr : '\n'">
 <p class="try-task"><strong>Missão:</strong> veja o valor de <code>$HOME</code> e <code>$USER</code> com <code>echo</code>. Depois mostre o PATH com uma pasta por linha. Repare que não há nenhuma pasta <code>sbin</code>.</p>
 </div>
 
@@ -290,7 +290,7 @@ Atingido:1 http://deb.debian.org/debian trixie InRelease
 
 <p>Um alias com o mesmo nome de um comando "ganha" dele. Para rodar o comando original uma vez, coloque uma barra antes: <code>\rm arquivo</code>.</p>
 
-<div class="try" data-goal="ran:^\s*alias\s+ll=,ran:^\s*ll">
+<div class="try" data-goal="ran:^\s*alias\s+ll=,ran:^\s*ll" data-solucao="alias ll='ls -l';;ll;;type ll">
 <p class="try-task"><strong>Missão:</strong> no simulador (que é um Debian), <code>ll</code> não existe. Crie o alias <code>ll</code> para <code>ls -l</code> e rode <code>ll</code>. Depois confira com <code>type ll</code>.</p>
 </div>
 
